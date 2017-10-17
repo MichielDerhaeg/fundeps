@@ -589,7 +589,7 @@ simplify as theory (ct:cs) =
       return (ct:residual_cs, fc_tm_subst)
     Just (cs', fc_subst) -> do
       (residual_cs, fc_subst') <- simplify as theory $ cs' <> cs
-      return (residual_cs, fc_subst <> fc_subst')
+      return (residual_cs, fc_subst' <> fc_subst)
 
 entail :: [RnTyVar] -> ProgramTheory -> AnnClsCt -> TcM (Maybe (AnnClsCs, FcTmSubst))
 entail _untch [] _cls_ct = return Nothing
