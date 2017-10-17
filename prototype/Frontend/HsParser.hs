@@ -25,11 +25,11 @@ import Text.Parsec.Prim (Parsec, (<?>), try, parse)
 type PsM a = Parsec String () a
 
 -- | Parse a complete program from a file
-hsParse :: FilePath -> IO (Either String PsProgram)
-hsParse path = readFile path >>= \contents ->
-  return $ case parse parser path contents of
-             Left err -> Left (show err)
-             Right p  -> Right p
+hsParse :: String -> FilePath -> Either String PsProgram
+hsParse contents path =
+  case parse parser path contents of
+    Left err -> Left (show err)
+    Right p  -> Right p
   where
     parser = whiteSpace *> pProgram <* eof
 
@@ -127,7 +127,7 @@ pProgram  =  PgmCls  <$> pClsDecl  <*> pProgram
 pClsDecl :: PsM PsClsDecl
 pClsDecl  =  (\ctx cls a (m,ty) -> ClsD ctx cls a m ty)
          <$  reserved "class"
-         <*> pCts
+         <*> pClassCts
          <*  reservedOp "=>"
          <*> pClass
          <*> parens pTyVarWithKind
@@ -138,7 +138,7 @@ pClsDecl  =  (\ctx cls a (m,ty) -> ClsD ctx cls a m ty)
 pInstDecl :: PsM PsInsDecl
 pInstDecl  =  (\ctx cls ty (m,tm) -> InsD ctx cls ty m tm)
           <$  reserved "instance"
-          <*> pCts
+          <*> pClassCts
           <*  reservedOp "=>"
           <*> pClass
           <*> pPrimTyPat
@@ -186,9 +186,9 @@ pPolyTy :: PsM PsPolyTy
 pPolyTy  =  PPoly <$  reserved "forall" <*> parens pTyVarWithKind <* dot <*> pPolyTy
         <|> PQual <$> pQualTy
 
--- | Parse a qualified type
+-- | Parse a qualified type -- Type Well-formedness says 1 constraint
 pQualTy :: PsM PsQualTy
-pQualTy  =  try (QQual <$> pPrimCtr <* reservedOp "=>" <*> pQualTy)
+pQualTy  =  try (QQual <$> pClassCtr <* reservedOp "=>" <*> pQualTy)
         <|> QMono <$> pMonoTy
 
 -- | Parse a primitive monotype
@@ -214,30 +214,13 @@ pKind :: PsM Kind
 pKind  =  chainr1 (parens pKind <|> (KStar <$ symbol "*")) (KArr <$ reservedOp "->")
       <?> "a kind"
 
--- | Parse a primitive constraint
-pPrimCtr :: PsM PsCtr
-pPrimCtr = parens pCtr <|> pClassCtr
-
--- | Parse a constraint
-pImplCtr :: PsM PsCtr
-pImplCtr = chainr1 pPrimCtr (CtrImpl <$ reservedOp "=>")
-
--- | Parse a forall constraint
-pCtr :: PsM PsCtr
-pCtr  =  CtrAbs
-         <$  reserved "forall"
-         <*> parens pTyVarWithKind
-         <*  dot
-         <*> pCtr
-     <|> pImplCtr
-
 -- | Parse a class constraint
-pClassCtr :: PsM PsCtr
-pClassCtr = fmap CtrClsCt (ClsCt <$> pClass <*> pPrimTy)
+pClassCtr :: PsM PsClsCt
+pClassCtr = ClsCt <$> pClass <*> pPrimTy
 
 -- | Parse a class/instance context
-pCts :: PsM PsCts
-pCts = parens (commaSep pCtr)
+pClassCts :: PsM PsClsCs
+pClassCts = parens (commaSep pClassCtr)
 
 -- | Parse a kind-annotated type variable (without the parentheses!!)
 pTyVarWithKind :: PsM PsTyVarWithKind

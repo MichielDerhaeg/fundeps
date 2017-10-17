@@ -57,14 +57,11 @@ instance SubstVar RnTyVar RnMonoTy RnPolyTy where
       | a == b    -> error "substTyVarInPolyTy: Shadowing"
       | otherwise -> PPoly (b :| kind) (substVar a aty ty)
 
--- | Substitute a type variable for a type in a constraint
-instance SubstVar RnTyVar RnMonoTy RnCtr where
-  substVar a ty = \case
-    CtrClsCt ct     -> CtrClsCt (substVar a ty ct)
-    CtrImpl ct1 ct2 -> CtrImpl (substVar a ty ct1) (substVar a ty ct2)
-    CtrAbs (b :| k) ct
-      | a == b      -> error "substTyVarInCtr: Shadowing"
-      | otherwise   -> CtrAbs (b :| k) (substVar a ty ct)
+-- | TODO document me
+instance SubstVar RnTyVar RnMonoTy CtrScheme where
+  substVar a ty (CtrScheme as cs cls)
+    | a `elem` fmap labelOf as = error "substTyVarInScheme: Shadowing"
+    | otherwise = CtrScheme as (substVar a ty cs) (substVar a ty cls)
 
 -- * Target Language SubstVar Instances (Type Substitution)
 -- ------------------------------------------------------------------------------
@@ -197,14 +194,6 @@ substInEqCt subst (ty1 :~: ty2) = substInMonoTy subst ty1 :~: substInMonoTy subs
 substInEqCs :: HsTySubst -> EqCs -> EqCs
 substInEqCs subst = map (substInEqCt subst)
 
--- | Apply a type substitution to a constraint
-substInCtr :: HsTySubst -> RnCtr -> RnCtr
-substInCtr = sub_rec
-
--- | Apply a type substitution to a list of constraints
-substInCts :: HsTySubst -> RnCts -> RnCts
-substInCts subst = map (substInCtr subst)
-
 -- | Apply a type substitution to a class constraint
 substInClsCt :: HsTySubst -> RnClsCt -> RnClsCt
 substInClsCt subst (ClsCt cls ty) = ClsCt cls (substInMonoTy subst ty)
@@ -212,6 +201,9 @@ substInClsCt subst (ClsCt cls ty) = ClsCt cls (substInMonoTy subst ty)
 -- | Apply a type substitution to a list of class constraints
 substInClsCs :: HsTySubst -> RnClsCs -> RnClsCs
 substInClsCs subst = map (substInClsCt subst)
+
+-- TODO document
+substInAnnClsCs subst = fmap (\(d :| ct) -> (d :| substInClsCt subst ct))
 
 -- | Apply a type substitution to a type variable
 substInTyVar :: HsTySubst -> RnTyVar -> RnMonoTy
@@ -223,7 +215,8 @@ substInTyVars subst = map (substInTyVar subst)
 
 -- | Apply a type substitution to a program theory
 substInProgramTheory :: HsTySubst -> ProgramTheory -> ProgramTheory
-substInProgramTheory subst = fmap (\(d :| ct) -> (d :| substInCtr subst ct))
+substInProgramTheory subst = fmap (\(d :| scheme) -> (d :| substInScheme subst scheme))
+substInScheme = sub_rec
 
 -- | Apply a type substitution to a qualified type
 substInQualTy :: HsTySubst -> RnQualTy -> RnQualTy
@@ -302,13 +295,6 @@ instance FreshenLclBndrs RnPolyTy where
   freshenLclBndrs (PQual ty) = return (PQual ty)
   freshenLclBndrs (PPoly (a :| _) ty) = freshRnTyVar (kindOf a) >>= \b ->
     PPoly (b :| kindOf b) <$> freshenLclBndrs (substVar a (TyVar b) ty)
-
--- | Freshen the (type) binders of a constraint
-instance FreshenLclBndrs RnCtr where
-  freshenLclBndrs (CtrClsCt ct)        = return (CtrClsCt ct)
-  freshenLclBndrs (CtrImpl ct1 ct2)    = CtrImpl <$> freshenLclBndrs ct1 <*> freshenLclBndrs ct2
-  freshenLclBndrs (CtrAbs (a :| _) ct) = freshRnTyVar (kindOf a) >>= \b ->
-    CtrAbs (b :| kindOf b) <$> freshenLclBndrs (substVar a (TyVar b) ct)
 
 -- | Freshen the (type) binders of a System F type
 instance FreshenLclBndrs FcType where

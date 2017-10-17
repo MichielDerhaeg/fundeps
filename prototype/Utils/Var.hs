@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-overlapping-patterns #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE KindSignatures    #-}
 {-# LANGUAGE GADTs             #-}
@@ -241,21 +242,21 @@ type DictVar = FcTmVar
 
 -- | Create a fresh renamed term variable
 freshRnTmVar :: MonadUnique m => m RnTmVar
-freshRnTmVar = getUniqueM >>= return . HsTmVar . MkName (MkSym "x")
+freshRnTmVar = HsTmVar . MkName (MkSym "x") <$> getUniqueM
 
 -- | Create a fresh renamed term variable
 freshRnTyVar :: MonadUnique m => Kind -> m RnTyVar
-freshRnTyVar k = getUniqueM >>= return . flip RnTyVar k . MkName (MkSym "t")
+freshRnTyVar k = flip RnTyVar k . MkName (MkSym "t") <$> getUniqueM
 
 -- | Generate a fresh System F term variable
 freshFcTmVar :: MonadUnique m => m FcTmVar
-freshFcTmVar = getUniqueM >>= return . FcTmVar . MkName (MkSym "x")
+freshFcTmVar = FcTmVar . MkName (MkSym "x") <$> getUniqueM
 
 -- | Generate a fresh System F type variable
 freshFcTyVar :: MonadUnique m => Kind -> m FcTyVar
-freshFcTyVar k = getUniqueM >>= return . flip FcTyVar k . MkName (MkSym "t")
+freshFcTyVar k = flip FcTyVar k . MkName (MkSym "t") <$> getUniqueM
 
 -- | Generate a fresh dictionary variable
 freshDictVar :: MonadUnique m => m DictVar
-freshDictVar = getUniqueM >>= return . FcTmVar . MkName (MkSym "d")
+freshDictVar = FcTmVar . MkName (MkSym "d") <$> getUniqueM
 

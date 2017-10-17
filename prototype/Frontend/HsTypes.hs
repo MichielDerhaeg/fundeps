@@ -67,7 +67,7 @@ data HsDataConInfo
   | HsDCClsInfo { hs_dc_data_con    :: RnDataCon    -- ^ The data constructor name
                 , hs_dc_univ        :: [RnTyVar]    -- ^ Universal type variables
                 , hs_dc_parent      :: RnTyCon      -- ^ Parent type constructor
-                , hs_dc_super       :: RnCts
+                , hs_dc_super       :: RnClsCs
                 , hs_dc_arg_tys     :: [RnPolyTy]   -- ^ Argument types
                 , hs_dc_fc_data_con :: FcDataCon }  -- ^ Elaborated Data Constructor
 
@@ -90,7 +90,7 @@ type PsClass = Class Sym
 type RnClass = Class Name
 
 data ClassInfo
-  = ClassInfo { cls_super     :: RnCts     -- ^ The superclass constraints
+  = ClassInfo { cls_super     :: RnClsCs   -- ^ The superclass constraints
               , cls_class     :: RnClass   -- ^ The class name
               , cls_type_args :: [RnTyVar] -- ^ Type arguments
               , cls_method    :: RnTmVar   -- ^ Method name
@@ -173,7 +173,7 @@ type RnMonoTy = MonoTy Name
 
 -- | Qualified Type
 data QualTy a = QMono (MonoTy a)
-              | QQual (Ctr a) (QualTy a)
+              | QQual (ClsCt a) (QualTy a)
 
 -- | Parsed/renamed qualified type
 type PsQualTy = QualTy Sym
@@ -260,40 +260,26 @@ monoTyToPolyTy :: MonoTy a -> PolyTy a
 monoTyToPolyTy = PQual . QMono
 
 -- | Take a polytype apart
-destructPolyTy :: PolyTy a -> ([HsTyVarWithKind a], Cts a, MonoTy a) -- GEORGE: Type synonym for lists of type variables?
+destructPolyTy :: PolyTy a -> ([HsTyVarWithKind a], ClsCs a, MonoTy a) -- GEORGE: Type synonym for lists of type variables?
 destructPolyTy (PQual   ty) = ([]  , cs, ty') where     (cs, ty') = destructQualTy ty
 destructPolyTy (PPoly a ty) = (a:as, cs, ty') where (as, cs, ty') = destructPolyTy ty
 
 -- | Take a qualified type apart
-destructQualTy :: QualTy a -> (Cts a, MonoTy a)
+destructQualTy :: QualTy a -> (ClsCs a, MonoTy a)
 destructQualTy (QMono    ty) = ([], ty)
 destructQualTy (QQual ct ty) = (ct:cs, ty')
   where (cs, ty') = destructQualTy ty
 
 -- | Inverse of destructPolyTy: create a polytype from parts
-constructPolyTy :: ([HsTyVarWithKind a], Cts a, MonoTy a) -> PolyTy a
+constructPolyTy :: ([HsTyVarWithKind a], ClsCs a, MonoTy a) -> PolyTy a
 constructPolyTy (as, cs, ty) = foldr PPoly (PQual (constructQualTy (cs,ty))) as
 
 -- | Inverse of destructQualTy: create a qualified type from parts
-constructQualTy :: (Cts a, MonoTy a) -> QualTy a
+constructQualTy :: (ClsCs a, MonoTy a) -> QualTy a
 constructQualTy (cs, ty) = foldr QQual (QMono ty) cs
 
 -- * Constraints
 -- ------------------------------------------------------------------------------
-
--- | Constraint(s)
-data Ctr a   = CtrClsCt (ClsCt a)                 -- ^ Class constraint
-             | CtrImpl (Ctr a) (Ctr a)            -- ^ Implication
-             | CtrAbs (HsTyVarWithKind a) (Ctr a) -- ^ Type abstraction
-type Cts a   = [Ctr a]
-
--- | Parsed constraint(s)
-type PsCtr   = Ctr Sym
-type PsCts   = Cts Sym
-
--- | Renamed constraint(s)
-type RnCtr   = Ctr Name
-type RnCts   = Cts Name
 
 -- | Class constraint(s)
 data ClsCt a = ClsCt (Class a) (MonoTy a)
@@ -307,9 +293,9 @@ type PsClsCs = ClsCs Sym
 type RnClsCt = ClsCt Name
 type RnClsCs = ClsCs Name
 
--- | Construct a constraint from a list of type variables, constraints and a class constraint
-constructCtr :: ([HsTyVarWithKind a], Cts a, ClsCt a) -> Ctr a
-constructCtr (as, cs, ty) = foldr CtrAbs (foldr CtrImpl (CtrClsCt ty) cs) as
+-- | Constraint scheme
+data CtrScheme = CtrScheme [HsTyVarWithKind Name] (ClsCs Name) (ClsCt Name)
+
 
 -- * Programs and Declarations
 -- ------------------------------------------------------------------------------
@@ -321,14 +307,14 @@ data Program a = PgmExp  (Term a)                 -- ^ Expression
                | PgmData (DataDecl a) (Program a) -- ^ Datatype declaration
 
 -- | Class declaration
-data ClsDecl a = ClsD { csuper :: Cts a             -- ^ Superclass constraints
+data ClsDecl a = ClsD { csuper :: ClsCs a           -- ^ Superclass constraints
                       , cname  :: Class a           -- ^ Class name
                       , cvar   :: HsTyVarWithKind a -- ^ Type variable
                       , cmena  :: HsTmVar a         -- ^ Method name
                       , cmety  :: PolyTy a }        -- ^ Method type
 
 -- | Instance declaration
-data InsDecl a = InsD { icons :: Cts a          -- ^ Constraints
+data InsDecl a = InsD { icons :: ClsCs a        -- ^ Constraints
                       , iname :: Class a        -- ^ Class name
                       , ivar  :: HsTyPat a      -- ^ Instance type
                       , imena :: HsTmVar a      -- ^ Method name
@@ -365,16 +351,16 @@ type Cs = (EqCs, RnClsCs)
 data EqCt = RnMonoTy :~: RnMonoTy
 type EqCs = [EqCt]
 
--- | Variable-annotated constraints
-type AnnCtr = Ann DictVar RnCtr
-type AnnCts = SnocList AnnCtr
-
 -- | Variable-annotated class constraints
 type AnnClsCt = Ann DictVar RnClsCt
 type AnnClsCs = [AnnClsCt]
 
+-- | Variable-annotated constraint schemes
+type AnnScheme = Ann DictVar CtrScheme
+type AnnSchemes = [AnnScheme]
+
 -- | The program theory is just a list of name-annotated constrains
-type ProgramTheory = AnnCts
+type ProgramTheory = AnnSchemes
 
 data FullTheory = FT { theory_super :: ProgramTheory
                      , theory_inst  :: ProgramTheory
@@ -403,7 +389,8 @@ ftDropSuper (FT _super inst local) = inst `mappend` local
 -- * Collecting Free Variables Out Of Objects
 -- ------------------------------------------------------------------------------
 
-instance ContainsFreeTyVars (Ann DictVar RnCtr) RnTyVar where
+-- be bold
+instance ContainsFreeTyVars (Ann DictVar RnClsCt) RnTyVar where
   ftyvsOf (_ :| ct) = ftyvsOf ct
 
 -- GEORGE: Careful. This does not check that the kinds are the same for every
@@ -425,11 +412,6 @@ instance Eq a => ContainsFreeTyVars (MonoTy a) (HsTyVar a) where
       ftyvsOfMonoTy (TyCon {})      = []
       ftyvsOfMonoTy (TyApp ty1 ty2) = ftyvsOfMonoTy ty1 ++ ftyvsOfMonoTy ty2
       ftyvsOfMonoTy (TyVar v)       = [v]
-
-instance Eq a => ContainsFreeTyVars (Ctr a) (HsTyVar a) where
-  ftyvsOf (CtrClsCt ct)     = ftyvsOf ct
-  ftyvsOf (CtrImpl ct1 ct2) = nub (ftyvsOf ct1 ++ ftyvsOf ct2)
-  ftyvsOf (CtrAbs a ct)     = ftyvsOf ct \\ [labelOf a]
 
 instance Eq a => ContainsFreeTyVars (ClsCt a) (HsTyVar a) where
   ftyvsOf (ClsCt _ ty) = ftyvsOf ty
@@ -570,7 +552,7 @@ instance (Symable a, PrettyPrint a) => PrettyPrint (MonoTy a) where
 instance (Symable a, PrettyPrint a) => PrettyPrint (QualTy a) where
   ppr (QMono    ty) = ppr ty
   ppr (QQual ct ty)
-    | let dct = if isClsCtr ct then pprPar ct else ppr ct
+    | let dct = pprPar ct --if isClsCtr ct then pprPar ct else ppr ct
     = dct <+> darrow <+> ppr ty
 
   needsParens (QMono ty) = needsParens ty
@@ -584,28 +566,14 @@ instance (Symable a, PrettyPrint a) => PrettyPrint (PolyTy a) where
   needsParens (PQual ty) = needsParens ty
   needsParens (PPoly {}) = True
 
--- | Pretty print constraints
-instance (Symable a, PrettyPrint a) => PrettyPrint (Ctr a) where
-  ppr (CtrClsCt ct)     = ppr ct
-  ppr (CtrImpl ct1 ct2)
-    | let d1 = if isClsCtr ct1 then ppr ct1 else pprPar ct1
-    , let d2 = if isAbsCtr ct2 then pprPar ct2 else ppr ct2
-    = d1 <+> darrow <+> d2
-  ppr (CtrAbs a ct)     = text "forall" <+> ppr a <> dot <+> ppr ct
-
+-- | Pretty print constraint schemes
+instance PrettyPrint CtrScheme where
+  ppr (CtrScheme as cs cls) =
+    (foldr
+       (\a b -> text "forall" <+> ppr a <> dot <+> b)
+       (parens . sep . punctuate comma $ map ppr cs)
+       as) <+> arrow <+> ppr cls
   needsParens _ = True
-
-isClsCtr :: Ctr a -> Bool
-isClsCtr (CtrClsCt {}) = True
-isClsCtr _other        = False
-
-isImplCtr :: Ctr a -> Bool
-isImplCtr (CtrImpl {}) = True
-isImplCtr _other       = False
-
-isAbsCtr :: Ctr a -> Bool
-isAbsCtr (CtrAbs {}) = True
-isAbsCtr _other      = False
 
 -- | Pretty print class constraints
 instance (Symable a, PrettyPrint a) => PrettyPrint (ClsCt a) where

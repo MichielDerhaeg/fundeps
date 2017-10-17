@@ -25,7 +25,7 @@ import Control.Monad.Except
 
 -- * Type checking monad
 -- ----------------------------------------------------------------------------
-type FcM = UniqueSupplyT (ReaderT FcCtx (StateT FcGblEnv (ExceptT String (Writer Trace))))
+type FcM = UniqueSupplyT (ReaderT FcCtx (StateT FcGblEnv (Except String)))
 
 data FcGblEnv = FcGblEnv { fc_env_tc_info :: AssocList FcTyCon   FcTyConInfo
                          , fc_env_dc_info :: AssocList FcDataCon FcDataConInfo
@@ -225,9 +225,8 @@ ensureIdenticalTypes types = unless (go types) $ throwError "Type mismatch in ca
 -- GEORGE: Refine the type and also print more stuff out
 
 fcTypeCheck :: (AssocList FcTyCon FcTyConInfo, AssocList FcDataCon FcDataConInfo) -> UniqueSupply -> FcProgram
-            -> (Either String ((FcType, UniqueSupply), FcGblEnv), Trace)
-fcTypeCheck (tc_env, dc_env) us pgm = runWriter
-                                    $ runExceptT
+            -> Either String ((FcType, UniqueSupply), FcGblEnv)
+fcTypeCheck (tc_env, dc_env) us pgm = runExcept
                                     $ flip runStateT  fc_init_gbl_env
                                     $ flip runReaderT fc_init_ctx
                                     $ flip runUniqueSupplyT us

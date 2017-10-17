@@ -44,7 +44,7 @@ instance PrettyPrint RnEnv where
 -- and type variables, respectively.
 type RnCtx = Ctx PsTmVar RnTmVar PsTyVar RnTyVar
 
-type RnM = UniqueSupplyT (ReaderT RnCtx (StateT RnEnv (ExceptT String (Writer Trace))))
+type RnM = UniqueSupplyT (ReaderT RnCtx (StateT RnEnv (Except String)))
 
 -- * Basic Monadic Setters and Getters
 -- ------------------------------------------------------------------------------
@@ -147,16 +147,7 @@ rnMonoTy (TyVar psa)     = TyVar <$> lookupTyVarM psa
 -- | Rename a qualified type
 rnQualTy :: PsQualTy -> RnM RnQualTy
 rnQualTy (QMono ty)    = QMono <$> rnMonoTy ty
-rnQualTy (QQual ct ty) = QQual <$> rnCtr ct <*> rnQualTy ty
-
--- | Rename a constraint
-rnCtr :: PsCtr -> RnM RnCtr
-rnCtr (CtrClsCt cls_ct) = CtrClsCt <$> rnClsCt cls_ct
-rnCtr (CtrImpl c1 c2)   = CtrImpl <$> (rnCtr c1) <*> (rnCtr c2)
-rnCtr (CtrAbs a ct)     = do
-  rna  <- rnTyVar a
-  rnct <- extendCtxTyM (labelOf a) rna (rnCtr ct)
-  return (CtrAbs (rna :| kindOf rna) rnct)
+rnQualTy (QQual ct ty) = QQual <$> rnClsCt ct <*> rnQualTy ty
 
 -- | Rename a class constraint
 rnClsCt :: PsClsCt -> RnM RnClsCt
@@ -252,7 +243,7 @@ rnClsDecl (ClsD cs cls a method method_ty) = do
   rn_a <- rnTyVar a
 
   -- Rename the superclass constraints
-  rn_cs <- extendCtxTyM (labelOf a) rn_a (mapM rnCtr cs)
+  rn_cs <- extendCtxTyM (labelOf a) rn_a (mapM rnClsCt cs)
 
   -- Rename the method type
   rn_method_ty <- extendCtxTyM (labelOf a) rn_a (rnPolyTy method_ty)
@@ -271,7 +262,7 @@ rnInsDecl (InsD cs cls_name ty_pat method_name method_tm) = do
   tyvars <- mapM rnTyVar (ftyvsOf ty_pat) -- collect and rename all bound variables
 
   (rn_ty_pat, bv) <- extendKindedVarsCtxM tyvars (rnTyPat ty_pat) -- rename the type pattern
-  rn_cs           <- extendKindedVarsCtxM bv (mapM rnCtr cs)  -- rename the instance context
+  rn_cs           <- extendKindedVarsCtxM bv (mapM rnClsCt cs)  -- rename the instance context
   rn_method_name  <- lookupMethodName method_name             -- rename the method name
 
   -- Ensure the method name is for the class we are checking
@@ -351,9 +342,8 @@ rnProgram (PgmData data_decl pgm) = do
 -- ------------------------------------------------------------------------------
 
 hsRename :: UniqueSupply -> PsProgram
-         -> (Either String (((RnProgram, RnCtx), UniqueSupply), RnEnv), Trace)
-hsRename us pgm = runWriter
-                $ runExceptT
+         -> Either String (((RnProgram, RnCtx), UniqueSupply), RnEnv)
+hsRename us pgm = runExcept
                 $ flip runStateT  rn_init_gbl_env
                 $ flip runReaderT rn_init_ctx
                 $ flip runUniqueSupplyT us
