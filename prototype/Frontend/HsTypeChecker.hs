@@ -5,6 +5,8 @@
 
 module Frontend.HsTypeChecker (hsElaborate) where
 
+import Debug.Trace
+
 import Frontend.HsTypes
 import Frontend.HsRenamer
 
@@ -591,7 +593,7 @@ simplify as theory (ct:cs) =
 
 entail :: [RnTyVar] -> ProgramTheory -> AnnClsCt -> TcM (Maybe (AnnClsCs, FcTmSubst))
 entail _untch [] _cls_ct = return Nothing
-entail as ((d' :| CtrScheme bs cls_cs (ClsCt cls2 ty2)):schemes) (d :| ClsCt cls1 ty1)
+entail as ((d' :| CtrScheme bs cls_cs (ClsCt cls2 ty2)):schemes) ct@(d :| ClsCt cls1 ty1)
   | cls1 == cls2
   , Right ty_subst <- unify as [ty1 :~: ty2] = do
     (d''s, ann_cls_cs) <- annotateCts $ substInClsCs ty_subst cls_cs
@@ -603,7 +605,7 @@ entail as ((d' :| CtrScheme bs cls_cs (ClsCt cls2 ty2)):schemes) (d :| ClsCt cls
              (foldl FcTmTyApp (FcTmVar d') fc_subbed_bs)
              (FcTmVar <$> d''s))
     return $ Just (ann_cls_cs, ev_subst)
-  | otherwise = return Nothing
+  | otherwise = entail as schemes ct
 
 -- | Elaborate a class declaration. Return
 --   a) The data declaration for the class
@@ -826,14 +828,15 @@ elabTermWithSig untch theory tm poly_ty = do
   let local_theory = ftToProgramTheory theory <> given_schemes
   let wanted = substInAnnClsCs ty_subst wanted_ccs
 
-    -- rightEntailsRec untouchables local_theory wanted
+   -- rightEntailsRec untouchables local_theory wanted
   (residual_cs, ev_subst) <- simplify untouchables local_theory wanted
 
-   -- Ensure that the constraints are completely resolved
+  -- Ensure that the constraints are completely resolved
   unless (null residual_cs) $
     throwErrorM
       (text "Failed to resolve constraints" <+>
-       colon <+> ppr residual_cs $$ text "From" <+> colon <+> ppr theory)
+       colon <+> ppr residual_cs $$ text "From" <+> colon <+> ppr theory
+       $$ text "Wanted" <+> colon <+> ppr wanted)
   fc_subst <- elabHsTySubst ty_subst
 
   -- Generate the resulting System F term
