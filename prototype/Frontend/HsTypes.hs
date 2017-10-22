@@ -572,7 +572,7 @@ instance PrettyPrint CtrScheme where
     (foldr
        (\a b -> text "forall" <+> ppr a <> dot <+> b)
        (parens . sep . punctuate comma $ map ppr cs)
-       as) <+> arrow <+> ppr cls
+       as) <+> darrow <+> ppr cls
   needsParens _ = True
 
 -- | Pretty print class constraints

@@ -1,6 +1,8 @@
 
 
 - Clean up implementation
+  * freshenlcl ctrchemes
+- Closure functions
 - System F -> System Fc
     * Grammar
     * Type Checker
