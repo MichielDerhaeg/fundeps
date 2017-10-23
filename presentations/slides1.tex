@@ -1,0 +1,93 @@
+\documentclass{beamer}
+
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{listings}
+%\usepackage{amsmath}
+\setbeamertemplate{footline}[frame number]
+
+\usepackage{mathpartir}
+\input{macros}
+
+\title{Implementation of Type Inference and Elaboration in System $F_C$ for
+Functional Dependencies}
+\author{Michiel Derhaeg}
+\institute{KULeuven}
+\date{2017}
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}
+    \frametitle{Timeline}
+    \begin{itemize}
+        \item What has been done?
+        \item Where are we now?
+        \item What are we trying to do?
+        \item What else could we do?
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{What has been done?}
+    \begin{columns}
+        \begin{column}{0.4\textwidth}
+            \begin{align*}
+                A &::= \cdot \mid A, C \\
+                C &::= Q \mid C_1 \Rightarrow C_2 \mid \forall a. C \\
+                Q &::= TC \tau
+            \end{align*}
+        \end{column}
+        \begin{column}{0.1\textwidth}
+            $\Longrightarrow$
+        \end{column}
+        \begin{column}{0.4\textwidth}
+            \begin{align*}
+                A &::= \emptyset \mid A, C \\
+                R &::= \forall \overline{a}. A \Rightarrow C \\
+                C &::= Q \\
+                Q &::= TC
+            \end{align*}
+        \end{column}
+    \end{columns}
+    \pause
+    \include{tc-ctrsolving}
+\end{frame}
+
+\begin{frame}[fragile]
+    \frametitle{Where are we now?}
+    \textbf{The Superclass Issue}
+    \begin{lstlisting}
+class Eq a where
+    (==) :: a -> a -> Bool
+
+class Eq a => Ord a where
+    (<=) :: a -> a -> Bool
+
+(<) :: (Eq a, Ord a) => a -> a -> Bool
+(<) a b | a == b = False
+        | a <= b = True
+        | otherwise = False
+    \end{lstlisting}
+\end{frame}
+
+\begin{frame}
+    \frametitle{What are we trying to do?}
+    \begin{itemize}
+        \item Putting the $C$'s in System $F_C$
+            \begin{itemize}
+                \item Extend the representation with type equality coercions
+                \item Extend the $F_C$ typechecker
+            \end{itemize}
+        \item Inference and elaboration  of multi-parameter type classes
+        \item Inference and elaboration of functional dependencies
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{What else could we do?}
+    Functional Dependencies vs GADTs $\&$ Type Families
+\end{frame}
+
+\end{document}

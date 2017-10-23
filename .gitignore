@@ -1,2 +1,14 @@
 .stack-work/
 tags
+
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.pdf
+*.synctex.gz
+*.nav
+*.snm
+*.toc
+*.vrb

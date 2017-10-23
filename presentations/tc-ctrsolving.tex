@@ -1,0 +1,63 @@
+%\begin{minipage}{\textwidth}
+% ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+%                          Constraint Entailment
+% ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+\begin{flushleft}
+\namedRuleform{\entailRightERec{\as}{\fullTheory}{\programTheory_1}{\programTheory_2}{\dictSubst}}
+              {Recursive Constraint Solving}
+\end{flushleft}
+\vspace{-3mm}
+\[
+\begin{array}{@{\hspace{0mm}}c@{\hspace{0mm}}}
+\inferrule*[right=STEP]
+           { 
+             \entailRightERec{\as}{\fullTheory}{\constraint}{\programTheory_2}{\dictSubst_1} \\
+             \entailRightERec{\as}{\fullTheory}{\dictSubst(\programTheory_1, \programTheory_2)}{\programTheory_3}{\dictSubst_2}
+           }
+           { \entailRightERec{\as}{\fullTheory}{\programTheory_1, \constraint}{\programTheory_3}{\dictSubst_2 \cdot \dictSubst_1} }
+\\\\
+\inferrule*[right=STOP]
+           { \nexists \constraint \in \programTheory_1 : \entailRightERec{\as}{\fullTheory}{\constraint}{\programTheory_2}{\dictSubst} }
+           { \entailRightERec{\as}{\fullTheory}{\programTheory_1}{\programTheory_1}{\bullet} }
+% \inferrule*[right=($\Rightarrow$IC)]
+%            { \proveConstraint{\fullTheory, \constraint_1}{\tyEnv}{\constraint_2} }
+%            { \proveConstraint{\fullTheory}{\tyEnv}{\constraint_1 \Rightarrow \constraint_2} }
+% \quad
+% \inferrule*[right=($\Rightarrow$EC)]
+%            { \proveConstraint{\fullTheory}{\tyEnv}{\constraint_1 \Rightarrow \constraint_2} \\\\
+%              \proveConstraint{\fullTheory}{\tyEnv}{\constraint_1}
+%            } % Premises end here
+%            { \proveConstraint{\fullTheory}{\tyEnv}{\constraint_2} }
+% \\\\
+% \inferrule*[right=($\forall$EC)]
+%            { \proveConstraint{\fullTheory}{\tyEnv}{\forall a. \constraint} \\\\
+%              \tcType{\tyEnv}{\monotype}
+%            } % Premises end here
+%            { \proveConstraint{\fullTheory}{\tyEnv}{[\monotype/a]\constraint} }
+% \quad
+% \inferrule*[right=($\forall$IC)]
+%            { \proveConstraint{\fullTheory}{\tyEnv, a}{\constraint} \\\\
+%              a \notin \tyEnv
+%            } % Premises end here
+%            { \proveConstraint{\fullTheory}{\tyEnv}{\forall a. \constraint} }
+\end{array}
+\]
+
+\begin{flushleft}
+\namedRuleform{\entailRightERec{\as}{\fullTheory}{\constraint}{\programTheory'}{\dictSubst}}
+              {Constraint Solving}
+\end{flushleft}
+\vspace{-3mm}
+\[
+\begin{array}{@{\hspace{0mm}}c@{\hspace{0mm}}}
+\inferrule*[right=QC]
+           {
+             (d' : \forall \bs . \programTheory' \Rightarrow \TC~\monotype_2) \in \fullTheory \\
+             \overline{d''}~\fresh \\
+             \tySubst = \unify{\as}{\monotype_1 \sim \monotype_2} \\
+             \dictSubst = \singleSubst{d}{d'~\tySubst(\bs)~\overline{d''}}{ }
+           }
+           { \entailRightERec{\as}{\fullTheory}{(d : \TC~\monotype_1)}{\tySubst(\overline{d''} : \programTheory')}{\dictSubst} }
+\end{array}
+\]
+%\end{minipage}

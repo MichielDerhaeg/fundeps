@@ -571,7 +571,7 @@ instance PrettyPrint CtrScheme where
   ppr (CtrScheme as cs cls) =
     (foldr
        (\a b -> text "forall" <+> ppr a <> dot <+> b)
-       (parens . sep . punctuate comma $ map ppr cs)
+       (parens . sep . punctuate comma $ map ppr cs) -- TODO omit if (empty cs)
        as) <+> darrow <+> ppr cls
   needsParens _ = True
 

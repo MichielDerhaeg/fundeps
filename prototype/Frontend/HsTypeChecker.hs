@@ -579,7 +579,8 @@ overlapCheck theory cls_ct@(ClsCt cls1 ty1)
 -- * Constraint Entailment
 -- ------------------------------------------------------------------------------
 
--- | TODO document us
+-- | Simplify the given type class constraints. Return the residual constraints
+--   and the dictionary substitution.
 simplify :: [RnTyVar] -> ProgramTheory -> AnnClsCs -> TcM (AnnClsCs, FcTmSubst)
 simplify as theory [] = return (mempty, mempty)
 simplify as theory (ct:cs) =
@@ -606,6 +607,14 @@ entail as ((d' :| CtrScheme bs cls_cs (ClsCt cls2 ty2)):schemes) ct@(d :| ClsCt 
              (FcTmVar <$> d''s))
     return $ Just (ann_cls_cs, ev_subst)
   | otherwise = entail as schemes ct
+
+closure :: [RnTyVar] -> ProgramTheory -> AnnClsCt -> TcM (AnnClsCs, FcTmSubst)
+closure as ((d_top :| CtrScheme alphas [ClsCt cls2 ty2] cls_ct):schemes) ct@(d :| ClsCt cls1 ty1)
+  = undefined
+
+closureAll :: [RnTyVar] -> ProgramTheory -> AnnClsCs -> TcM (AnnClsCs, FcTmSubst)
+closureAll as theory cs = -- TODO nub AnnClsCs?
+  ((\(a, b) -> (mconcat a, mconcat b)) . unzip) <$> mapM (closure as theory) cs
 
 -- | Elaborate a class declaration. Return
 --   a) The data declaration for the class
@@ -770,7 +779,7 @@ elabInsDecl theory (InsD ins_ctx cls typat method method_tm) = do
 
     (residual_cs, ev_subst) <- simplify
                                  (map labelOf bs)
-                                 (ftToProgramTheory local_theory)
+                                 (theory_inst local_theory <> theory_local local_theory)
                                  super_cs
     unless (null residual_cs) $
       throwErrorM (text "Failed to resolve superclass constraints" <+>
@@ -825,7 +834,7 @@ elabTermWithSig untch theory tm poly_ty = do
   -- Resolve all the wanted constraints
   let untouchables = nub (untch ++ map labelOf as)
   ty_subst <- unify untouchables $ wanted_eqs ++ [mono_ty :~: ty]
-  let local_theory = ftToProgramTheory theory <> given_schemes
+  let local_theory = theory_local theory <> theory_inst theory <> given_schemes
   let wanted = substInAnnClsCs ty_subst wanted_ccs
 
    -- rightEntailsRec untouchables local_theory wanted
