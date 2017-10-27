@@ -3,11 +3,8 @@
 \usepackage[utf8]{inputenc}
 \usepackage{graphicx}
 \usepackage{listings}
-%\usepackage{amsmath}
+\usepackage{color}
 \setbeamertemplate{footline}[frame number]
-
-\usepackage{mathpartir}
-\input{macros}
 
 \title{Implementation of Type Inference and Elaboration in System $F_C$ for
 Functional Dependencies}
@@ -15,79 +12,121 @@ Functional Dependencies}
 \institute{KULeuven}
 \date{2017}
 
+\setbeamercovered{transparent}
+
 \begin{document}
 
 \frame{\titlepage}
 
-\begin{frame}
-    \frametitle{Timeline}
-    \begin{itemize}
-        \item What has been done?
-        \item Where are we now?
-        \item What are we trying to do?
-        \item What else could we do?
-    \end{itemize}
-\end{frame}
+\begin{frame}[fragile]
+    \frametitle{Functional Dependencies}
+    \begin{lstlisting}
+class Collection c e | c -> e where
+    singleton :: e -> c
 
-\begin{frame}
-    \frametitle{What has been done?}
-    \begin{columns}
-        \begin{column}{0.4\textwidth}
-            \begin{align*}
-                A &::= \cdot \mid A, C \\
-                C &::= Q \mid C_1 \Rightarrow C_2 \mid \forall a. C \\
-                Q &::= TC \tau
-            \end{align*}
-        \end{column}
-        \begin{column}{0.1\textwidth}
-            $\Longrightarrow$
-        \end{column}
-        \begin{column}{0.4\textwidth}
-            \begin{align*}
-                A &::= \emptyset \mid A, C \\
-                R &::= \forall \overline{a}. A \Rightarrow C \\
-                C &::= Q \\
-                Q &::= TC
-            \end{align*}
-        \end{column}
-    \end{columns}
-    \pause
-    \include{tc-ctrsolving}
+instance Collection [a] a where
+    singleton x = [x]
+
+singleton2 :: (Coll c1 e, Coll c2 c1 ) => e -> c2
+singleton2 c = singleton (singleton c)
+    \end{lstlisting}
 \end{frame}
 
 \begin{frame}[fragile]
-    \frametitle{Where are we now?}
-    \textbf{The Superclass Issue}
+    \frametitle{The Problem}
     \begin{lstlisting}
-class Eq a where
-    (==) :: a -> a -> Bool
+    class C a b | a -> b
+    instance C Int Bool
 
-class Eq a => Ord a where
-    (<=) :: a -> a -> Bool
-
-(<) :: (Eq a, Ord a) => a -> a -> Bool
-(<) a b | a == b = False
-        | a <= b = True
-        | otherwise = False
+    f :: C Int b => b -> Bool
+    f x = x
     \end{lstlisting}
 \end{frame}
 
 \begin{frame}
-    \frametitle{What are we trying to do?}
+    \frametitle{Solution}
+    \textit{Elaboration on Functional Dependencies}, \\
+    George Karachalias, Tom Schrijvers, 2017
     \begin{itemize}
-        \item Putting the $C$'s in System $F_C$
-            \begin{itemize}
-                \item Extend the representation with type equality coercions
-                \item Extend the $F_C$ typechecker
-            \end{itemize}
-        \item Inference and elaboration  of multi-parameter type classes
-        \item Inference and elaboration of functional dependencies
+        \item Implement type inference
+        \item Use type equality coercions in elaboration
     \end{itemize}
 \end{frame}
 
 \begin{frame}
-    \frametitle{What else could we do?}
-    Functional Dependencies vs GADTs $\&$ Type Families
+    \frametitle{Goals}
+    \begin{itemize}
+        \item[Part 1] Implementation of
+            \begin{itemize}
+                \item Type Inference
+                \item Elaboration into System $F_C$
+                \item GADTs and Type Families
+            \end{itemize}
+        \item[Part 2] Interaction of all features
+            \begin{itemize}
+            \end{itemize}
+    \end{itemize}
 \end{frame}
+
+\begin{frame}
+    \frametitle{Plan}
+    \begin{itemize}
+        \item Gert-Jan's implementation of Quantified Class Constraints
+        \item Simplify to Haskell '98
+        \item Extend
+            \begin{itemize}
+                \item System $F \rightarrow$ System $F_C$
+                \item Dormant type equalities
+            \end{itemize}
+        \item Implement algorithm from \textit{Elaboration on Functional Dependencies}
+        \item Implement Type Families \& GADTs
+    \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+    \frametitle{Current state}
+    \begin{itemize}
+        \item Gert-Jan's implementation of Quantified Class Constraints
+        \item Simplify to Haskell '98
+        \color{lightgray}
+        \item {Extend}
+            \begin{itemize}
+                \color{lightgray}
+                \item $F \rightarrow F_C$
+                \item Add type equalities to the source language
+            \end{itemize}
+        \item Implement algorithm from \textit{Elaboration on Functional Dependencies}
+        \item Implement Type Families \& GADTs
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Current Challenge}
+    \begin{itemize}
+        \item[Challenge:] Superclasses without backtracking
+        \item[Approach:] Transitive closure of given constraints
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Related work}
+    \begin{itemize}
+        \item Types and Programming Languages
+        \item OutsideIn(X)
+        \item System F with Type Equality Coercions
+        \item Elaboration on Functional Dependencies
+        \item Quantified Class Constraints
+    \end{itemize}
+\end{frame}
+
+%class Eq a where
+%    (==) :: a -> a -> Bool
+%class Eq a => Ord a where
+%    (<=) :: a -> a -> Bool
+%
+%(<) :: (Eq a, Ord a) => a -> a -> Bool
+%(<) a b | a == b = False
+%        | a <= b = True
+%        | otherwise = False
 
 \end{document}
