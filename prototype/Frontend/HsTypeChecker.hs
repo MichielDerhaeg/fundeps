@@ -24,7 +24,6 @@ import Utils.SnocList
 import Utils.PrettyPrint hiding ((<>))
 import Utils.Utils
 import Utils.Errors
-import Utils.Trace
 import Utils.ListT
 
 import Control.Monad.Writer
@@ -582,7 +581,7 @@ overlapCheck theory cls_ct@(ClsCt cls1 ty1)
 -- | Simplify the given type class constraints. Return the residual constraints
 --   and the dictionary substitution.
 simplify :: [RnTyVar] -> ProgramTheory -> AnnClsCs -> TcM (AnnClsCs, FcTmSubst)
-simplify as theory [] = return (mempty, mempty)
+simplify _as _theory [] = return (mempty, mempty)
 simplify as theory (ct:cs) =
   entail as theory ct >>= \case
     Nothing -> do
@@ -608,9 +607,29 @@ entail as ((d' :| CtrScheme bs cls_cs (ClsCt cls2 ty2)):schemes) ct@(d :| ClsCt 
     return $ Just (ann_cls_cs, ev_subst)
   | otherwise = entail as schemes ct
 
+-- | TODO to similar to entail/simplify -> generalise/refactor
+-- | assuming superclass ctr scheme 'well-formedness'
 closure :: [RnTyVar] -> ProgramTheory -> AnnClsCt -> TcM (AnnClsCs, FcTmSubst)
-closure as ((d_top :| CtrScheme alphas [ClsCt cls2 ty2] cls_ct):schemes) ct@(d :| ClsCt cls1 ty1)
-  = undefined
+closure untchs theory cls_ct = go untchs theory cls_ct
+  where
+    go as ((d_top :| CtrScheme alphas [ClsCt cls2 ty2] q):schemes) ct@(d :| ClsCt cls1 ty1)
+      | cls1 == cls2
+      , Right ty_subst <- unify as [ty1 :~: ty2] = do
+        d' <- freshDictVar
+        let sub_q = substInClsCt ty_subst q
+        fc_subbed_alphas <-
+          mapM elabMonoTy . substInTyVars ty_subst $ labelOf alphas
+        let ev_subst =
+              (d' |->
+               FcTmApp
+                 (foldl FcTmTyApp (FcTmVar d_top) fc_subbed_alphas)
+                 (FcTmVar d))
+        (cls_cs, ev_subst') <- go as schemes ct
+        (all_cs, ev_subst'') <- closureAll as theory (d' :| sub_q : cls_cs)
+        return (d' :| sub_q : cls_cs <> all_cs, ev_subst'' <> ev_subst' <> ev_subst)
+      | otherwise = go as schemes ct
+    go _untchs [] _cls_ct = return (mempty, mempty)
+    go _ _ _ = throwErrorM $ text "closure" <+> colon <+> text "Contstraint scheme has too many implications"
 
 closureAll :: [RnTyVar] -> ProgramTheory -> AnnClsCs -> TcM (AnnClsCs, FcTmSubst)
 closureAll as theory cs = -- TODO nub AnnClsCs?
@@ -771,22 +790,32 @@ elabInsDecl theory (InsD ins_ctx cls typat method method_tm) = do
 
   -- Entail the superclass constraints
   fc_super_tms <- do
-    a <- lookupClsParam cls
-    (ds, super_cs) <- lookupClsSuper cls                          >>=
-                      --mapM freshenLclBndrs                        >>=
-                      return . substVar a (hsTyPatToMonoTy typat) >>=
-                      annotateCts
+    --a <- lookupClsParam cls
+    --(ds, super_cs) <- lookupClsSuper cls                          >>=
+    --                  --mapM freshenLclBndrs                      >>=
+    --                  return . substVar a (hsTyPatToMonoTy typat) >>=
+    --                  annotateCts
+
+    (super_cs, super_ev_subst) <- closure
+                                    (map labelOf bs)
+                                    (theory_super theory)
+                                    (ins_d :| head_ct)
 
     (residual_cs, ev_subst) <- simplify
                                  (map labelOf bs)
                                  (theory_inst local_theory <> theory_local local_theory)
                                  super_cs
+
+    traceM . renderWithColor $
+        ppr head_ct <+> colon <+> ppr super_cs <+> colon <+> ppr super_ev_subst
+        $$ ppr ev_subst
+
     unless (null residual_cs) $
       throwErrorM (text "Failed to resolve superclass constraints" <+>
                    colon <+>
                    ppr residual_cs $$ text "From" <+> colon <+> ppr local_theory)
 
-    return (map (substFcTmInTm ev_subst . FcTmVar) ds)
+    return (map (substFcTmInTm (ev_subst <> super_ev_subst) . FcTmVar) (labelOf super_cs))
 
   -- The full implementation of the dictionary transformer
   fc_dict_transformer <- do
