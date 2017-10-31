@@ -5,8 +5,6 @@
 
 module Frontend.HsTypeChecker (hsElaborate) where
 
-import Debug.Trace
-
 import Frontend.HsTypes
 import Frontend.HsRenamer
 
@@ -20,12 +18,9 @@ import Utils.Unique
 import Utils.AssocList
 import Utils.Annotated
 import Utils.Ctx
-import Utils.SnocList
 import Utils.PrettyPrint hiding ((<>))
 import Utils.Utils
 import Utils.Errors
-import Utils.Trace
-import Utils.ListT
 
 import Control.Monad.Writer
 import Control.Monad.Reader
@@ -33,6 +28,7 @@ import Control.Monad.State
 import Control.Monad.Except
 import Control.Arrow (second)
 import Data.List (nub)
+import Data.Maybe (catMaybes)
 
 -- * Create the typechecking environment from the renaming one
 -- ------------------------------------------------------------------------------
@@ -292,34 +288,17 @@ elabCtr (CtrAbs (a :| _) ct) = FcTyAbs (rnTyVarToFcTyVar a) <$> elabCtr ct
 --}
 
 -- TODO document us
+elabClsCt :: RnClsCt -> TcM FcType
 elabClsCt (ClsCt cls ty) =
   FcTyApp <$> (FcTyCon <$> lookupClsTyCon cls) <*> elabMonoTy ty
 
 elabScheme :: CtrScheme -> TcM FcType
 elabScheme (CtrScheme as cs cls_ct) = elabAbs as $ elabImpls cs $ elabClsCt cls_ct
   where
-    elabImpls (ct1:cs) fc = mkFcArrowTy <$> elabClsCt ct1 <*> elabImpls cs fc
+    elabImpls (ct1:cs') fc = mkFcArrowTy <$> elabClsCt ct1 <*> elabImpls cs' fc
     elabImpls [] fc = fc
-    elabAbs ((a :| _):as) fc = FcTyAbs (rnTyVarToFcTyVar a) <$> elabAbs as fc
+    elabAbs ((a :| _):as') fc = FcTyAbs (rnTyVarToFcTyVar a) <$> elabAbs as' fc
     elabAbs [] fc = fc
-
--- * Constraint Solving Monad
--- ------------------------------------------------------------------------------
-
-newtype SolveM a = SolveM (ListT TcM a)
-  deriving ( Functor, Applicative, Monad
-           , MonadState TcEnv, MonadReader TcCtx, MonadError String )
-
-instance MonadUnique SolveM where
-  getUniqueSupplyM = liftSolveM getUniqueSupplyM
-
--- | Lift TcM into SolveM
-liftSolveM :: TcM a -> SolveM a
-liftSolveM m = SolveM (lift m)
-
--- | Get the first solution
-runSolverFirstM :: SolveM a -> TcM a
-runSolverFirstM (SolveM m) = firstListT m
 
 -- * Constraint store
 -- ------------------------------------------------------------------------------
@@ -363,8 +342,7 @@ storeAnnCts cs = modify (\(CS eqs ccs) -> CS eqs (mappend ccs cs))
 -- | Add many type variables to the typing context
 extendTcCtxTysM :: MonadReader TcCtx m => [RnTyVar] -> m a -> m a
 extendTcCtxTysM []     m = m
---extendTcCtxTysM (a:as) m = extendCtxTyM a (kindOf a) (extendTcCtxTysM as m) -- just a left fold..
-extendTcCtxTysM ty_vars m = foldl (\m a -> extendCtxTyM a (kindOf a) m) m ty_vars
+extendTcCtxTysM ty_vars m = foldl (\m' a -> extendCtxTyM a (kindOf a) m') m ty_vars
 
 -- | Set the typing environment
 setTcCtxTmM :: MonadReader TcCtx m => TcCtx -> m a -> m a
@@ -564,8 +542,8 @@ overlapCheck :: MonadError String m => FullTheory -> RnClsCt -> m ()
 overlapCheck theory cls_ct@(ClsCt cls1 ty1)
   -- We only care about the instance theory
  =
-  case filter isJust (fmap overlaps (theory_inst theory)) of
-    Just msg:_ -> throwErrorM msg
+  case catMaybes (fmap overlaps (theory_inst theory)) of
+    msg:_ -> throwErrorM msg
     []         -> return ()
   where
     overlaps (_ :| scheme@(CtrScheme _ _ (ClsCt cls2 ty2)))
@@ -573,8 +551,6 @@ overlapCheck theory cls_ct@(ClsCt cls1 ty1)
       , Right {} <- unify [] [ty1 :~: ty2] =
         Just (text "overlapCheck:" $$ ppr cls_ct $$ ppr scheme)
       | otherwise = Nothing
-    isJust (Just _) = True
-    isJust Nothing = False
 
 -- * Constraint Entailment
 -- ------------------------------------------------------------------------------
@@ -582,7 +558,7 @@ overlapCheck theory cls_ct@(ClsCt cls1 ty1)
 -- | Simplify the given type class constraints. Return the residual constraints
 --   and the dictionary substitution.
 simplify :: [RnTyVar] -> ProgramTheory -> AnnClsCs -> TcM (AnnClsCs, FcTmSubst)
-simplify as theory [] = return (mempty, mempty)
+simplify _as _theory [] = return (mempty, mempty)
 simplify as theory (ct:cs) =
   entail as theory ct >>= \case
     Nothing -> do
