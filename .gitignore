@@ -11,3 +11,6 @@ tags
 *.snm
 *.toc
 *.vrb
+
+reports/*.pdf
+presentations/*.pdf
