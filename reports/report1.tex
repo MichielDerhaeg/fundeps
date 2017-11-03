@@ -7,7 +7,7 @@
 \pagestyle{myheadings}
 \markright{Intermediary report November -  Student: Michiel Derhaeg}
 
-{\bf Thesis title:} {\em Implementation of Type Inference and Elaboration into System FC for Functional Dependencies}
+{\bf Thesis title:} {\em Implementation of Type Inference and Elaboration into System $F_C$ for Functional Dependencies}
 
 \vspace{0.5cm}
 {\bf Supervisor:} Tom Schrijvers
@@ -26,7 +26,7 @@ type checker rejects certain unambiguous programs which in theory should have a
 principal type. Due to the inability to elaborate this into System F, an often
 used intermediate representation for functional programming languages.
 
-\paragraph{}
+\mbox{}\\
 An extension of System F with type equality coercions has made elaboration
 possible and the goal of this thesis is to implement a proposed solution to
 discover practical issues that may arise and study how this solution interacts
@@ -35,26 +35,40 @@ with other major type system features like GADTs and Type Families.
 \vspace{1cm}
 {\bf Literature study:}
 \begin{itemize} % TODO which authors need to be included? which journal?
-\item D. Vytiniotis, S. P. Jones, T. Schrijvers, M. Sulzmann; "OutsideIn(X);
-    Modular type inference with local assumptions". TODO, 2017
-\item M. Sulzmann, M. M. T. Chakravarty, S. P. Jones, K. Donnelly; "System F
-    With Type Equality Coercions". TODO, 2011
-\item G. Butto, G. Karachalias, T. Schrijvers; "Quantified Class Constraints".
-    ACM SIGPLAN, 2017
-\item G. Karachalias, T. Schrijvers; "Elaboration on Functional Dependencies".
-    ACM SIGPLAN, 2017
-\item P. Wadler, S. Blott; "How to make ad-hoc polymorphism less ad hoc". TODO, 1988
+\item
+  D. Vytiniotis, S. Peyton jones, T. Schrijvers, and M. Sulzmann. 2011.
+  OutsideIn(X): Modular Type Inference with Local Assumptions. J. Funct.
+  Program. 21, vol. 4-5, pp. 333--412.
+\item
+  M. Sulzmann, M. M. T. Chakravarty, S. Peyton Jones, and K. Donnelly. 2007.
+  System F with Type Equality Coercions.
+  In \textit{TLDI '07}. ACM.
+\item
+  G.J. Bottu, G. Karachalias, T. Schrijvers, B. C. d. S. Oliveira, and P. Wadler. 2017.
+  Quantified Class Constraints.
+  In \textit{Haskell 2017}. ACM.
+\item
+  G. Karachalias and T. Schrijvers. 2017.
+  Elaboration on Functional Dependencies. %: Functional Dependencies Are Dead, Long Live Functional Dependencies!.
+  In \textit{Haskell 2017}. ACM.
+\item
+  P. Wadler and S. Blott. 1989.
+  How to Make Ad-hoc Polymorphism Less Ad Hoc.
+  In \textit{POPL '89}. ACM.
 \end{itemize}
 
 \vspace{1cm}
 {\bf Finished work:}
-Firstly, I have studied the literature concerning type systems. I've read the
-book \textit{Types and Programming Languages} and several papers about type
-systems, System $F_C$ and type classes.
+Firstly, I have studied some related work concerning type systems. I have read
+the book \textit{Types and Programming Languages} and several papers concerning
+Haskell's type system, System $F_C$, type classes, and functional dependencies.
 
-I've cleaned up a prototype compiler that was used for a previous project and
-implented a simpler type class constraint solver so it supports similar features
-as Haskell '98.
+Furthermore, I have simplified the implementation of a prototype compiler for a
+Haskell-like functional language, which has already been developed by the
+research group.
+
+% George says: 'cleaned up' is too informal for this sort of text
+% George says: Use "I have" instead "I've"
 
 \vspace{1cm}
 {\bf Main results:}
@@ -62,19 +76,23 @@ We now have an implementation of a prototype compiler for a basic functional
 programming language with type classes which we can easily extend with the
 features we will later require.
 
-This implementation now supports superclasses without relying on backtracking.
+Additionally, the implementation currently supports superclass constraints
+without relying on backtracking (as opposed to the non-simplified version of
+the compiler), which is essential for implementing type inference for
+functional dependencies.
 
 \vspace{1cm}
 {\bf Main difficulties:}
-A significant amount of time had to be invested to familiarize myself with the
-research area, but this was to be expected as I had little to no prior
+A significant amount of time had to be invested into familiarizing myself with
+the research area, but this was to be expected, as I had little to no prior
 knowlegde about it.
 
-An unexpected time investment was moving from the theory to the
-implementation. Figuring out which parts of the code coincided with wich parts
-of the theory took an unexpected amount of effort initially. But once this
-hurdle had passed and I was familiarized with the implementation, this was no
-longer a issue. % don't know about this sentence structure
+An unexpected amount of time has been invested in moving from the theory to the
+implementation. Figuring out the correlation between the code and the theory
+took an unexpected amount of effort initially.
+%% However, once this
+%% hurdle had passed and I was familiarized with the implementation, this was no
+%% longer a issue. % don't know about this sentence structure
 
 % non-determinism -> backtracking ?
 We've opted for a type class constraint solver without non-determinism. We
