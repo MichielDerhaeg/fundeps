@@ -18,7 +18,7 @@
 
 \vspace{1cm}
 {\bf Short context and goal: }
-When declaring type classes with multiple parameters, it might be usefull to
+When declaring type classes with multiple parameters, it might be useful to
 define functional dependencies between these paremeters to prevent any
 ambiguities during type inference. This type system feature has been implemented
 in the Glasgow Haskell Compiler. But this implementation is incomplete and the
@@ -50,27 +50,43 @@ with other major type system features like GADTs and Type Families.
 {\bf Finished work:}
 Firstly, I have studied the literature concerning type systems. I've read the
 book \textit{Types and Programming Languages} and several papers about type
-systems, System $F_C$ and type classes. I've cleaned up a prototype compiler
-that was used for a previous project and implented a simpler type class
-constraint solver so it just supports Haskell '98.
+systems, System $F_C$ and type classes.
 
+I've cleaned up a prototype compiler that was used for a previous project and
+implented a simpler type class constraint solver so it supports similar features
+as Haskell '98.
 
 \vspace{1cm}
 {\bf Main results:}
-? % TODO not sure what do say here
+We now have an implementation of a prototype compiler for a basic functional
+programming language with type classes which we can easily extend with the
+features we will later require.
 
+This implementation now supports superclasses without relying on backtracking.
 
 \vspace{1cm}
 {\bf Main difficulties:}
-The main unexpected time investment was moving from the theory to the
+A significant amount of time had to be invested to familiarize myself with the
+research area, but this was to be expected as I had little to no prior
+knowlegde about it.
+
+An unexpected time investment was moving from the theory to the
 implementation. Figuring out which parts of the code coincided with wich parts
 of the theory took an unexpected amount of effort initially. But once this
 hurdle had passed and I was familiarized with the implementation, this was no
-longer a issue.
+longer a issue. % don't know about this sentence structure
+
+% non-determinism -> backtracking ?
+We've opted for a type class constraint solver without non-determinism. We
+therefore had to devise another method to deal with superclasses.
 
 \vspace{1cm}
 {\bf Planning:}
-? % TODO if only i had those notes
+% TODO changeme, i'll put something here already
+By the end of November I expect to have extended the target language of the
+compiler, which currently is System F,  with type equality coercions. And have
+finished the parts of the thesis text concerning the required background.
+% better word than background
 
 \vspace{1cm}
 {\bf Continuing to work like this, I expect to achive a ??/20 by the end of the
