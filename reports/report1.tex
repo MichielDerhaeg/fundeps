@@ -14,7 +14,7 @@
 
 
 \vspace{0.5cm}
-{\bf Daily leaders} George Karachalias
+{\bf Daily leaders:} George Karachalias
 
 \vspace{1cm}
 {\bf Short context and goal: }
@@ -23,8 +23,7 @@ define functional dependencies between these paremeters to prevent any
 ambiguities during type inference. This type system feature has been implemented
 in the Glasgow Haskell Compiler, but, the implementation is incomplete and the
 type checker rejects certain unambiguous programs which in theory should have a
-principal type. %Due to the inability to elaborate this into System F, an often
-%used intermediate representation for functional programming languages.
+principal type.
 
 \mbox{}\\
 An extension of System F with type equality coercions has made elaboration
@@ -34,7 +33,7 @@ with other major type system features like GADTs and Type Families.
 
 \vspace{1cm}
 {\bf Literature study:}
-\begin{itemize} % TODO which authors need to be included? which journal?
+\begin{itemize}
 \item
   D. Vytiniotis, S. Peyton jones, T. Schrijvers, and M. Sulzmann. 2011.
   OutsideIn(X): Modular Type Inference with Local Assumptions. J. Funct.
@@ -90,11 +89,7 @@ knowlegde about it.
 An unexpected amount of time has been invested in moving from the theory to the
 implementation. Figuring out the correlation between the code and the theory
 took an unexpected amount of effort initially.
-%% However, once this
-%% hurdle had passed and I was familiarized with the implementation, this was no
-%% longer a issue. % don't know about this sentence structure
 
-% non-determinism -> backtracking ?
 We've opted for a type class constraint solver without non-determinism. We
 therefore had to devise another method to deal with superclasses.
 
