@@ -327,3 +327,13 @@ instance FreshenLclBndrs FcAlt where
     ys  <- mapM (\_ -> freshFcTmVar) xs
     tm' <- freshenLclBndrs $ foldl (\t (x,y) -> substVar x (FcTmVar y) t) tm (zipExact xs ys)
     return (FcAlt (FcConPat dc ys) tm')
+
+instance FreshenLclBndrs CtrScheme where
+  freshenLclBndrs (CtrScheme as cs ct) = do
+    new_as <- mapM (freshRnTyVar . kindOf) (labelOf as)
+    let local_subst = buildRnSubst $ zip (labelOf as) new_as
+    return $
+      CtrScheme
+        (new_as |: fmap kindOf new_as)
+        (substInClsCs local_subst cs)
+        (substInClsCt local_subst ct)
