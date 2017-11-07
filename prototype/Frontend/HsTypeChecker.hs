@@ -277,21 +277,12 @@ elabMonoTy (TyCon tc)      = FcTyCon <$> lookupTyCon tc
 elabMonoTy (TyApp ty1 ty2) = FcTyApp <$> elabMonoTy ty1 <*> elabMonoTy ty2
 elabMonoTy (TyVar v)       = return (rnTyVarToFcType v)
 
--- | Elaborate a constraint (DO NOT CHECK WELL-SCOPEDNESS)
--- GEORGE: Check kinds though!!
-{--
-elabCtr :: RnCtr -> TcM FcType
-elabCtr (CtrClsCt (ClsCt cls ty))
-  = FcTyApp <$> (FcTyCon <$> lookupClsTyCon cls) <*> elabMonoTy ty
-elabCtr (CtrImpl ct1 ct2) = mkFcArrowTy <$> (elabCtr ct1) <*> elabCtr ct2
-elabCtr (CtrAbs (a :| _) ct) = FcTyAbs (rnTyVarToFcTyVar a) <$> elabCtr ct
---}
-
--- TODO document us
+-- | Elaborate a class constaint
 elabClsCt :: RnClsCt -> TcM FcType
 elabClsCt (ClsCt cls ty) =
   FcTyApp <$> (FcTyCon <$> lookupClsTyCon cls) <*> elabMonoTy ty
 
+-- | Elaborate a class constaint scheme
 elabScheme :: CtrScheme -> TcM FcType
 elabScheme (CtrScheme as cs cls_ct) = elabAbs as $ elabImpls cs $ elabClsCt cls_ct
   where
@@ -555,8 +546,8 @@ overlapCheck theory cls_ct@(ClsCt cls1 ty1)
 -- * Constraint Entailment
 -- ------------------------------------------------------------------------------
 
--- | Simplify the given type class constraints. Return the residual constraints
---   and the dictionary substitution.
+-- | Simplify the wanted type class constraints. Return the residual constraints
+-- | and the dictionary substitution.
 simplify :: [RnTyVar] -> ProgramTheory -> AnnClsCs -> TcM (AnnClsCs, FcTmSubst)
 simplify _as _theory [] = return (mempty, mempty)
 simplify as theory (ct:cs) =
@@ -568,6 +559,8 @@ simplify as theory (ct:cs) =
       (residual_cs, fc_subst') <- simplify as theory $ cs' <> cs
       return (residual_cs, fc_subst' <> fc_subst)
 
+-- | Entail a single type class constraint. Returns Nothing if nothing has been
+-- | done. May produce additional class constraints.
 entail :: [RnTyVar] -> ProgramTheory -> AnnClsCt -> TcM (Maybe (AnnClsCs, FcTmSubst))
 entail _untch [] _cls_ct = return Nothing
 entail as ((d' :| CtrScheme bs cls_cs (ClsCt cls2 ty2)):schemes) ct@(d :| ClsCt cls1 ty1)
@@ -584,8 +577,8 @@ entail as ((d' :| CtrScheme bs cls_cs (ClsCt cls2 ty2)):schemes) ct@(d :| ClsCt 
     return $ Just (ann_cls_cs, ev_subst)
   | otherwise = entail as schemes ct
 
--- | TODO to similar to entail/simplify -> generalise/refactor
--- | assuming superclass ctr scheme 'well-formedness'
+-- | Returns the (transitive) super class constaints of the type class constraint
+-- | using the super class theory.
 closure :: [RnTyVar] -> ProgramTheory -> AnnClsCt -> TcM (AnnClsCs, FcTmSubst)
 closure untchs theory cls_ct = go theory cls_ct
   where
