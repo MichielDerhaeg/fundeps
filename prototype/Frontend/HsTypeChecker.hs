@@ -5,6 +5,8 @@
 
 module Frontend.HsTypeChecker (hsElaborate) where
 
+import Debug.Trace
+
 import Frontend.HsTypes
 import Frontend.HsRenamer
 
@@ -512,10 +514,10 @@ unify  untchs eqs
       | v1 == v2 = Just (mempty, [])
     one_step us (TyVar v :~: ty)
       | v `notElem` us, occursCheck v ty = Just (v |-> ty, [])
-      | otherwise                        = Nothing
     one_step us (ty :~: TyVar v)
       | v `notElem` us, occursCheck v ty = Just (v |-> ty, [])
-      | otherwise                        = Nothing
+    one_step _us (_ :~: TyVar _) = Nothing
+    one_step _us (TyVar _ :~: _) = Nothing
     one_step _us (TyCon tc1 :~: TyCon tc2)
       | tc1 == tc2 = Just (mempty, [])
       | otherwise  = Nothing
@@ -576,20 +578,43 @@ entail as ((d' :| CtrScheme bs cls_cs (ClsCt cls2 ty2)):schemes) ct@(d :| ClsCt 
     (d''s, ann_cls_cs) <- annotateCts $ substInClsCs ty_subst cls_cs
     fc_subbed_bs <- mapM elabMonoTy . substInTyVars ty_subst $ labelOf bs
     let ev_subst =
-          (d |->
+          d |->
            foldl
              FcTmApp
              (foldl FcTmTyApp (FcTmVar d') fc_subbed_bs)
-             (FcTmVar <$> d''s))
+             (FcTmVar <$> d''s)
     return $ Just (ann_cls_cs, ev_subst)
   | otherwise = entail as schemes ct
 
+-- | TODO to similar to entail/simplify -> generalise/refactor
+-- | assuming superclass ctr scheme 'well-formedness'
 closure :: [RnTyVar] -> ProgramTheory -> AnnClsCt -> TcM (AnnClsCs, FcTmSubst)
-closure as ((d_top :| CtrScheme alphas [ClsCt cls2 ty2] cls_ct):schemes) ct@(d :| ClsCt cls1 ty1)
-  = undefined
+closure untchs theory cls_ct = go theory cls_ct
+  where
+    go ((d_top :| CtrScheme alphas [ClsCt cls2 ty2] q):schemes) ct@(d :| ClsCt cls1 ty1)
+      | cls1 == cls2
+      , Right ty_subst <- unify untchs [ty1 :~: ty2] = do
+        d' <- freshDictVar
+        let sub_q = substInClsCt ty_subst q
+        fc_subbed_alphas <-
+          mapM elabMonoTy . substInTyVars ty_subst $ labelOf alphas
+        let ev_subst =
+              d' |->
+               FcTmApp
+                 (foldl FcTmTyApp (FcTmVar d_top) fc_subbed_alphas)
+                 (FcTmVar d)
+        (cls_cs, ev_subst') <- go schemes ct
+        (all_cs, ev_subst'') <- closureAll untchs theory (d' :| sub_q : cls_cs)
+        return (d' :| sub_q : cls_cs <> all_cs, ev_subst <> ev_subst' <> ev_subst'')
+      | otherwise = go schemes ct
+    go [] _cls_ct = return (mempty, mempty)
+    go _ _ =
+      throwErrorM $
+        text "closure" <+> colon <+>
+          text "constraint scheme has too many implications"
 
 closureAll :: [RnTyVar] -> ProgramTheory -> AnnClsCs -> TcM (AnnClsCs, FcTmSubst)
-closureAll as theory cs = -- TODO nub AnnClsCs?
+closureAll as theory cs =
   ((\(a, b) -> (mconcat a, mconcat b)) . unzip) <$> mapM (closure as theory) cs
 
 -- | Elaborate a class declaration. Return
@@ -716,17 +741,25 @@ extendCtxKindAnnotatedTysM ann_as = extendCtxTysM as (map kindOf as)
 --   a) The dictionary transformer implementation
 --   b) The extended program theory
 elabInsDecl :: FullTheory -> RnInsDecl -> TcM (FcValBind, FullTheory)
-elabInsDecl theory (InsD ins_ctx cls typat method method_tm) = do
+elabInsDecl theory (InsD ins_cs cls typat method method_tm) = do
+  let bs      = ftyvsOf typat
+  let fc_bs   = map (rnTyVarToFcTyVar . labelOf) bs
+  let head_ct = ClsCt cls (hsTyPatToMonoTy typat)
+
   -- Ensure the instance does not overlap
   overlapCheck theory head_ct
 
   -- Create the instance constraint scheme
   ins_d <- freshDictVar
-  let ins_scheme = ins_d :| CtrScheme bs ins_ctx head_ct
+  ins_scheme <- fmap (ins_d :|) $ freshenLclBndrs $ CtrScheme bs ins_cs head_ct
 
   --  Generate fresh dictionary variables for the instance context
-  ann_ins_ctx <- snd <$> annotateCts ins_ctx
-  let ann_ins_schemes = (fmap . fmap) (CtrScheme [] []) ann_ins_ctx
+  ann_ins_cs <- snd <$> annotateCts ins_cs
+  (closure_cs, closure_ev_subst) <- closureAll
+                                      (labelOf bs)
+                                      (theory_super theory)
+                                       ann_ins_cs
+  let ann_ins_schemes = (fmap . fmap) (CtrScheme [] []) (closure_cs <> ann_ins_cs)
 
   --  The local program theory
   let local_theory = theory `ftExtendLocal` ann_ins_schemes `ftExtendLocal` [ins_scheme]
@@ -736,37 +769,37 @@ elabInsDecl theory (InsD ins_ctx cls typat method method_tm) = do
 
   -- Create the dictionary transformer type
   dtrans_ty <- do
-    fc_head_ty <- extendTcCtxTysM (map labelOf bs) (wfElabClsCt head_ct)
-    fc_ins_ctx <- extendTcCtxTysM (map labelOf bs) (wfElabClsCs ins_ctx)
-    return $ fcTyAbs fc_bs $ fcTyArr fc_ins_ctx fc_head_ty
+    fc_head_ty <- extendTcCtxTysM (labelOf bs) (wfElabClsCt head_ct)
+    fc_ins_cs <- extendTcCtxTysM (labelOf bs) (wfElabClsCs ins_cs)
+    return $ fcTyAbs fc_bs $ fcTyArr fc_ins_cs fc_head_ty
 
   -- Elaborate the method implementation
   fc_method_tm <- do
     expected_method_ty <- instMethodTy (hsTyPatToMonoTy typat) <$> lookupTmVarM method
-    elabTermWithSig (map labelOf bs) local_theory method_tm expected_method_ty
+    substFcTmInTm closure_ev_subst <$>
+      elabTermWithSig (labelOf bs) local_theory method_tm expected_method_ty
 
   -- Entail the superclass constraints
   fc_super_tms <- do
     a <- lookupClsParam cls
-    (ds, super_cs) <- lookupClsSuper cls                          >>=
-                      --mapM freshenLclBndrs                        >>=
-                      return . substVar a (hsTyPatToMonoTy typat) >>=
-                      annotateCts
+    (ds, super_cs) <- substVar a (hsTyPatToMonoTy typat) <$>
+                        lookupClsSuper cls >>= annotateCts
 
     (residual_cs, ev_subst) <- simplify
-                                 (map labelOf bs)
-                                 (theory_inst local_theory <> theory_local local_theory)
+                                 (labelOf bs)
+                                 (ftDropSuper local_theory)
                                  super_cs
+
     unless (null residual_cs) $
       throwErrorM (text "Failed to resolve superclass constraints" <+>
                    colon <+>
                    ppr residual_cs $$ text "From" <+> colon <+> ppr local_theory)
 
-    return (map (substFcTmInTm ev_subst . FcTmVar) ds)
+    return (map (substFcTmInTm (closure_ev_subst <> ev_subst) . FcTmVar) ds)
 
   -- The full implementation of the dictionary transformer
   fc_dict_transformer <- do
-    binds <- annCtsToTmBinds ann_ins_ctx
+    binds <- annCtsToTmBinds ann_ins_cs
     dc    <- lookupClsDataCon cls
     pat_ty <- elabMonoTy (hsTyPatToMonoTy typat)
     return $ fcTmTyAbs fc_bs $
@@ -777,10 +810,6 @@ elabInsDecl theory (InsD ins_ctx cls typat method method_tm) = do
   let fc_val_bind = FcValBind ins_d dtrans_ty fc_dict_transformer
 
   return (fc_val_bind, ext_theory)
-  where
-    bs      = ftyvsOf typat
-    fc_bs   = map (rnTyVarToFcTyVar . labelOf) bs
-    head_ct = ClsCt cls (hsTyPatToMonoTy typat)
 
 -- | Instantiate a method type for a particular instance
 instMethodTy :: RnMonoTy -> RnPolyTy -> RnPolyTy
@@ -805,12 +834,13 @@ elabTermWithSig untch theory tm poly_ty = do
   -- Generate fresh dictionary variables for the given constraints
   given_ccs <- snd <$> annotateCts cs
   dbinds <- annCtsToTmBinds given_ccs
-  let given_schemes = (fmap . fmap) (CtrScheme [] []) given_ccs
+  (super_cs, closure_ev_subst) <- closureAll untch (theory_super theory) given_ccs
+  let given_schemes = (fmap . fmap) (CtrScheme [] []) (super_cs <> given_ccs)
 
   -- Resolve all the wanted constraints
   let untouchables = nub (untch ++ map labelOf as)
   ty_subst <- unify untouchables $ wanted_eqs ++ [mono_ty :~: ty]
-  let local_theory = theory_local theory <> theory_inst theory <> given_schemes
+  let local_theory = ftDropSuper theory <> given_schemes
   let wanted = substInAnnClsCs ty_subst wanted_ccs
 
    -- rightEntailsRec untouchables local_theory wanted
@@ -827,7 +857,9 @@ elabTermWithSig untch theory tm poly_ty = do
   -- Generate the resulting System F term
   return $
     fcTmTyAbs fc_as $
-    fcTmAbs dbinds $ substFcTmInTm ev_subst $ substFcTyInTm fc_subst fc_tm
+    fcTmAbs dbinds $
+      substFcTmInTm (closure_ev_subst <> ev_subst) $
+        substFcTyInTm fc_subst fc_tm
 
 -- | Convert a source type substitution to a System F type substitution
 elabHsTySubst :: HsTySubst -> TcM FcTySubst

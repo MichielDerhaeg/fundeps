@@ -38,7 +38,9 @@ runTest filePath = do
             Left err -> throwMainError "typechecker" err
             Right ((((fc_pgm, tc_ty, theory), envs), us2), _tc_env) ->
               case fcTypeCheck envs us2 fc_pgm of
-                Left err -> throwMainError "System F typechecker" err
+                Left err -> do
+                  throwMainError "System F typechecker" err
+                  putStrLn $ renderWithColor $ ppr fc_pgm
                 Right ((fc_ty, _us3), _fc_env) -> do
                   putStrLn "---------------------------- Elaborated Program ---------------------------"
                   putStrLn $ renderWithColor $ ppr fc_pgm
