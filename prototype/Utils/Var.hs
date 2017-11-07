@@ -1,7 +1,7 @@
-{-# OPTIONS_GHC -fno-warn-overlapping-patterns #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE KindSignatures    #-}
 {-# LANGUAGE GADTs             #-}
+{-# LANGUAGE CPP               #-}
 
 module Utils.Var
 ( -- * Parser output: Sym
@@ -84,7 +84,9 @@ instance Eq a => Eq (HsTmVar a) where
 instance Eq a => Eq (HsTyVar a) where
   (PsTyVar a  ) == (PsTyVar b  ) = (a == b)
   (RnTyVar a _) == (RnTyVar b _) = (a == b)
+#if __GLASGOW_HASKELL__ < 800
   _ == _ = error "We need >= GHC 8.0 to avoid this.."
+#endif
 
 -- | Parsed term and type variables
 type PsTmVar = HsTmVar Sym
@@ -168,7 +170,9 @@ instance Uniquable FcTyVar where
 -- | Convert a source renamed variable to a System F variable
 rnTyVarToFcTyVar :: HsTyVar Name -> FcTyVar
 rnTyVarToFcTyVar (RnTyVar name kind) = FcTyVar name kind
+#if __GLASGOW_HASKELL__ < 800
 rnTyVarToFcTyVar _ {- PsTyVar {} -}  = error "We need GHC 8.0"
+#endif
 
 -- | Convert a source renamed term variable to a System F type variable
 rnTmVarToFcTmVar :: HsTmVar Name -> FcTmVar
@@ -213,7 +217,9 @@ instance Named (HsTmVar Name) where
 
 instance Named (HsTyVar Name) where
   nameOf (RnTyVar name _kind) = name
+#if __GLASGOW_HASKELL__ < 800
   nameOf _ {- PsTyVar {} -}   = error "We need GHC 8.0"
+#endif
 
 instance Named FcTmVar where
   nameOf = fctmvar_name
@@ -226,7 +232,9 @@ instance Named FcTyVar where
 
 instance Kinded (HsTyVar Name) where
   kindOf (RnTyVar _name kind) = kind
+#if __GLASGOW_HASKELL__ < 800
   kindOf _ {- PsTyVar {} -}   = error "We need GHC 8.0"
+#endif
 
 instance Kinded FcTyVar where
   kindOf = fctyvar_kind
