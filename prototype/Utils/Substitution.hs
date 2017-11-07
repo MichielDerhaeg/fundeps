@@ -202,8 +202,9 @@ substInClsCt subst (ClsCt cls ty) = ClsCt cls (substInMonoTy subst ty)
 substInClsCs :: HsTySubst -> RnClsCs -> RnClsCs
 substInClsCs subst = map (substInClsCt subst)
 
--- TODO document
-substInAnnClsCs subst = fmap (\(d :| ct) -> (d :| substInClsCt subst ct))
+-- | Apply a type substitution to a list of annotated class constraints
+substInAnnClsCs :: HsTySubst -> AnnClsCs -> AnnClsCs
+substInAnnClsCs subst = (fmap . fmap) (substInClsCt subst)
 
 -- | Apply a type substitution to a type variable
 substInTyVar :: HsTySubst -> RnTyVar -> RnMonoTy
@@ -215,7 +216,9 @@ substInTyVars subst = map (substInTyVar subst)
 
 -- | Apply a type substitution to a program theory
 substInProgramTheory :: HsTySubst -> ProgramTheory -> ProgramTheory
-substInProgramTheory subst = fmap (\(d :| scheme) -> (d :| substInScheme subst scheme))
+substInProgramTheory subst = (fmap . fmap) (substInScheme subst)
+
+substInScheme :: HsTySubst -> CtrScheme -> CtrScheme
 substInScheme = sub_rec
 
 -- | Apply a type substitution to a qualified type
