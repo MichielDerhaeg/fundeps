@@ -5,8 +5,6 @@
 
 module Frontend.HsTypeChecker (hsElaborate) where
 
-import Debug.Trace
-
 import Frontend.HsTypes
 import Frontend.HsRenamer
 
@@ -761,11 +759,11 @@ elabInsDecl theory (InsD ins_cs cls typat method method_tm) = do
                                        ann_ins_cs
   let ann_ins_schemes = (fmap . fmap) (CtrScheme [] []) (closure_cs <> ann_ins_cs)
 
-  --  The local program theory
-  let local_theory = theory `ftExtendLocal` ann_ins_schemes `ftExtendLocal` [ins_scheme]
-
   -- The extended program theory
   let ext_theory = theory `ftExtendInst` [ins_scheme]
+
+  --  The local program theory
+  let local_theory = ext_theory `ftExtendLocal` ann_ins_schemes
 
   -- Create the dictionary transformer type
   dtrans_ty <- do
@@ -776,8 +774,7 @@ elabInsDecl theory (InsD ins_cs cls typat method method_tm) = do
   -- Elaborate the method implementation
   fc_method_tm <- do
     expected_method_ty <- instMethodTy (hsTyPatToMonoTy typat) <$> lookupTmVarM method
-    substFcTmInTm closure_ev_subst <$>
-      elabTermWithSig (labelOf bs) local_theory method_tm expected_method_ty
+    elabTermWithSig (labelOf bs) local_theory method_tm expected_method_ty
 
   -- Entail the superclass constraints
   fc_super_tms <- do
@@ -787,24 +784,25 @@ elabInsDecl theory (InsD ins_cs cls typat method method_tm) = do
 
     (residual_cs, ev_subst) <- simplify
                                  (labelOf bs)
-                                 (ftDropSuper local_theory)
-                                 super_cs
+                                 (ftDropSuper local_theory) -- TODO apearantly these should not include the instance scheme
+                                  super_cs
 
     unless (null residual_cs) $
       throwErrorM (text "Failed to resolve superclass constraints" <+>
                    colon <+>
                    ppr residual_cs $$ text "From" <+> colon <+> ppr local_theory)
 
-    return (map (substFcTmInTm (closure_ev_subst <> ev_subst) . FcTmVar) ds)
+    return (map (substFcTmInTm ev_subst . FcTmVar) ds)
 
   -- The full implementation of the dictionary transformer
   fc_dict_transformer <- do
     binds <- annCtsToTmBinds ann_ins_cs
     dc    <- lookupClsDataCon cls
     pat_ty <- elabMonoTy (hsTyPatToMonoTy typat)
-    return $ fcTmTyAbs fc_bs $
-               fcTmAbs binds $
-                 fcDataConApp dc pat_ty (fc_super_tms ++ [fc_method_tm])
+    return $ substFcTmInTm closure_ev_subst $
+      fcTmTyAbs fc_bs $
+        fcTmAbs binds $
+           fcDataConApp dc pat_ty (fc_super_tms ++ [fc_method_tm])
 
   -- Resulting dictionary transformer
   let fc_val_bind = FcValBind ins_d dtrans_ty fc_dict_transformer
