@@ -384,7 +384,7 @@ ftToProgramTheory (FT super inst local) = mconcat [super,inst,local]
 
 -- | Drop the superclass component of the full theory and turn it into a program theory (concatenate)
 ftDropSuper :: FullTheory -> ProgramTheory
-ftDropSuper (FT _super inst local) = inst `mappend` local
+ftDropSuper (FT _super inst local) = local `mappend` inst
 
 -- * Collecting Free Variables Out Of Objects
 -- ------------------------------------------------------------------------------
@@ -575,7 +575,7 @@ instance PrettyPrint CtrScheme where
        as)
     where
       pprCs [] = empty
-      pprCs cs = (parens . sep . punctuate comma $ map ppr cs) <+> darrow
+      pprCs cs' = (parens . sep . punctuate comma $ map ppr cs') <+> darrow
   needsParens _ = True
 
 -- | Pretty print class constraints
