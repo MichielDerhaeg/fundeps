@@ -57,7 +57,7 @@ snocListChooseM (xs :> x)  f = f x >>= \case
 selectListT :: Monad m => [a] -> ListT m a
 selectListT xs = foldr (<|>) mzero (map pure xs)
 
-firstMatch :: (MonadError String m, Monad m) => ListT m a -> m a
+firstMatch :: (MonadError CompileError m, Monad m) => ListT m a -> m a
 firstMatch list = runListT list goM (pure Nothing) >>= \case
   Nothing -> throwErrorM (text "Solving failed") -- GEORGE: This information is kinda useless.
                                                  -- Find a way to show the residuals

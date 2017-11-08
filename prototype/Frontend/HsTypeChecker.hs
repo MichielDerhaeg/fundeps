@@ -87,7 +87,7 @@ addTyConInfoTcM tc info = modify $ \s ->
 -- * Type Checking Monad
 -- ------------------------------------------------------------------------------
 
-type TcM = UniqueSupplyT (ReaderT TcCtx (StateT TcEnv (Except String)))
+type TcM = UniqueSupplyT (ReaderT TcCtx (StateT TcEnv (Except CompileError)))
 
 type TcCtx = Ctx RnTmVar RnPolyTy RnTyVar Kind
 
@@ -140,9 +140,9 @@ buildInitFcAssocs = do
 -- ------------------------------------------------------------------------------
 
 -- | Ensure something is not already bound in the local context
-notInTcCtxM :: (PrettyPrint a, MonadReader ctx m, MonadError String m) => (ctx -> a -> Maybe t) -> a -> m ()
+notInTcCtxM :: (PrettyPrint a, MonadReader ctx m, MonadError CompileError m) => (ctx -> a -> Maybe t) -> a -> m ()
 notInTcCtxM f x = ask >>= \ctx -> case f ctx x of
-  Just {} -> throwErrorM (text "notInTcCtxM" <+> colon <+> ppr x <+> text "is already bound")
+  Just {} -> tcFail (text "notInTcCtxM" <+> colon <+> ppr x <+> text "is already bound")
   Nothing -> return ()
 
 -- | Ensure the type variable is not already bound
@@ -160,10 +160,10 @@ tmVarNotInTcCtxM = notInTcCtxM lookupTmVarCtx
 --         2. It's exactly the same as lookupFcGblEnv. Abstract over both.
 
 -- | Lookup something in the global environment
-lookupTcEnvM ::  (Eq a, PrettyPrint a, MonadError String m, MonadState s m) => (s -> AssocList a b) -> a -> m b
+lookupTcEnvM ::  (Eq a, PrettyPrint a, MonadError CompileError m, MonadState s m) => (s -> AssocList a b) -> a -> m b
 lookupTcEnvM f x = gets f >>= \l -> case lookupInAssocList x l of
   Just y  -> return y
-  Nothing -> throwErrorM (text "lookupTcEnvM" <+> colon <+> ppr x <+> text "is unbound")
+  Nothing -> tcFail (text "lookupTcEnvM" <+> colon <+> ppr x <+> text "is unbound")
 
 -- | Lookup a type constructor
 lookupTyCon :: RnTyCon -> TcM FcTyCon
@@ -212,7 +212,7 @@ lookupClsParam cls = do
   info <- lookupTcEnvM tc_env_cls_info cls
   case cls_type_args info of
     [a] -> return a
-    _   -> throwErrorM (text "lookupClsParam")
+    _   -> tcFail (text "lookupClsParam")
 
 -- * Type and Constraint Elaboration (With Well-formedness (well-scopedness) Check)
 -- ------------------------------------------------------------------------------
@@ -229,7 +229,7 @@ wfElabMonoTy (TyApp ty1 ty2) = do
   case k1 of
     KArr k1a k1b
       | k1a == k2 -> return (k1b, FcTyApp fc_ty1 fc_ty2)
-    _other_kind   -> throwErrorM (text "wfElabMonoTy" <+> colon <+> text "TyApp")
+    _other_kind   -> tcFail (text "wfElabMonoTy" <+> colon <+> text "TyApp")
 wfElabMonoTy (TyVar v) = do
   kind <- lookupTyVarM v
   return (kind, rnTyVarToFcType v)
@@ -241,7 +241,7 @@ wfElabQualTy (QQual ct ty) = do
   fc_ty1         <- wfElabClsCt ct
   (kind, fc_ty2) <- wfElabQualTy ty
   unless (kind == KStar) $
-    throwErrorM (text "wfElabQualTy" <+> colon <+> text "QQual")
+    tcFail (text "wfElabQualTy" <+> colon <+> text "QQual")
   return (KStar, mkFcArrowTy fc_ty1 fc_ty2)
 
 -- | Elaborate a constraint
@@ -252,7 +252,7 @@ wfElabClsCt (ClsCt cls ty) = do
     [k] | k == ty_kind -> do
       fc_tc <- lookupClsTyCon cls
       return (FcTyApp (FcTyCon fc_tc) fc_ty)
-    _other_kind -> throwErrorM (text "wfElabClsCt")
+    _other_kind -> tcFail (text "wfElabClsCt")
 
 -- | Elaborate a list of constraints
 wfElabClsCs :: RnClsCs -> TcM [FcType]
@@ -265,7 +265,7 @@ wfElabPolyTy (PPoly (a :| _) ty) = do
   tyVarNotInTcCtxM a {- GEORGE: ensure is unbound -}
   (kind, fc_ty) <- extendCtxTyM a (kindOf a) (wfElabPolyTy ty)
   unless (kind == KStar) $
-    throwErrorM (text "wfElabPolyTy" <+> colon <+> text "PPoly")
+    tcFail (text "wfElabPolyTy" <+> colon <+> text "PPoly")
   return (KStar, FcTyAbs (rnTyVarToFcTyVar a) fc_ty)
 
 -- * Type and Constraint Elaboration (Without Well-scopedness Check)
@@ -305,7 +305,7 @@ instance Monoid ConstraintStore where
 -- | Type inference generation monad
 newtype GenM a = GenM (StateT ConstraintStore TcM a)
   deriving ( Functor, Applicative, Monad
-           , MonadState ConstraintStore, MonadReader TcCtx, MonadError String )
+           , MonadState ConstraintStore, MonadReader TcCtx, MonadError CompileError)
 
 -- GEORGE: All this is bad. We should not store the unique supply within the
 -- global environment, rather wrap our monads with the UniqueSupplyT transformer
@@ -441,11 +441,11 @@ freshenDataConSig dc = do
   return (bs, arg_tys, tc)
 
 -- | Cast a list of polytypes to monotypes. Fail if not possible
-polyTysToMonoTysM :: MonadError String m => [PolyTy a] -> m [MonoTy a]
+polyTysToMonoTysM :: MonadError CompileError m => [PolyTy a] -> m [MonoTy a]
 polyTysToMonoTysM []       = return []
 polyTysToMonoTysM (ty:tys) = case polyTyToMonoTy ty of
   Just mono_ty -> fmap (mono_ty:) (polyTysToMonoTysM tys)
-  Nothing      -> throwErrorM (text "polyTysToMonoTysM" <+> colon <+> text "non-monotype")
+  Nothing      -> tcFail (text "polyTysToMonoTysM" <+> colon <+> text "non-monotype")
 
 -- | Elaborate a case expression
 elabTmCase :: RnTerm -> [RnAlt] -> GenM (RnMonoTy, FcTerm)
@@ -488,13 +488,13 @@ rnTmVarToFcTerm = FcTmVar . rnTmVarToFcTmVar
 -- ------------------------------------------------------------------------------
 
 -- | Type Unification. The first argument are the untouchables (rigid) variables.
-unify :: MonadError String m => [RnTyVar] -> EqCs -> m HsTySubst
+unify :: MonadError CompileError m => [RnTyVar] -> EqCs -> m HsTySubst
 unify _untchs [] = return mempty
 unify  untchs eqs
   | Just ((subst1, eqs'), eqs'') <- go (one_step untchs) eqs
   = do subst2 <- unify untchs (substInEqCs subst1 (eqs' ++ eqs''))
        return (subst2 <> subst1)
-  | otherwise = throwErrorM $ vcat [ text "Unification failed."
+  | otherwise = tcFail $ vcat [ text "Unification failed."
                                    , text "Residual constraints" <+> colon <+> ppr eqs
                                    , text "Untouchables"         <+> colon <+> ppr untchs ]
   where
@@ -529,13 +529,13 @@ occursCheck a (TyVar b)       = a /= b
 -- * Overlap Checking
 -- ------------------------------------------------------------------------------
 
-overlapCheck :: MonadError String m => FullTheory -> RnClsCt -> m ()
+overlapCheck :: MonadError CompileError m => FullTheory -> RnClsCt -> m ()
 overlapCheck theory cls_ct@(ClsCt cls1 ty1)
   -- We only care about the instance theory
  =
   case catMaybes (fmap overlaps (theory_inst theory)) of
-    msg:_ -> throwErrorM msg
-    []         -> return ()
+    msg:_ -> tcFail msg
+    []    -> return ()
   where
     overlaps (_ :| scheme@(CtrScheme _ _ (ClsCt cls2 ty2)))
       | cls1 == cls2
@@ -600,7 +600,7 @@ closure untchs theory cls_ct = go theory cls_ct
       | otherwise = go schemes ct
     go [] _cls_ct = return (mempty, mempty)
     go _ _ =
-      throwErrorM $
+      tcFail $
         text "closure" <+> colon <+>
           text "constraint scheme has too many implications"
 
@@ -715,12 +715,12 @@ elabDataDecl (DataD tc as dcs) = do
     fc_dc <- hs_dc_fc_data_con <$> lookupTcEnvM tc_env_dc_info dc         -- Elaborate the data constructor
     (kinds, fc_tys) <- unzip <$> extendCtxKindAnnotatedTysM as (mapM wfElabMonoTy tys) -- Elaborate the argument types
     unless (all (==KStar) kinds) $
-      throwErrorM (text "elabDataDecl" <+> colon <+> text "not all datacon args have kind star")
+      tcFail (text "elabDataDecl" <+> colon <+> text "not all datacon args have kind star")
     return (fc_dc, fc_tys)
   return (FcDataDecl fc_tc fc_as fc_dcs)
 
 -- | Extend the typing environment with some kind annotated type variables
-extendCtxKindAnnotatedTysM :: (MonadReader (Ctx x x' a Kind) m, Kinded a, MonadError String m) => [Ann a t] -> m b -> m b
+extendCtxKindAnnotatedTysM :: (MonadReader (Ctx x x' a Kind) m, Kinded a, MonadError CompileError m) => [Ann a t] -> m b -> m b
 extendCtxKindAnnotatedTysM ann_as = extendCtxTysM as (map kindOf as)
   where
     as = map labelOf ann_as
@@ -781,7 +781,7 @@ elabInsDecl theory (InsD ins_cs cls typat method method_tm) = do
                                   super_cs
 
     unless (null residual_cs) $
-      throwErrorM (text "Failed to resolve superclass constraints" <+>
+      tcFail (text "Failed to resolve superclass constraints" <+>
                    colon <+>
                    ppr residual_cs $$ text "From" <+> colon <+> ppr local_theory)
 
@@ -839,7 +839,7 @@ elabTermWithSig untch theory tm poly_ty = do
 
   -- Ensure that the constraints are completely resolved
   unless (null residual_cs) $
-    throwErrorM
+    tcFail
       (text "Failed to resolve constraints" <+>
        colon <+> ppr residual_cs $$ text "From" <+> colon <+> ppr theory
        $$ text "Wanted" <+> colon <+> ppr wanted)
@@ -933,15 +933,16 @@ hsElaborate ::
      RnEnv
   -> UniqueSupply
   -> RnProgram
-  -> Either String ( ( ( (FcProgram, RnPolyTy, FullTheory)
-                       , ( AssocList FcTyCon FcTyConInfo
-                         , AssocList FcDataCon FcDataConInfo))
-                     , UniqueSupply)
-                   , TcEnv)
+  -> Either CompileError ( ( ( (FcProgram, RnPolyTy, FullTheory)
+                             , ( AssocList FcTyCon FcTyConInfo
+                               , AssocList FcDataCon FcDataConInfo))
+                           , UniqueSupply)
+                         , TcEnv)
 hsElaborate rn_gbl_env us pgm = runExcept
                               $ flip runStateT  tc_init_gbl_env -- Empty when you start
                               $ flip runReaderT tc_init_ctx
                               $ flip runUniqueSupplyT us
+                              $ markTcError
                               $ do { buildInitTcEnv pgm rn_gbl_env -- Create the actual global environment
                                    ; result <- elabProgram tc_init_theory pgm
                                    ; assocs <- buildInitFcAssocs
@@ -950,3 +951,9 @@ hsElaborate rn_gbl_env us pgm = runExcept
     tc_init_theory  = FT mempty mempty mempty
     tc_init_ctx     = mempty
     tc_init_gbl_env = TcEnv mempty mempty mempty
+
+tcFail :: MonadError CompileError m => Doc -> m a
+tcFail = throwError . CompileError HsTypeChecker
+
+markTcError :: MonadError CompileError m => m a -> m a
+markTcError = markErrorPhase HsTypeChecker

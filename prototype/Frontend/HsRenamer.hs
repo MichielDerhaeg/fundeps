@@ -16,6 +16,7 @@ import Utils.Utils
 import Utils.Annotated
 import Utils.FreeVars
 import Utils.Trace
+import Utils.Errors
 
 import Control.Monad.Writer
 import Control.Monad.Reader
@@ -44,7 +45,7 @@ instance PrettyPrint RnEnv where
 -- and type variables, respectively.
 type RnCtx = Ctx PsTmVar RnTmVar PsTyVar RnTyVar
 
-type RnM = UniqueSupplyT (ReaderT RnCtx (StateT RnEnv (Except String)))
+type RnM = UniqueSupplyT (ReaderT RnCtx (StateT RnEnv (Except CompileError)))
 
 -- * Basic Monadic Setters and Getters
 -- ------------------------------------------------------------------------------
@@ -66,21 +67,21 @@ lookupClsInfoRnM :: PsClass -> RnM RnClsInfo
 lookupClsInfoRnM cls = getClsInfoRnM >>= \cls_infos ->
   case lookupInAssocList cls cls_infos of
     Just cls_info -> return cls_info
-    Nothing       -> throwErrorRnM (text "Class name" <+> ppr cls <+> text "unbound")
+    Nothing       -> rnFail (text "Class name" <+> ppr cls <+> text "unbound")
 
 -- | Lookup the info of a data constructor
 lookupDataConInfoRnM :: PsDataCon -> RnM HsDataConInfo
 lookupDataConInfoRnM dc = getDataConInfoRnM >>= \dc_infos ->
   case lookupInAssocList dc dc_infos of
     Just dc_info -> return dc_info
-    Nothing      -> throwErrorRnM (text "DataCon name" <+> ppr dc <+> text "unbound")
+    Nothing      -> rnFail (text "DataCon name" <+> ppr dc <+> text "unbound")
 
 -- | Lookup the info of a type constructor
 lookupTyConInfoRnM :: PsTyCon -> RnM HsTyConInfo
 lookupTyConInfoRnM tc = getTyConInfoRnM >>= \tc_infos ->
   case lookupInAssocList tc tc_infos of
     Just tc_info -> return tc_info
-    Nothing      -> throwErrorRnM (text "TyCon name" <+> ppr tc <+> text "unbound")
+    Nothing      -> rnFail (text "TyCon name" <+> ppr tc <+> text "unbound")
 
 -- | Add a renamed class name to the state
 addClsInfoRnM :: PsClass -> RnClsInfo -> RnM ()
@@ -104,14 +105,14 @@ rnSym s = getUniqueM >>= return . mkName s
 -- | Rename a method name. It has to be unbound
 rnMethodName :: PsTmVar -> RnM RnTmVar
 rnMethodName x = ask >>= \ctx -> case lookupTmVarCtx ctx x of
-  Just {} -> throwErrorRnM (text "Method name" <+> ppr x <+> text "already bound")
+  Just {} -> rnFail (text "Method name" <+> ppr x <+> text "already bound")
   Nothing -> rnTmVar x
 
 -- | Lookup an already-bound method name
 lookupMethodName :: PsTmVar -> RnM RnTmVar
 lookupMethodName x = ask >>= \ctx -> case lookupTmVarCtx ctx x of
   Just rnx -> return rnx
-  Nothing  -> throwErrorRnM (text "Method name" <+> ppr x <+> text "unbound")
+  Nothing  -> rnFail (text "Method name" <+> ppr x <+> text "unbound")
 
 -- * Rename Types
 -- ------------------------------------------------------------------------------
@@ -135,7 +136,7 @@ rnTyPat = liftM (second nub) . go
     go (HsTyVarPat (a :| k)) = do
       rna <- lookupTyVarM a
       unless (kindOf rna == k) $
-        throwErrorRnM (text "rnTyPat:" <+> text "Inconsistent kind assignment")
+        rnFail (text "rnTyPat:" <+> text "Inconsistent kind assignment")
       return (HsTyVarPat (rna :| kindOf rna), [rna])
 
 -- | Rename a monotype
@@ -159,7 +160,7 @@ rnClass cls = do
   cls_infos <- getClsInfoRnM
   case lookupInAssocList cls cls_infos of
     Just cls_info -> return (rn_cls_class cls_info)
-    Nothing       -> throwErrorRnM (text "Class name" <+> ppr cls <+> text "unbound")
+    Nothing       -> rnFail (text "Class name" <+> ppr cls <+> text "unbound")
 
 -- | Rename a polytype
 rnPolyTy :: PsPolyTy -> RnM RnPolyTy
@@ -230,7 +231,7 @@ rnClsDecl (ClsD cs cls a method method_ty) = do
   rn_cls <- do
     cls_infos <- getClsInfoRnM
     case lookupInAssocList cls cls_infos of
-      Just {} -> throwErrorRnM (text "Class" <+> ppr cls <+> text "already defined")
+      Just {} -> rnFail (text "Class" <+> ppr cls <+> text "already defined")
       Nothing -> Class <$> rnSym (symOf cls)
 
   -- Rename the method name
@@ -268,7 +269,7 @@ rnInsDecl (InsD cs cls_name ty_pat method_name method_tm) = do
   -- Ensure the method name is for the class we are checking
   expected_method_name <- lookupClassMethodName cls_name
   unless (rn_method_name == expected_method_name) $
-    throwErrorRnM (ppr method_name <+> text "does not belong to class" <+> ppr cls_name)
+    rnFail (ppr method_name <+> text "does not belong to class" <+> ppr cls_name)
 
   rn_method_tm    <- rnTerm method_tm                        -- rename the method implementation
   return (InsD rn_cs rn_cls_name rn_ty_pat rn_method_name rn_method_tm)
@@ -288,12 +289,12 @@ rnDataDecl (DataD tc as dcs) = do
   rntc <- do
     tc_infos <- getTyConInfoRnM
     case lookupInAssocList tc tc_infos of
-      Just {} -> throwErrorRnM (text "TyCon" <+> ppr tc <+> text "already defined")
+      Just {} -> rnFail (text "TyCon" <+> ppr tc <+> text "already defined")
       Nothing -> HsTC <$> rnSym (symOf tc)
 
   -- Rename the universal type variables
   unless (distinct as) $
-    throwErrorRnM (text "TyCon" <+> ppr tc <+> text "has non-linear parameters")
+    rnFail (text "TyCon" <+> ppr tc <+> text "has non-linear parameters")
   rnas <- mapM rnTyVar as
 
   -- Store the TyCon info in the global environment
@@ -306,7 +307,7 @@ rnDataDecl (DataD tc as dcs) = do
     rndc <- do
       dc_infos <- getDataConInfoRnM
       case lookupInAssocList dc dc_infos of
-        Just {} -> throwErrorRnM (text "DataCon" <+> ppr dc <+> text "already defined")
+        Just {} -> rnFail (text "DataCon" <+> ppr dc <+> text "already defined")
         Nothing -> HsDC <$> rnSym (symOf dc)
 
     -- Rename the data constructor's type arguments
@@ -342,7 +343,7 @@ rnProgram (PgmData data_decl pgm) = do
 -- ------------------------------------------------------------------------------
 
 hsRename :: UniqueSupply -> PsProgram
-         -> Either String (((RnProgram, RnCtx), UniqueSupply), RnEnv)
+         -> Either CompileError (((RnProgram, RnCtx), UniqueSupply), RnEnv)
 hsRename us pgm = runExcept
                 $ flip runStateT  rn_init_gbl_env
                 $ flip runReaderT rn_init_ctx
@@ -355,6 +356,5 @@ hsRename us pgm = runExcept
                             , rn_env_tc_info  = extendAssocList psArrowTyCon arrowTyConInfo mempty
                             }
 
--- | Throw an error
-throwErrorRnM :: Doc -> RnM a
-throwErrorRnM d = throwError (renderError d)
+rnFail :: MonadFail m => Doc -> m a
+rnFail = failM . CompileError HsRenamer

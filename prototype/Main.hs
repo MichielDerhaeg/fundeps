@@ -10,6 +10,7 @@ import           Frontend.HsParser      (hsParse)
 import           Frontend.HsRenamer     (hsRename)
 import           Frontend.HsTypeChecker (hsElaborate)
 
+import           Utils.Errors
 import           Utils.PrettyPrint
 import           Utils.Unique           (newUniqueSupply)
 
@@ -29,17 +30,17 @@ runTest filePath = do
   us0 <- newUniqueSupply 'u'
   fileContents <- readFile filePath
   case hsParse fileContents filePath of
-    Left err     -> throwMainError "parser" err
+    Left err     -> throwMainError err
     Right ps_pgm ->
       case hsRename us0 ps_pgm of
-        Left err -> throwMainError "renamer" err
+        Left err -> throwMainError err
         Right (((rn_pgm, _rn_ctx), us1), rn_env) ->
           case hsElaborate rn_env us1 rn_pgm of
-            Left err -> throwMainError "typechecker" err
+            Left err -> throwMainError err
             Right ((((fc_pgm, tc_ty, theory), envs), us2), _tc_env) ->
               case fcTypeCheck envs us2 fc_pgm of
                 Left err -> do
-                  throwMainError "System F typechecker" err
+                  throwMainError err
                   putStrLn $ renderWithColor $ ppr fc_pgm
                 Right ((fc_ty, _us3), _fc_env) -> do
                   putStrLn "---------------------------- Elaborated Program ---------------------------"
@@ -50,9 +51,3 @@ runTest filePath = do
                   putStrLn $ renderWithColor $ ppr theory
                   putStrLn "-------------------------- System F Program Type --------------------------"
                   putStrLn $ renderWithColor $ ppr fc_ty
-  where
-    throwMainError phase e
-      | label <- colorDoc red (text phase <+> text "failure")
-      , msg   <- brackets label <+> colorDoc red (text e)
-      = putStrLn (renderWithColor msg)
-

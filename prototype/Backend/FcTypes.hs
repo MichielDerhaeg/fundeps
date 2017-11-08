@@ -38,6 +38,7 @@ data FcType = FcTyVar FcTyVar        -- ^ Type variable
             | FcTyAbs FcTyVar FcType -- ^ Type abstraction
             | FcTyApp FcType  FcType -- ^ Type application
             | FcTyCon FcTyCon        -- ^ Type constructor
+            -- | FcTyCrc
 
 -- | Syntactic equality on System F types
 eqFcTypes :: FcType -> FcType -> Bool

@@ -6,6 +6,8 @@ import Frontend.HsTypes
 import Utils.Kind (Kind(..))
 import Utils.Var (Sym, mkSym, PsTyVar, mkPsTyVar, PsTmVar, mkPsTmVar)
 import Utils.Annotated (Ann((:|)))
+import Utils.Errors
+import Utils.PrettyPrint (text)
 
 -- | Utilities
 import Data.Functor (($>))
@@ -25,10 +27,10 @@ import Text.Parsec.Prim (Parsec, (<?>), try, parse)
 type PsM a = Parsec String () a
 
 -- | Parse a complete program from a file
-hsParse :: String -> FilePath -> Either String PsProgram
+hsParse :: String -> FilePath -> Either CompileError PsProgram
 hsParse contents path =
   case parse parser path contents of
-    Left err -> Left (show err)
+    Left err -> Left (CompileError HsParser (text (show err)))
     Right p  -> Right p
   where
     parser = whiteSpace *> pProgram <* eof

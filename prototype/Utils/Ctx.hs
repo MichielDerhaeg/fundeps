@@ -66,13 +66,13 @@ extendCtxTm :: Ctx x x' a a' -> x -> x' -> Ctx x x' a a'
 extendCtxTm ctx tv tm = CtxConsTm ctx tv tm
 
 -- | Lookup a type variable in the context
-lookupTyVarM :: (Eq a, PrettyPrint a, MonadReader (Ctx x x' a b) m, MonadError String m) => a -> m b
+lookupTyVarM :: (Eq a, PrettyPrint a, MonadReader (Ctx x x' a b) m, MonadError CompileError m) => a -> m b
 lookupTyVarM psb = ask >>= \ctx -> case lookupTyVarCtx ctx psb of
   Just rnb -> return rnb
   Nothing  -> throwErrorM (text "Unbound type variable" <+> colon <+> ppr psb)
 
 -- | Lookup a term variable in the context
-lookupTmVarM :: (Eq a1, PrettyPrint a1, MonadReader (Ctx a1 b a a') m, MonadError String m) => a1 -> m b
+lookupTmVarM :: (Eq a1, PrettyPrint a1, MonadReader (Ctx a1 b a a') m, MonadError CompileError m) => a1 -> m b
 lookupTmVarM psy = ask >>= \ctx -> case lookupTmVarCtx ctx psy of
   Just rny -> return rny
   Nothing  -> throwErrorM (text "Unbound term variable" <+> colon <+> ppr psy)
@@ -82,7 +82,7 @@ extendCtxTyM :: MonadReader (Ctx x x' a a') m => a -> a' -> m b -> m b
 extendCtxTyM psa rna = local (\ctx -> extendCtxTy ctx psa rna)
 
 -- | Add many type variables to the context
-extendCtxTysM :: (MonadReader (Ctx x x' a a') m, MonadError String m) => [a] -> [a'] -> m b -> m b
+extendCtxTysM :: (MonadReader (Ctx x x' a a') m, MonadError CompileError m) => [a] -> [a'] -> m b -> m b
 extendCtxTysM []     []     m = m
 extendCtxTysM (a:as) (b:bs) m = extendCtxTyM a b (extendCtxTysM as bs m)
 extendCtxTysM _      _      _ = throwErrorM (text "extendCtxTysM" <+> colon <+> text "length mismatch")
@@ -92,7 +92,7 @@ extendCtxTmM :: MonadReader (Ctx x x' a a') m => x -> x' -> m b -> m b
 extendCtxTmM psx rnx = local (\ctx -> extendCtxTm ctx psx rnx)
 
 -- | Add many term variables to the context
-extendCtxTmsM :: (MonadReader (Ctx x x' a a') m, MonadError String m) => [x] -> [x'] -> m b -> m b
+extendCtxTmsM :: (MonadReader (Ctx x x' a a') m, MonadError CompileError m) => [x] -> [x'] -> m b -> m b
 extendCtxTmsM []     []     m = m
 extendCtxTmsM (x:xs) (y:ys) m = extendCtxTmM x y (extendCtxTmsM xs ys m)
 extendCtxTmsM _      _      _ = throwErrorM (text "extendCtxTmsM" <+> colon <+> text "length mismatch")
