@@ -1,11 +1,12 @@
-{-# LANGUAGE DataKinds            #-}
-{-# LANGUAGE KindSignatures       #-}
-{-# LANGUAGE GADTs                #-}
-{-# LANGUAGE TypeFamilies         #-}
-{-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE FlexibleInstances    #-}
-{-# LANGUAGE FlexibleContexts     #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE DataKinds                  #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GADTs                      #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE KindSignatures             #-}
+{-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE TypeSynonymInstances       #-}
+{-# LANGUAGE UndecidableInstances       #-}
 
 module Backend.FcTypes where
 
@@ -38,7 +39,19 @@ data FcType = FcTyVar FcTyVar        -- ^ Type variable
             | FcTyAbs FcTyVar FcType -- ^ Type abstraction
             | FcTyApp FcType  FcType -- ^ Type application
             | FcTyCon FcTyCon        -- ^ Type constructor
-            -- | FcTyCrc
+            | FcTyCrcAbs FcProp FcType -- ^ phi => v
+            | FcTyFam FcFamVar [FcType] -- ^ F(vs)
+
+data FcProp = FcProp FcType FcType -- ^ Type equality proposition -- v_1 ~ v_2
+
+data FcCoercion = FcCrcReflx FcType -- ^ <v>
+                | FcCrcSym FcCoercion -- ^ sym gamma
+                | FcCrcLeft FcCoercion -- ^ left gamma
+                | FcCrcRight FcCoercion -- ^ right gamma
+                | FcCrcTrans FcCoercion -- ^ gamma_1 ; gamma_2
+                | FcCrcAbs FcProp FcCoercion -- ^ phi => gamma
+                | FcCrcVar FcCrcVar -- ^ c
+                | FcCrcAxVar FcAxVar [FcType] -- ^ g vs
 
 -- | Syntactic equality on System F types
 eqFcTypes :: FcType -> FcType -> Bool
@@ -114,6 +127,21 @@ instance PrettyPrint FcDataConInfo where
       ]
   needsParens _ = False
 
+-- TODO doc
+newtype FcFamVar = FcFV { unFcFV :: Name }
+  deriving (Eq, Ord, Symable, Named, Uniquable)
+
+data FcFamInfo = FcFamInfo
+  { fc_fam_var  :: FcFamVar
+  , fc_fam_univ :: [FcTyVar]
+  }
+
+newtype FcCrcVar = FcCV { unFcCV :: Name }
+  deriving (Eq, Ord, Symable, Named, Uniquable)
+
+newtype FcAxVar = FcAV { unFcAV :: Name }
+  deriving (Eq, Ord, Symable, Named, Uniquable)
+
 -- -- | Take the type apart the hindley milner way
 -- destructFcTypeHM :: FcType -> ([FcTyVar], [FcType], FcType)
 -- destructFcTypeHM (FcTyArr ty1 ty2) = (as, ty1:lhs, rhs)
@@ -165,13 +193,16 @@ data FcTerm = FcTmAbs FcTmVar FcType FcTerm         -- ^ Term abstraction: lambd
             | FcTmDataCon FcDataCon                 -- ^ Data constructor
             | FcTmLet FcTmVar FcType FcTerm FcTerm  -- ^ Let binding: let x : ty = tm in tm
             | FcTmCase FcTerm [FcAlt]               -- ^ Case
+            | FcTmPropAbs FcCrcVar FcTerm -- ^ Lambda(c : phi). t
+            | FcTmCrcApp FcTerm FcCoercion -- ^ t phi
+            | FcTmCast FcTerm FcCoercion -- ^ t > phi
 
 -- GEORGE: You should never need to make terms and patterns instances of Eq. If
 -- you do it means that something is probably wrong (the only setting where you
 -- need stuff like this is for optimizations).
 
 -- | Patterns
-data FcPat = FcConPat FcDataCon [FcTmVar]
+data FcPat = FcConPat FcDataCon [FcTmVar] -- TODO two lists
 
 -- | Case alternative(s)
 data FcAlt  = FcAlt FcPat FcTerm
@@ -219,10 +250,22 @@ data FcValBind = FcValBind { fval_bind_var :: FcTmVar   -- ^ Variable Name
                            , fval_bind_tm  :: FcTerm    -- ^ Variable Value
                            }
 
+data FcFamDecl = FcFamDecl FcFamVar [FcTyVar] -- type F(as)
+
+data FcAxiomDecl = FcAxiomDecl -- g as : F(us) ~ v
+  { feq_ax_vr  :: FcAxVar   -- ^ Axiom variable -- g
+  , feq_ax_tv  :: [FcTyVar] -- ^ Universal Type variables -- as
+  , feq_ax_fv  :: FcFamVar  -- ^ Type Family variable -- F
+  , feq_ax_fvs :: [FcTyVar] -- ^ Type Family type arguments -- us
+  , feq_ax_ty  :: FcType    -- ^ Equal Type -- v
+  }
+
 -- | Program
 data FcProgram = FcPgmDataDecl FcDataDecl FcProgram     -- ^ Data Declaration
                | FcPgmValDecl  FcValBind  FcProgram     -- ^ Value Binding
                | FcPgmTerm FcTerm                       -- ^ Term
+               | FcPgmAxiomDecl FcAxiomDecl             -- ^ Axiom Declaration
+               | FcPgmFamDecl FcFamDecl                 -- ^ Type Family Declaration
 
 -- * Pretty printing
 -- ----------------------------------------------------------------------------
