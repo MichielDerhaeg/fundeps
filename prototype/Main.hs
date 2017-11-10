@@ -29,25 +29,25 @@ runTest :: FilePath -> IO ()
 runTest filePath = do
   us0 <- newUniqueSupply 'u'
   fileContents <- readFile filePath
-  case hsParse fileContents filePath of
-    Left err     -> throwMainError err
-    Right ps_pgm ->
-      case hsRename us0 ps_pgm of
-        Left err -> throwMainError err
-        Right (((rn_pgm, _rn_ctx), us1), rn_env) ->
-          case hsElaborate rn_env us1 rn_pgm of
-            Left err -> throwMainError err
-            Right ((((fc_pgm, tc_ty, theory), envs), us2), _tc_env) ->
-              case fcTypeCheck envs us2 fc_pgm of
-                Left err -> do
-                  throwMainError err
-                  putStrLn $ renderWithColor $ ppr fc_pgm
-                Right ((fc_ty, _us3), _fc_env) -> do
-                  putStrLn "---------------------------- Elaborated Program ---------------------------"
-                  putStrLn $ renderWithColor $ ppr fc_pgm
-                  putStrLn "------------------------------- Program Type ------------------------------"
-                  putStrLn $ renderWithColor $ ppr tc_ty
-                  putStrLn "------------------------------ Program Theory -----------------------------"
-                  putStrLn $ renderWithColor $ ppr theory
-                  putStrLn "-------------------------- System F Program Type --------------------------"
-                  putStrLn $ renderWithColor $ ppr fc_ty
+  let result = do
+        ps_pgm <- hsParse fileContents filePath
+        (((rn_pgm, _rn_ctx), us1), rn_env) <- hsRename us0 ps_pgm
+        ((((fc_pgm, tc_ty, theory), envs), us2), _tc_env) <-
+          hsElaborate rn_env us1 rn_pgm
+        ((fc_ty, _us3), _fc_env) <- fcTypeCheck envs us2 fc_pgm
+        return (fc_pgm, tc_ty, theory, fc_ty)
+  case result of
+    Left err -> throwMainError err
+    Right (fc_pgm, tc_ty, theory, fc_ty) -> do
+      putStrLn
+        "---------------------------- Elaborated Program ---------------------------"
+      putStrLn $ renderWithColor $ ppr fc_pgm
+      putStrLn
+        "------------------------------- Program Type ------------------------------"
+      putStrLn $ renderWithColor $ ppr tc_ty
+      putStrLn
+        "------------------------------ Program Theory -----------------------------"
+      putStrLn $ renderWithColor $ ppr theory
+      putStrLn
+        "-------------------------- System F Program Type --------------------------"
+      putStrLn $ renderWithColor $ ppr fc_ty
