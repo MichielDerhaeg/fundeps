@@ -470,7 +470,7 @@ elabHsAlt scr_ty res_ty (HsAlt (HsPat dc xs) rhs) = do
   storeEqCs [ scr_ty :~: foldl TyApp (TyCon tc) (map TyVar bs)  -- The scrutinee type must match the pattern type
             , res_ty :~: rhs_ty ]                               -- All right hand sides should be the same
 
-  return (FcAlt (FcConPat fc_dc (map rnTmVarToFcTmVar xs)) fc_rhs)
+  return (FcAlt (FcConPat fc_dc (map rnTmVarToFcTmVar xs) [] [] []) fc_rhs)
 
 -- | Covert a renamed type variable to a System F type
 rnTyVarToFcType :: RnTyVar -> FcType
@@ -651,7 +651,7 @@ elabClsDecl (ClsD rn_cs cls (a :| _) method method_ty) = do
     let fc_tm = FcTmTyAbs (rnTyVarToFcTyVar a) $
                   FcTmAbs da fc_cls_head $
                     FcTmCase (FcTmVar da)
-                             [FcAlt (FcConPat dc xs) (FcTmVar (xs !! i))]
+                             [FcAlt (FcConPat dc xs [] [] []) (FcTmVar (xs !! i))]
     let proj = FcValBind d fc_scheme fc_tm
 
     return (d :| scheme, proj)
@@ -685,7 +685,7 @@ elabMethodSig method a cls sigma = do
   let fc_method_rhs = fcTmTyAbs (map rnTyVarToFcTyVar bs) $
                         fcTmAbs dbinds $
                           FcTmCase (FcTmVar (head ds))
-                                   [FcAlt (FcConPat dc xs)
+                                   [FcAlt (FcConPat dc xs [] [] [])
                                           (fcDictApp (fcTmTyApp (FcTmVar (last xs)) (tail rn_bs)) (tail ds))]
 
   let fc_val_bind = FcValBind (rnTmVarToFcTmVar method) fc_method_ty fc_method_rhs
@@ -948,7 +948,7 @@ hsElaborate rn_gbl_env us pgm = runExcept
                                    ; assocs <- buildInitFcAssocs
                                    ; return (result, assocs) }
   where
-    tc_init_theory  = FT mempty mempty mempty
+    tc_init_theory  = FT mempty mempty mempty mempty
     tc_init_ctx     = mempty
     tc_init_gbl_env = TcEnv mempty mempty mempty
 

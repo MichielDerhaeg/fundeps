@@ -200,7 +200,7 @@ tcAlts scr_ty alts
       return ty
 
 tcAlt :: FcType -> FcAlt -> FcM FcType
-tcAlt scr_ty (FcAlt (FcConPat dc xs) rhs) = case tyConAppMaybe scr_ty of
+tcAlt scr_ty (FcAlt (FcConPat dc xs _ _ _) rhs) = case tyConAppMaybe scr_ty of
   Just (tc, tys) -> do
     tmVarsNotInFcCtxM xs -- GEORGE: Ensure not bound already
     (as, arg_tys, dc_tc) <- lookupDataConTyM dc

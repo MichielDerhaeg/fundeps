@@ -39,19 +39,24 @@ data FcType = FcTyVar FcTyVar        -- ^ Type variable
             | FcTyAbs FcTyVar FcType -- ^ Type abstraction
             | FcTyApp FcType  FcType -- ^ Type application
             | FcTyCon FcTyCon        -- ^ Type constructor
-            | FcTyCrcAbs FcProp FcType -- ^ phi => v
+            | FcTyQual FcProp FcType -- ^ phi => v
             | FcTyFam FcFamVar [FcType] -- ^ F(vs)
 
 data FcProp = FcProp FcType FcType -- ^ Type equality proposition -- v_1 ~ v_2
 
-data FcCoercion = FcCrcReflx FcType -- ^ <v>
-                | FcCrcSym FcCoercion -- ^ sym gamma
-                | FcCrcLeft FcCoercion -- ^ left gamma
-                | FcCrcRight FcCoercion -- ^ right gamma
-                | FcCrcTrans FcCoercion -- ^ gamma_1 ; gamma_2
-                | FcCrcAbs FcProp FcCoercion -- ^ phi => gamma
-                | FcCrcVar FcCrcVar -- ^ c
-                | FcCrcAxVar FcAxVar [FcType] -- ^ g vs
+data FcCoercion = FcCoVar FcCoVar -- ^ c
+                | FcCoAx FcAxVar [FcType] -- ^ g vs
+                | FcCoRefl FcType -- ^ <v>
+                | FcCoSym FcCoercion -- ^ sym gamma
+                | FcCoTrans FcCoercion FcCoercion -- ^ gamma_1 ; gamma_2
+                | FcCoApp FcCoercion FcCoercion -- ^ gamma_1 gamma_2
+                | FcCoLeft FcCoercion -- ^ left gamma
+                | FcCoRight FcCoercion -- ^ right gamma
+                | FcCoFam FcFamVar [FcCoercion] -- ^ F(gammas)
+                | FcCoAbs FcTyVar FcCoercion -- ^ forall a. gamma
+                | FcCoInst FcCoercion FcCoercion -- ^ gamma_1 [gamma_2]
+                | FcCoQual FcProp FcCoercion -- ^ phi => gamma
+                | FcCoQInst FcCoercion FcCoercion -- ^ gamma_1 @ gamma_2
 
 -- | Syntactic equality on System F types
 eqFcTypes :: FcType -> FcType -> Bool
@@ -136,11 +141,24 @@ data FcFamInfo = FcFamInfo
   , fc_fam_univ :: [FcTyVar]
   }
 
-newtype FcCrcVar = FcCV { unFcCV :: Name }
+newtype FcCoVar = FcCV { unFcCV :: Name }
   deriving (Eq, Ord, Symable, Named, Uniquable)
+
+data FcCrcInfo = FcCrcInfo
+  { fc_co_var :: FcCoVar
+  , fc_co_val :: FcCoercion
+  }
 
 newtype FcAxVar = FcAV { unFcAV :: Name }
   deriving (Eq, Ord, Symable, Named, Uniquable)
+
+data FcAxiomInfo = FcAxiomInfo
+  { fc_ax_var  :: FcAxVar   -- ^ g
+  , fc_ax_tv  :: [FcTyVar] -- ^ Universal Type variables -- as
+  , fc_ax_fv  :: FcFamVar  -- ^ Type Family variable -- F
+  , fc_ax_fvs :: [FcTyVar] -- ^ Type Family type arguments -- us
+  , fc_ax_ty  :: FcType    -- ^ Equal Type -- v
+  }
 
 -- -- | Take the type apart the hindley milner way
 -- destructFcTypeHM :: FcType -> ([FcTyVar], [FcType], FcType)
@@ -193,20 +211,34 @@ data FcTerm = FcTmAbs FcTmVar FcType FcTerm         -- ^ Term abstraction: lambd
             | FcTmDataCon FcDataCon                 -- ^ Data constructor
             | FcTmLet FcTmVar FcType FcTerm FcTerm  -- ^ Let binding: let x : ty = tm in tm
             | FcTmCase FcTerm [FcAlt]               -- ^ Case
-            | FcTmPropAbs FcCrcVar FcTerm -- ^ Lambda(c : phi). t
-            | FcTmCrcApp FcTerm FcCoercion -- ^ t phi
-            | FcTmCast FcTerm FcCoercion -- ^ t > phi
+            | FcTmPropAbs FcCoVar FcProp FcTerm     -- ^ Lambda(c : phi). t
+            | FcTmCoApp FcTerm FcCoercion           -- ^ t gamma
+            | FcTmCast FcTerm FcCoercion            -- ^ t > gamma
 
 -- GEORGE: You should never need to make terms and patterns instances of Eq. If
 -- you do it means that something is probably wrong (the only setting where you
 -- need stuff like this is for optimizations).
 
 -- | Patterns
-data FcPat = FcConPat FcDataCon [FcTmVar] -- TODO two lists
+data FcPat = -- TODO fix occurences
+  FcConPat FcDataCon
+           [FcTmVar] -- ^ bs -- TODO make FcTyVar
+           [Ann FcCoVar FcProp] -- ^ (c : phi)s
+           [Ann FcTmVar FcType] -- ^ (d : tau)s
+           [Ann FcTmVar FcType] -- ^ (f : v  )s
 
 -- | Case alternative(s)
 data FcAlt  = FcAlt FcPat FcTerm
 type FcAlts = [FcAlt]
+
+data MatchCtx
+  = MCtxHole
+  | MCtxCase FcTmVar FcPat MatchCtx
+
+matchCtxApply :: MatchCtx -> FcTerm -> FcTerm
+matchCtxApply MCtxHole t = t
+matchCtxApply (MCtxCase d p e) t =
+  FcTmCase (FcTmVar d) [(FcAlt p (matchCtxApply e t))]
 
 -- * Some smart constructors (uncurried variants)
 -- ----------------------------------------------------------------------------
@@ -253,11 +285,11 @@ data FcValBind = FcValBind { fval_bind_var :: FcTmVar   -- ^ Variable Name
 data FcFamDecl = FcFamDecl FcFamVar [FcTyVar] -- type F(as)
 
 data FcAxiomDecl = FcAxiomDecl -- g as : F(us) ~ v
-  { feq_ax_vr  :: FcAxVar   -- ^ Axiom variable -- g
-  , feq_ax_tv  :: [FcTyVar] -- ^ Universal Type variables -- as
-  , feq_ax_fv  :: FcFamVar  -- ^ Type Family variable -- F
-  , feq_ax_fvs :: [FcTyVar] -- ^ Type Family type arguments -- us
-  , feq_ax_ty  :: FcType    -- ^ Equal Type -- v
+  { fax_decl_vr  :: FcAxVar   -- ^ Axiom variable -- g
+  , fax_decl_tv  :: [FcTyVar] -- ^ Universal Type variables -- as
+  , fax_decl_fv  :: FcFamVar  -- ^ Type Family variable -- F
+  , fax_decl_fvs :: [FcType] -- ^ Type Family type arguments -- us
+  , fax_decl_ty  :: FcType    -- ^ Equal Type -- v
   }
 
 -- | Program
@@ -340,7 +372,7 @@ instance PrettyPrint FcTerm where
 
 -- | Pretty print patterns
 instance PrettyPrint FcPat where
-  ppr (FcConPat dc xs) = ppr dc <+> hsep (map ppr xs)
+  ppr (FcConPat dc xs _ _ _) = ppr dc <+> hsep (map ppr xs)
   needsParens _        = True
 
 -- | Pretty print case alternatives

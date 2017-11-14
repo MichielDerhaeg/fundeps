@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE LambdaCase             #-}
 {-# LANGUAGE UndecidableInstances   #-}
+{-# LANGUAGE GADTs   #-}
 
 module Utils.Substitution where
 
@@ -77,6 +78,8 @@ instance SubstVar FcTyVar FcType FcType where
       | otherwise   -> FcTyAbs b (substVar a ty ty1)
     FcTyApp ty1 ty2 -> FcTyApp (substVar a ty ty1) (substVar a ty ty2)
     FcTyCon tc      -> FcTyCon tc
+    FcTyQual phi aty -> FcTyQual (substVar a aty phi) (substVar a aty ty)
+    FcTyFam f tys   -> FcTyFam f $ map (substVar a ty) tys
 
 -- | Substitute a type variable for a type in a term
 instance SubstVar FcTyVar FcType FcTerm where
@@ -96,6 +99,27 @@ instance SubstVar FcTyVar FcType FcTerm where
 instance SubstVar FcTyVar FcType FcAlt where
   substVar a ty (FcAlt p tm) = FcAlt p (substVar a ty tm)
   -- GEORGE: Now the patterns do not bind type variables so we don't have to check for shadowing here.
+
+instance SubstVar FcTyVar FcType FcProp where
+  substVar a aty (FcProp ty1 ty2) = FcProp (substVar a aty ty1) (substVar a aty ty2)
+
+instance SubstVar FcTyVar FcType FcCoercion where
+  substVar a aty = \case
+    FcCoVar v -> FcCoVar v
+    FcCoAx ax tys -> FcCoAx ax $ map (substVar a aty) tys
+    FcCoRefl ty -> FcCoRefl $ substVar a aty ty
+    FcCoSym co -> FcCoSym $ substVar a aty co
+    FcCoTrans co1 co2 -> FcCoTrans (substVar a aty co1) (substVar a aty co2)
+    FcCoApp co1 co2 -> FcCoApp (substVar a aty co1) (substVar a aty co2)
+    FcCoLeft co -> FcCoLeft $ substVar a aty co
+    FcCoRight co -> FcCoRight $ substVar a aty co
+    FcCoFam f crs -> FcCoFam f $ map (substVar a aty) crs
+    FcCoAbs b co
+      | a == b -> error "TODO"
+      | otherwise -> FcCoAbs b $ substVar a aty co
+    FcCoInst co1 co2 -> FcCoInst (substVar a aty co1) (substVar a aty co2)
+    FcCoQual phi co -> FcCoQual (substVar a aty phi) (substVar a aty co)
+    FcCoQInst co1 co2 -> FcCoQInst (substVar a aty co1) (substVar a aty co2)
 
 -- * Target Language SubstVar Instances (Term Substitution)
 -- ------------------------------------------------------------------------------
@@ -118,13 +142,51 @@ instance SubstVar FcTmVar FcTerm FcTerm where
       | x == y      -> error "substFcTmVarInTm: Shadowing (let)"
       | otherwise   -> FcTmLet y ty (substVar x xtm tm1) (substVar x xtm tm2)
     FcTmCase tm cs  -> FcTmCase (substVar x xtm tm) (map (substVar x xtm) cs)
+    FcTmPropAbs c phi t -> FcTmPropAbs c phi (substVar x xtm t)
+    FcTmCoApp t co -> FcTmCoApp (substVar x xtm t) co
+    FcTmCast t co -> FcTmCast (substVar x xtm t) co
 
 -- | Substitute a term variable for a term in a case alternative
 instance SubstVar FcTmVar FcTerm FcAlt where
-  substVar x xtm (FcAlt (FcConPat dc xs) tm)
+  substVar x xtm (FcAlt (FcConPat dc xs _ _ _) tm)
     | not (distinct xs) = error "substFcTmVarInAlt: Variables in pattern are not distinct" -- extra redundancy for safety
     | any (==x) xs      = error "substFcTmVarInAlt: Shadowing"
-    | otherwise         = FcAlt (FcConPat dc xs) (substVar x xtm tm)
+    | otherwise         = FcAlt (FcConPat dc xs [] [] []) (substVar x xtm tm)
+
+-- * Target Language SubstVar Instances (Coercion Substitution)
+-- ------------------------------------------------------------------------------
+
+instance SubstVar FcCoVar FcCoercion FcCoercion where -- TODO shadowing?
+  substVar c co = \case
+    FcCoVar c'
+      | c == c'        -> co
+      | otherwise      -> FcCoVar c'
+    FcCoSym co'        -> FcCoSym $ substVar c co co'
+    FcCoTrans co1 co2  -> FcCoTrans (substVar c co co1) (substVar c co co2)
+    FcCoApp co1 co2    -> FcCoApp (substVar c co co1) (substVar c co co2)
+    FcCoLeft co'       -> FcCoLeft $ substVar c co co'
+    FcCoRight co'      -> FcCoRight $ substVar c co co'
+    FcCoFam f crs      -> FcCoFam f $ map (substVar c co) crs
+    FcCoAbs a co'      -> FcCoAbs a $ substVar c co co'
+    FcCoInst co1 co2  -> FcCoInst (substVar c co co1) (substVar c co co2)
+    FcCoQual prop co'  -> FcCoQual prop $ substVar c co co'
+    FcCoQInst co1 co2 -> FcCoQInst (substVar c co co1) (substVar c co co2)
+    co' -> co'
+
+instance SubstVar FcCoVar FcCoercion FcTerm where
+  substVar c co = \case -- TODO finish
+    FcTmVar y            -> FcTmVar y
+    FcTmAbs y ty tm      -> FcTmAbs y ty $ substVar c co tm
+    FcTmApp tm1 tm2      -> FcTmApp (substVar c co tm1) (substVar c co tm2)
+    FcTmTyAbs a tm       -> FcTmTyAbs a (substVar c co tm)
+    FcTmTyApp tm ty      -> FcTmTyApp (substVar c co tm) ty
+    FcTmDataCon dc       -> FcTmDataCon dc
+    FcTmLet y ty tm1 tm2 -> FcTmLet y ty (substVar c co tm1) (substVar c co tm2)
+    FcTmCase tm cs       -> FcTmCase (substVar c co tm) (map (substVar c co) cs)
+
+instance SubstVar FcCoVar FcCoercion FcAlt where -- TODO finish
+  substVar c co (FcAlt (FcConPat dc xs _ _ _) tm)
+    = FcAlt (FcConPat dc xs [] [] []) (substVar c co tm)
 
 -- ------------------------------------------------------------------------------
 
@@ -218,6 +280,7 @@ substInTyVars subst = map (substInTyVar subst)
 substInProgramTheory :: HsTySubst -> ProgramTheory -> ProgramTheory
 substInProgramTheory subst = (fmap . fmap) (substInScheme subst)
 
+-- | TODO document
 substInScheme :: HsTySubst -> CtrScheme -> CtrScheme
 substInScheme = sub_rec
 
@@ -259,6 +322,45 @@ substFcTmInTm = sub_rec
 -- | Apply a term substitution to a case alternative
 substFcTmInAlt :: FcTmSubst -> FcAlt -> FcAlt
 substFcTmInAlt = sub_rec
+
+-- * System FC Evidence Substitution
+-- ------------------------------------------------------------------------------
+--
+-- TODO cool option but probably impossible
+data Sub' t where
+  SNil'  :: Sub' t
+  -- TODO we can't generalise t? or instantiate t -> FcTerm
+  SCons' :: SubstVar x y t => Sub' t -> x -> y -> Sub' t
+
+-- TODO stupid simple option
+data EvSub = EvNil
+           | CoCons EvSub FcCoVar FcCoercion
+           | TmCons EvSub FcTmVar FcTerm
+
+instance Monoid EvSub where
+  mempty = EvNil
+  mappend sub EvNil = sub
+  mappend sub (CoCons s c co) = CoCons (mappend sub s) c co
+  mappend sub (TmCons s c co) = TmCons (mappend sub s) c co
+
+class EvSubst x y where
+  (|-->) :: x -> y -> EvSub
+
+instance EvSubst FcCoVar FcCoercion where
+  (|-->) = CoCons EvNil
+
+instance EvSubst FcTmVar FcTerm where
+  (|-->) = TmCons EvNil
+
+instance ApplySubst EvSub FcTerm where
+  applySubst EvNil t = t
+  applySubst (CoCons s c co) t = applySubst s (substVar c co t)
+  applySubst (TmCons s tv tm) t = applySubst s (substVar tv tm t)
+
+instance ApplySubst EvSub FcCoercion where
+  applySubst EvNil t = t
+  applySubst (CoCons s c co) t = applySubst s (substVar c co t)
+  applySubst (TmCons s _ _ ) t = applySubst s t
 
 -- * The Subst class
 -- ------------------------------------------------------------------------------
@@ -326,11 +428,12 @@ instance FreshenLclBndrs FcTerm where
 
 -- | Freshen the (type + term) binders of a System F case alternative
 instance FreshenLclBndrs FcAlt where
-  freshenLclBndrs (FcAlt (FcConPat dc xs) tm) = do
+  freshenLclBndrs (FcAlt (FcConPat dc xs _ _ _) tm) = do
     ys  <- mapM (\_ -> freshFcTmVar) xs
     tm' <- freshenLclBndrs $ foldl (\t (x,y) -> substVar x (FcTmVar y) t) tm (zipExact xs ys)
-    return (FcAlt (FcConPat dc ys) tm')
+    return (FcAlt (FcConPat dc ys [] [] []) tm')
 
+-- | TODO document
 instance FreshenLclBndrs CtrScheme where
   freshenLclBndrs (CtrScheme as cs ct) = do
     new_as <- mapM (freshRnTyVar . kindOf) (labelOf as)
