@@ -64,11 +64,21 @@ eqFcTypes (FcTyVar v1)    (FcTyVar v2)    = v1 == v2
 eqFcTypes (FcTyAbs v1 t1) (FcTyAbs v2 t2) = (v1 == v2)      && eqFcTypes t1 t2
 eqFcTypes (FcTyApp t1 t2) (FcTyApp t3 t4) = eqFcTypes t1 t3 && eqFcTypes t2 t4
 eqFcTypes (FcTyCon tc1)   (FcTyCon tc2)   = tc1 == tc2
+eqFcTypes (FcTyQual p1 t1) (FcTyQual p2 t2) = eqFcTypes t1 t2 && eqFcProp p1 p2
+eqFcTypes (FcTyFam f1 ts1) (FcTyFam f2 ts2) =
+  and (zipWith eqFcTypes ts1 ts2) && f1 == f2
 
-eqFcTypes (FcTyVar {}) _ = False
-eqFcTypes (FcTyAbs {}) _ = False
-eqFcTypes (FcTyApp {}) _ = False
-eqFcTypes (FcTyCon {}) _ = False
+eqFcTypes (FcTyVar  {}) _ = False
+eqFcTypes (FcTyAbs  {}) _ = False
+eqFcTypes (FcTyApp  {}) _ = False
+eqFcTypes (FcTyCon  {}) _ = False
+eqFcTypes (FcTyQual {}) _ = False
+eqFcTypes (FcTyFam  {}) _ = False
+
+-- | Syntactic equality on System Fc propositions
+eqFcProp :: FcProp -> FcProp -> Bool
+eqFcProp (FcProp ty1 ty2) (FcProp ty3 ty4) =
+  eqFcTypes ty1 ty3 && eqFcTypes ty2 ty4
 
 -- | Type Constructors
 newtype FcTyCon = FcTC { unFcTC :: Name }
@@ -299,8 +309,8 @@ data FcAxiomDecl = FcAxiomDecl -- g as : F(us) ~ v
 data FcProgram = FcPgmDataDecl FcDataDecl FcProgram     -- ^ Data Declaration
                | FcPgmValDecl  FcValBind  FcProgram     -- ^ Value Binding
                | FcPgmTerm FcTerm                       -- ^ Term
-               | FcPgmAxiomDecl FcAxiomDecl             -- ^ Axiom Declaration
-               | FcPgmFamDecl FcFamDecl                 -- ^ Type Family Declaration
+               | FcPgmAxiomDecl FcAxiomDecl FcProgram   -- ^ Axiom Declaration
+               | FcPgmFamDecl FcFamDecl FcProgram       -- ^ Type Family Declaration
 
 -- * Pretty printing
 -- ----------------------------------------------------------------------------
@@ -330,11 +340,15 @@ instance PrettyPrint FcType where
     | FcTyApp {} <- ty1 = ppr ty1    <+> pprPar ty2
     | otherwise         = pprPar ty1 <+> pprPar ty2
   ppr (FcTyCon tc)      = ppr tc
+  ppr (FcTyQual phi ty) = ppr phi <+> darrow <+> ppr ty
+  ppr (FcTyFam f tys) = ppr f <> parens (sep (punctuate comma (map ppr tys)))
 
-  needsParens (FcTyApp {}) = True
-  needsParens (FcTyAbs {}) = True
-  needsParens (FcTyVar {}) = False
-  needsParens (FcTyCon {}) = False
+  needsParens (FcTyApp  {}) = True
+  needsParens (FcTyAbs  {}) = True
+  needsParens (FcTyVar  {}) = False
+  needsParens (FcTyCon  {}) = False
+  needsParens (FcTyQual {}) = True
+  needsParens (FcTyFam  {}) = False
 
 -- | Pretty print type constructors
 instance PrettyPrint FcTyCon where
@@ -363,6 +377,10 @@ instance PrettyPrint FcTerm where
 
   ppr (FcTmCase tm cs)     = hang (colorDoc yellow (text "case") <+> ppr tm <+> colorDoc yellow (text "of"))
                                   2 (vcat $ map ppr cs)
+  ppr (FcTmPropAbs c phi tm) =
+    parens (ppr c <+> colon <+> ppr phi) <> dot <+> ppr tm
+  ppr (FcTmCoApp tm co) = ppr tm <+> ppr co
+  ppr (FcTmCast tm co) = ppr tm <+> text ">" <+> ppr co
 
   needsParens (FcTmApp     {}) = True
   needsParens (FcTmTyApp   {}) = True
@@ -372,6 +390,9 @@ instance PrettyPrint FcTerm where
   needsParens (FcTmVar     {}) = False
   needsParens (FcTmTyAbs   {}) = True
   needsParens (FcTmDataCon {}) = False
+  needsParens (FcTmPropAbs {}) = True
+  needsParens (FcTmCoApp   {}) = True
+  needsParens (FcTmCast    {}) = True
 
 -- | Pretty print patterns
 instance PrettyPrint FcPat where
@@ -407,5 +428,70 @@ instance PrettyPrint FcValBind where
 instance PrettyPrint FcProgram where
   ppr (FcPgmDataDecl datadecl pgm) = ppr datadecl $$ ppr pgm
   ppr (FcPgmValDecl  valbind  pgm) = ppr valbind  $$ ppr pgm
+  ppr (FcPgmFamDecl famdecl pgm)   = ppr famdecl  $$ ppr pgm
+  ppr (FcPgmAxiomDecl axdecl pgm)  = ppr axdecl   $$ ppr pgm
   ppr (FcPgmTerm tm)               = ppr tm
+  needsParens _ = False
+
+instance PrettyPrint FcProp where
+  ppr (FcProp ty1 ty2) = ppr ty1 <+> text "~" <+> ppr ty2
+  needsParens _        = True
+
+instance PrettyPrint FcFamVar where
+  ppr           = ppr . symOf
+  needsParens _ = False
+
+instance PrettyPrint FcCoVar where
+  ppr           = ppr . symOf
+  needsParens _ = False
+
+instance PrettyPrint FcAxVar where
+  ppr           = ppr . symOf
+  needsParens _ = False
+
+-- | Pretty print coercions
+instance PrettyPrint FcCoercion where
+  ppr (FcCoVar c) = ppr c
+  ppr (FcCoAx g tys) = ppr g <+> sep (map ppr tys) -- TODO
+  ppr (FcCoRefl ty) = text "<" <> ppr ty <> text ">"
+  ppr (FcCoSym co) = text "sym" <+> ppr co
+  ppr (FcCoTrans co1 co2) = ppr co1 <> text ";" <+> ppr co2
+  ppr (FcCoApp co1 co2) = ppr co1 <+> ppr co2
+  ppr (FcCoLeft co) = text "left" <+> ppr co
+  ppr (FcCoRight co) = text "right" <+> ppr co
+  ppr (FcCoFam f crcs) = ppr f <> parens (sep (punctuate comma (map ppr crcs)))
+  ppr (FcCoAbs a co) = text "forall" <+> ppr a <> dot <+> ppr co
+  ppr (FcCoInst co1 co2) = ppr co1 <+> brackets (ppr co2)
+  ppr (FcCoQual phi co) = ppr phi <+> darrow <+> ppr co
+  ppr (FcCoQInst co1 co2) = ppr co1 <+> text "@" <+> ppr co2
+
+  needsParens (FcCoVar {})   = False
+  needsParens (FcCoAx {})    = True
+  needsParens (FcCoRefl {})  = False
+  needsParens (FcCoSym {})   = True
+  needsParens (FcCoTrans {}) = False
+  needsParens (FcCoApp {})   = True
+  needsParens (FcCoLeft {})  = True
+  needsParens (FcCoRight {}) = True
+  needsParens (FcCoFam {})   = False
+  needsParens (FcCoAbs {})   = True
+  needsParens (FcCoInst {})  = False
+  needsParens (FcCoQual {})  = True
+  needsParens (FcCoQInst {}) = True
+
+-- | Pretty print family declarations
+instance PrettyPrint FcFamDecl where
+  ppr (FcFamDecl f as) =
+    ppr f <> parens (sep (punctuate comma (map ppr as)))
+  needsParens _ = False
+
+-- | Pretty print axiom declarations
+instance PrettyPrint FcAxiomDecl where
+  ppr (FcAxiomDecl g as f us v) =
+    ppr g <+>
+      parens (sep (punctuate comma (map ppr as))) <+>
+      colon <+>
+      ppr f <> parens (sep (punctuate comma (map ppr us))) <+>
+      text "~" <+>
+      ppr v
   needsParens _ = False
