@@ -144,7 +144,10 @@ data FcFamInfo = FcFamInfo
 newtype FcCoVar = FcCV { unFcCV :: Name }
   deriving (Eq, Ord, Symable, Named, Uniquable)
 
-data FcCrcInfo = FcCrcInfo
+freshCoVar :: MonadUnique m => m FcCoVar
+freshCoVar = FcCV . mkName (mkSym "c") <$> getUniqueM
+
+data FcCoInfo = FcCoInfo
   { fc_co_var :: FcCoVar
   , fc_co_val :: FcCoercion
   }
