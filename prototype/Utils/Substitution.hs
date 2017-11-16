@@ -99,8 +99,9 @@ instance SubstVar FcTyVar FcType FcTerm where
 
 -- | Substitute a type variable for a type in a case alternative
 instance SubstVar FcTyVar FcType FcAlt where
-  substVar a ty (FcAlt p tm) = FcAlt p (substVar a ty tm) -- TODO fix
-  -- GEORGE: Now the patterns do not bind type variables so we don't have to check for shadowing here.
+  substVar a ty (FcAlt p@(FcConPat _k bs _cs _vs) tm)
+    | any (== a) bs = error "TODO shadowing" --TODO subst in pattern too?
+    | otherwise = FcAlt p (substVar a ty tm)
 
 instance SubstVar FcTyVar FcType FcProp where
   substVar a aty (FcProp ty1 ty2) = FcProp (substVar a aty ty1) (substVar a aty ty2)
@@ -387,12 +388,16 @@ alphaEqFcTypes (FcTyAbs a ty1) (FcTyAbs b ty2) = do
   alphaEqFcTypes ty1' ty2'
 alphaEqFcTypes (FcTyApp ty1 ty2) (FcTyApp ty3 ty4) = liftM2 (&&) (alphaEqFcTypes ty1 ty3) (alphaEqFcTypes ty2 ty4)
 alphaEqFcTypes (FcTyCon tc1)     (FcTyCon tc2)     = return (tc1 == tc2)
+alphaEqFcTypes (FcTyQual (FcProp ty1 ty2) ty3) (FcTyQual (FcProp ty4 ty5) ty6) =
+  and <$> mapM (uncurry alphaEqFcTypes) [(ty1, ty4), (ty2, ty5), (ty3, ty6)]
+alphaEqFcTypes (FcTyFam f1 tys1) (FcTyFam f2 tys2) =
+  and . ((f1 == f2) :) <$> mapM (uncurry alphaEqFcTypes) (zip tys1 tys2)
 
 alphaEqFcTypes (FcTyVar {}) _ = return False
 alphaEqFcTypes (FcTyAbs {}) _ = return False
 alphaEqFcTypes (FcTyApp {}) _ = return False
 alphaEqFcTypes (FcTyCon {}) _ = return False
-alphaEqFcTypes (FcTyFam {}) _ = return False -- TODO
+alphaEqFcTypes (FcTyFam {}) _ = return False
 alphaEqFcTypes (FcTyQual {}) _ = return False
 
 -- * Freshen up all local binders
