@@ -154,8 +154,8 @@ data FcFamInfo = FcFamInfo
 newtype FcCoVar = FcCV { unFcCV :: Name }
   deriving (Eq, Ord, Symable, Named, Uniquable)
 
-freshCoVar :: MonadUnique m => m FcCoVar
-freshCoVar = FcCV . mkName (mkSym "c") <$> getUniqueM
+freshFcCoVar :: MonadUnique m => m FcCoVar
+freshFcCoVar = FcCV . mkName (mkSym "c") <$> getUniqueM
 
 data FcCoInfo = FcCoInfo
   { fc_co_var :: FcCoVar
@@ -234,11 +234,10 @@ data FcTerm = FcTmAbs FcTmVar FcType FcTerm         -- ^ Term abstraction: lambd
 
 -- | Patterns
 data FcPat = -- TODO fix occurences
-  FcConPat FcDataCon
-           [FcTmVar] -- ^ bs -- TODO make FcTyVar
+  FcConPat FcDataCon -- K
+           [FcTyVar] -- ^ bs
            [Ann FcCoVar FcProp] -- ^ (c : phi)s
-           [Ann FcTmVar FcType] -- ^ (d : tau)s
-           [Ann FcTmVar FcType] -- ^ (f : v  )s
+           [Ann FcTmVar FcType] -- ^ (d : tau)s (f : v  )s
 
 -- | Case alternative(s)
 data FcAlt  = FcAlt FcPat FcTerm
@@ -396,7 +395,8 @@ instance PrettyPrint FcTerm where
 
 -- | Pretty print patterns
 instance PrettyPrint FcPat where
-  ppr (FcConPat dc xs _ _ _) = ppr dc <+> hsep (map ppr xs)
+  ppr (FcConPat dc bs cs vs) =
+    ppr dc <+> hsep (ppr <$> bs) <+> hsep (ppr <$> cs) <+> hsep (ppr <$> vs)
   needsParens _        = True
 
 -- | Pretty print case alternatives

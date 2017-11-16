@@ -17,6 +17,7 @@ import Utils.PrettyPrint
 import Utils.Errors
 import Utils.Utils
 import Utils.Trace
+import Utils.Annotated
 
 import Control.Monad.Writer
 import Control.Monad.Reader
@@ -200,15 +201,15 @@ tcAlts scr_ty alts
       return ty
 
 tcAlt :: FcType -> FcAlt -> FcM FcType
-tcAlt scr_ty (FcAlt (FcConPat dc xs _ _ _) rhs) = case tyConAppMaybe scr_ty of
+tcAlt scr_ty (FcAlt (FcConPat dc _ _ xs) rhs) = case tyConAppMaybe scr_ty of
   Just (tc, tys) -> do
-    tmVarsNotInFcCtxM xs -- GEORGE: Ensure not bound already
+    tmVarsNotInFcCtxM (labelOf xs) -- GEORGE: Ensure not bound already
     (as, arg_tys, dc_tc) <- lookupDataConTyM dc
     unless (dc_tc == tc) $
       fcFail (text "tcAlt" <+> colon <+> text "The type of the scrutinee does not match that of the pattern")
     let ty_subst     = mconcat (zipWithExact (|->) as tys)
     let real_arg_tys = map (substFcTyInTy ty_subst) arg_tys
-    extendCtxTmsM xs real_arg_tys (tcTerm rhs)
+    extendCtxTmsM (labelOf xs) real_arg_tys (tcTerm rhs)
   Nothing -> fcFail (text "destructScrTy" <+> colon <+> text "Not a tycon application")
 
 -- | Ensure that all types are syntactically the same

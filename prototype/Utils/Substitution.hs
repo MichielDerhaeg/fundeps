@@ -150,10 +150,10 @@ instance SubstVar FcTmVar FcTerm FcTerm where
 
 -- | Substitute a term variable for a term in a case alternative
 instance SubstVar FcTmVar FcTerm FcAlt where -- TODO fix
-  substVar x xtm (FcAlt (FcConPat dc xs _ _ _) tm)
-    | not (distinct xs) = error "substFcTmVarInAlt: Variables in pattern are not distinct" -- extra redundancy for safety
-    | any (==x) xs      = error "substFcTmVarInAlt: Shadowing"
-    | otherwise         = FcAlt (FcConPat dc xs [] [] []) (substVar x xtm tm)
+  substVar x xtm (FcAlt (FcConPat dc bs cs vs) tm)
+    -- | not (distinct xs) = error "substFcTmVarInAlt: Variables in pattern are not distinct" -- extra redundancy for safety -- TODO really required?
+    | any (==x) (labelOf vs) = error "substFcTmVarInAlt: Shadowing"
+    | otherwise              = FcAlt (FcConPat dc bs cs vs) (substVar x xtm tm)
 
 -- * Target Language SubstVar Instances (Coercion Substitution)
 -- ------------------------------------------------------------------------------
@@ -192,8 +192,9 @@ instance SubstVar FcCoVar FcCoercion FcTerm where
     FcTmCast t co'       -> FcTmCast (substVar c co t) (substVar c co co')
 
 instance SubstVar FcCoVar FcCoercion FcAlt where -- TODO finish
-  substVar c co (FcAlt (FcConPat dc xs _ _ _) tm)
-    = FcAlt (FcConPat dc xs [] [] []) (substVar c co tm)
+  substVar c co (FcAlt (FcConPat dc bs cs vs) tm)
+    | any (==c) (labelOf cs) = error "substFcCoercionInAlt: Shadowing"
+    | otherwise = FcAlt (FcConPat dc bs cs vs) (substVar c co tm)
 
 -- ------------------------------------------------------------------------------
 
@@ -229,6 +230,9 @@ instance Subst (Sub x y) x y where
 sub_rec :: SubstVar v t x => Sub v t -> x -> x
 sub_rec SNil          t = t
 sub_rec (SCons s x y) t = sub_rec s (substVar x y t)
+
+buildSubst :: [(x,y)] -> Sub x y
+buildSubst = foldl (\s (x,y) -> SCons s x y) SNil
 
 -- * The ApplySubst Class
 -- ------------------------------------------------------------------------------
@@ -431,7 +435,7 @@ instance FreshenLclBndrs FcTerm where
 
   freshenLclBndrs (FcTmCase tm cs) = FcTmCase <$> freshenLclBndrs tm <*> mapM freshenLclBndrs cs
   freshenLclBndrs (FcTmPropAbs c phi t) = do
-    c' <- freshCoVar
+    c' <- freshFcCoVar
     FcTmPropAbs c' <$> freshenLclBndrs phi <*>
       freshenLclBndrs (substVar c (FcCoVar c') t)
   freshenLclBndrs (FcTmCoApp t co) = FcTmCoApp <$> freshenLclBndrs t <*> freshenLclBndrs co
@@ -439,10 +443,16 @@ instance FreshenLclBndrs FcTerm where
 
 -- | Freshen the (type + term) binders of a System F case alternative
 instance FreshenLclBndrs FcAlt where
-  freshenLclBndrs (FcAlt (FcConPat dc xs _ _ _) tm) = do
-    ys  <- mapM (\_ -> freshFcTmVar) xs
-    tm' <- freshenLclBndrs $ foldl (\t (x,y) -> substVar x (FcTmVar y) t) tm (zipExact xs ys)
-    return (FcAlt (FcConPat dc ys [] [] []) tm')
+  freshenLclBndrs (FcAlt (FcConPat dc bs cs vs) tm) = do
+    bs' <- mapM (freshFcTyVar . kindOf) bs
+    cs' <- mapM (\_ -> freshFcCoVar) (labelOf cs)
+    vs' <- mapM (\_ -> freshFcTmVar) (labelOf vs)
+    let ty_subst = buildSubst . zip bs $ map FcTyVar bs'
+    let co_subst = buildSubst . zip (labelOf cs) $ map FcCoVar cs'
+    let tm_subst = buildSubst . zip (labelOf vs) $ map FcTmVar vs'
+    FcAlt (FcConPat dc bs' (cs' |: dropLabel cs) (vs' |: dropLabel vs)) <$>
+      freshenLclBndrs
+        (applySubst ty_subst (applySubst co_subst (applySubst tm_subst tm)))
 
 -- | TODO document
 instance FreshenLclBndrs CtrScheme where
@@ -460,4 +470,23 @@ instance FreshenLclBndrs FcProp where
     FcProp <$> freshenLclBndrs ty1 <*> freshenLclBndrs ty2
 
 instance FreshenLclBndrs FcCoercion where
-  freshenLclBndrs = return -- TODO
+  freshenLclBndrs (FcCoVar c) = return $ FcCoVar c
+  freshenLclBndrs (FcCoAx g tys) = FcCoAx g <$> mapM freshenLclBndrs tys
+  freshenLclBndrs (FcCoRefl ty) = FcCoRefl <$> freshenLclBndrs ty
+  freshenLclBndrs (FcCoSym co) = FcCoSym <$> freshenLclBndrs co
+  freshenLclBndrs (FcCoTrans co1 co2) =
+    FcCoTrans <$> freshenLclBndrs co1 <*> freshenLclBndrs co2
+  freshenLclBndrs (FcCoApp co1 co2) =
+    FcCoApp <$> freshenLclBndrs co1 <*> freshenLclBndrs co2
+  freshenLclBndrs (FcCoLeft co) = FcCoLeft <$> freshenLclBndrs co
+  freshenLclBndrs (FcCoRight co) = FcCoRight <$> freshenLclBndrs co
+  freshenLclBndrs (FcCoFam f crcs) = FcCoFam f <$> mapM freshenLclBndrs crcs
+  freshenLclBndrs (FcCoAbs a co) = do
+    a' <- freshFcTyVar (kindOf a)
+    FcCoAbs a' <$> freshenLclBndrs (substVar a (FcTyVar a') co)
+  freshenLclBndrs (FcCoInst co1 co2) =
+    FcCoInst <$> freshenLclBndrs co1 <*> freshenLclBndrs co2
+  freshenLclBndrs (FcCoQual phi co) =
+    FcCoQual <$> freshenLclBndrs phi <*> freshenLclBndrs co
+  freshenLclBndrs (FcCoQInst co1 co2) =
+    FcCoQInst <$> freshenLclBndrs co1 <*> freshenLclBndrs co2
