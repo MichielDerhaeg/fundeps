@@ -1,4 +1,7 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts       #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE FunctionalDependencies #-}
 
 module Utils.Ctx
 ( Ctx -- Keep opaque
@@ -11,6 +14,11 @@ module Utils.Ctx
 
 import Utils.PrettyPrint hiding ((<>))
 import Utils.Errors
+import Utils.Var
+import Utils.SnocList
+import Utils.Kind
+
+import Backend.FcTypes
 
 import Data.Monoid
 import Control.Monad.Reader
@@ -104,3 +112,61 @@ extendCtxM ctx2 = local (\ctx1 -> ctx1 <> ctx2)
 -- | Replace the context
 setCtxM :: MonadReader r m => r -> m a -> m a
 setCtxM ctx = local (\_ -> ctx)
+
+class (Eq src) => Context ctx src trg | src ctx -> trg where -- TODO fundeps
+  lookupCtx :: ctx -> src -> Maybe trg
+  extendCtx :: ctx -> src -> trg -> ctx
+
+lookupCtxM' ::
+     ( MonadError CompileError m
+     , PrettyPrint src
+     , Context ctx src trg
+     , MonadReader ctx m
+     )
+  => src
+  -> m trg
+lookupCtxM' src = ask >>= \ctx -> case lookupCtx ctx src of
+  Just trg -> return trg
+  Nothing -> throwErrorM $ text "Unbound variable" <+> colon <+> ppr src
+
+extendCtxM' :: (Context ctx src trg, MonadReader ctx m) => src -> trg -> m a -> m a
+extendCtxM' s t = local (\ctx -> extendCtx ctx s t)
+
+setCtxM' :: MonadReader ctx m => ctx -> m a -> m a
+setCtxM' ctx = local (\_ -> ctx)
+
+notInCtxM ::
+     ( PrettyPrint src
+     , MonadReader ctx m
+     , MonadError CompileError m
+     , Context ctx src trg
+     )
+  => src
+  -> m ()
+notInCtxM x = ask >>= \ctx -> case lookupCtx ctx x of
+  Just _ -> throwErrorM (text "notInCtxM" <+> colon <+> ppr x <+> text "is already bound")
+  Nothing -> return ()
+
+-- TODO move FcTc stuff to Fc typechecker?
+type FcTcCtx     = SnocList FcTcBinding
+data FcTcBinding = FcTcTmBnd FcTmVar FcType
+                 | FcTcTyBnd FcTyVar Kind
+                 | FcTcCoBnd FcCoVar FcProp
+
+instance Context (SnocList FcTcBinding) FcTmVar FcType where
+  lookupCtx (ctx :> FcTcTmBnd a ty) b = if a == b then Just ty else lookupCtx ctx b
+  lookupCtx (ctx :> _) b = lookupCtx ctx b
+  lookupCtx SN _ = Nothing
+  extendCtx ctx src trg = ctx :> FcTcTmBnd src trg
+
+instance Context (SnocList FcTcBinding) FcTyVar Kind where
+  lookupCtx (ctx :> FcTcTyBnd a k) b = if a == b then Just k else lookupCtx ctx b
+  lookupCtx (ctx :> _) b = lookupCtx ctx b
+  lookupCtx SN _ = Nothing
+  extendCtx ctx src trg = ctx :> FcTcTyBnd src trg
+
+instance Context (SnocList FcTcBinding) FcCoVar FcProp where
+  lookupCtx (ctx :> FcTcCoBnd a phi) b = if a == b then Just phi else lookupCtx ctx b
+  lookupCtx (ctx :> _) b = lookupCtx ctx b
+  lookupCtx SN _ = Nothing
+  extendCtx ctx src trg = ctx :> FcTcCoBnd src trg

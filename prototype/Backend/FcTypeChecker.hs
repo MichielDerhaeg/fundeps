@@ -30,13 +30,15 @@ type FcM = UniqueSupplyT (ReaderT FcCtx (StateT FcGblEnv (Except CompileError)))
 
 data FcGblEnv = FcGblEnv { fc_env_tc_info :: AssocList FcTyCon   FcTyConInfo
                          , fc_env_dc_info :: AssocList FcDataCon FcDataConInfo
+                         , fc_env_tf_info :: AssocList FcFamVar  FcFamInfo
                          }
 
 instance PrettyPrint FcGblEnv where
-  ppr (FcGblEnv tc_infos dc_infos)
+  ppr (FcGblEnv tc_infos dc_infos tf_infos)
     = braces $ vcat $ punctuate comma
     [ text "fc_env_tc_info" <+> colon <+> ppr tc_infos
-    , text "fc_env_dc_info" <+> colon <+> ppr dc_infos ]
+    , text "fc_env_dc_info" <+> colon <+> ppr dc_infos
+    , text "fc_env_tf_info" <+> colon <+> ppr tf_infos ]
   needsParens _ = False
 
 type FcCtx = Ctx FcTmVar FcType FcTyVar Kind
@@ -238,7 +240,10 @@ fcTypeCheck (tc_env, dc_env) us pgm = runExcept
                                     $ tcFcProgram pgm
   where
     fc_init_ctx     = mempty
-    fc_init_gbl_env = FcGblEnv tc_env dc_env
+    fc_init_gbl_env = FcGblEnv { fc_env_tc_info = tc_env
+                               , fc_env_dc_info = dc_env
+                               , fc_env_tf_info = mempty -- TODO
+                               }
 
 fcFail :: MonadError CompileError m => Doc -> m a
 fcFail = throwError . CompileError FcTypeChecker

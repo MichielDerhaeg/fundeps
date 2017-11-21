@@ -99,9 +99,16 @@ instance SubstVar FcTyVar FcType FcTerm where
 
 -- | Substitute a type variable for a type in a case alternative
 instance SubstVar FcTyVar FcType FcAlt where
-  substVar a ty (FcAlt p@(FcConPat _k bs _cs _vs) tm)
-    | any (== a) bs = error "TODO shadowing" --TODO subst in pattern too?
-    | otherwise = FcAlt p (substVar a ty tm)
+  substVar a ty (FcAlt (FcConPat k bs cs vs) tm)
+    | any (== a) bs = error "TODO shadowing"
+    | otherwise =
+      FcAlt
+        (FcConPat
+           k
+           bs
+           ((fmap . fmap) (substVar a ty) cs)
+           ((fmap . fmap) (substVar a ty) vs))
+        (substVar a ty tm)
 
 instance SubstVar FcTyVar FcType FcProp where
   substVar a aty (FcProp ty1 ty2) = FcProp (substVar a aty ty1) (substVar a aty ty2)
@@ -150,16 +157,20 @@ instance SubstVar FcTmVar FcTerm FcTerm where
     FcTmCast t co -> FcTmCast (substVar x xtm t) co
 
 -- | Substitute a term variable for a term in a case alternative
-instance SubstVar FcTmVar FcTerm FcAlt where -- TODO fix
-  substVar x xtm (FcAlt (FcConPat dc bs cs vs) tm)
-    -- | not (distinct xs) = error "substFcTmVarInAlt: Variables in pattern are not distinct" -- extra redundancy for safety -- TODO really required?
-    | any (==x) (labelOf vs) = error "substFcTmVarInAlt: Shadowing"
-    | otherwise              = FcAlt (FcConPat dc bs cs vs) (substVar x xtm tm)
+instance SubstVar FcTmVar FcTerm FcAlt where
+  substVar x xtm (FcAlt p@(FcConPat _dc bs cs vs) tm)
+    | not (distinct bs && distinct (labelOf cs) && distinct (labelOf vs)) =
+      -- extra redundancy for safety, TODO maybe put distinct checking in the type checker
+      error "substFcTmVarInAlt: Variables in pattern are not distinct"
+    | any (== x) (labelOf vs) = error "substFcTmVarInAlt: Shadowing"
+    | otherwise = FcAlt p (substVar x xtm tm)
 
 -- * Target Language SubstVar Instances (Coercion Substitution)
 -- ------------------------------------------------------------------------------
 
-instance SubstVar FcCoVar FcCoercion FcCoercion where -- TODO shadowing?
+-- TODO implement specialised functions and types
+
+instance SubstVar FcCoVar FcCoercion FcCoercion where
   substVar c co = \case
     FcCoVar c'
       | c == c'        -> co
@@ -192,7 +203,8 @@ instance SubstVar FcCoVar FcCoercion FcTerm where
     FcTmCoApp t co'      -> FcTmCoApp (substVar c co t) (substVar c co co')
     FcTmCast t co'       -> FcTmCast (substVar c co t) (substVar c co co')
 
-instance SubstVar FcCoVar FcCoercion FcAlt where -- TODO finish
+-- TODO distinct checking?
+instance SubstVar FcCoVar FcCoercion FcAlt where
   substVar c co (FcAlt (FcConPat dc bs cs vs) tm)
     | any (==c) (labelOf cs) = error "substFcCoercionInAlt: Shadowing"
     | otherwise = FcAlt (FcConPat dc bs cs vs) (substVar c co tm)
@@ -393,11 +405,11 @@ alphaEqFcTypes (FcTyQual (FcProp ty1 ty2) ty3) (FcTyQual (FcProp ty4 ty5) ty6) =
 alphaEqFcTypes (FcTyFam f1 tys1) (FcTyFam f2 tys2) =
   and . ((f1 == f2) :) <$> mapM (uncurry alphaEqFcTypes) (zip tys1 tys2)
 
-alphaEqFcTypes (FcTyVar {}) _ = return False
-alphaEqFcTypes (FcTyAbs {}) _ = return False
-alphaEqFcTypes (FcTyApp {}) _ = return False
-alphaEqFcTypes (FcTyCon {}) _ = return False
-alphaEqFcTypes (FcTyFam {}) _ = return False
+alphaEqFcTypes (FcTyVar  {}) _ = return False
+alphaEqFcTypes (FcTyAbs  {}) _ = return False
+alphaEqFcTypes (FcTyApp  {}) _ = return False
+alphaEqFcTypes (FcTyCon  {}) _ = return False
+alphaEqFcTypes (FcTyFam  {}) _ = return False
 alphaEqFcTypes (FcTyQual {}) _ = return False
 
 -- * Freshen up all local binders

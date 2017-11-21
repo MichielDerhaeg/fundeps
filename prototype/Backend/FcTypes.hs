@@ -151,6 +151,14 @@ data FcFamInfo = FcFamInfo
   , fc_fam_univ :: [FcTyVar]
   }
 
+instance PrettyPrint FcFamInfo where
+  ppr (FcFamInfo f as) =
+    braces $ vcat $ punctuate comma $
+      [ text "fc_fam_var"  <+> colon <+> ppr f
+      , text "fc_fam_univ" <+> colon <+> ppr as
+      ]
+  needsParens _ = False
+
 newtype FcCoVar = FcCV { unFcCV :: Name }
   deriving (Eq, Ord, Symable, Named, Uniquable)
 
@@ -243,6 +251,7 @@ data FcPat = -- TODO fix occurences
 data FcAlt  = FcAlt FcPat FcTerm
 type FcAlts = [FcAlt]
 
+-- TODO find better location
 data MatchCtx
   = MCtxHole
   | MCtxCase FcTmVar FcPat MatchCtx
