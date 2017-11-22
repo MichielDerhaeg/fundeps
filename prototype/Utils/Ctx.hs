@@ -2,6 +2,7 @@
 {-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE UndecidableInstances   #-}
 
 module Utils.Ctx
 ( Ctx -- Keep opaque
@@ -10,6 +11,9 @@ module Utils.Ctx
 , extendCtxTyM, extendCtxTysM
 , extendCtxTmM, extendCtxTmsM
 , extendCtxM, setCtxM
+, FcTcCtx, extendCtxM'
+, lookupCtxM', notInCtxM
+, setCtxM'
 ) where
 
 import Utils.PrettyPrint hiding ((<>))
@@ -113,7 +117,7 @@ extendCtxM ctx2 = local (\ctx1 -> ctx1 <> ctx2)
 setCtxM :: MonadReader r m => r -> m a -> m a
 setCtxM ctx = local (\_ -> ctx)
 
-class (Eq src) => Context ctx src trg | src ctx -> trg where -- TODO fundeps
+class (Eq src) => Context ctx src trg | src ctx -> trg where
   lookupCtx :: ctx -> src -> Maybe trg
   extendCtx :: ctx -> src -> trg -> ctx
 
@@ -152,6 +156,13 @@ type FcTcCtx     = SnocList FcTcBinding
 data FcTcBinding = FcTcTmBnd FcTmVar FcType
                  | FcTcTyBnd FcTyVar Kind
                  | FcTcCoBnd FcCoVar FcProp
+
+instance Context ctx src trg => Context ctx [src] [trg] where
+  lookupCtx ctx as = sequence $ fmap (lookupCtx ctx) as
+  extendCtx ctx (s:ss) (t:ts) = extendCtx (extendCtx ctx ss ts) s t
+  extendCtx ctx []     []     = ctx
+  extendCtx _   _      _      = error "extendCtx: length mismatch"
+  -- TODO length mismatch, implement als fooM instead for better error?
 
 instance Context (SnocList FcTcBinding) FcTmVar FcType where
   lookupCtx (ctx :> FcTcTmBnd a ty) b = if a == b then Just ty else lookupCtx ctx b
