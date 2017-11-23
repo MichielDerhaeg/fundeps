@@ -347,37 +347,12 @@ substFcTmInTm = sub_rec
 substFcTmInAlt :: FcTmSubst -> FcAlt -> FcAlt
 substFcTmInAlt = sub_rec
 
--- * System FC Evidence Substitution
+-- * System Fc Proposition Substitution
 -- ------------------------------------------------------------------------------
 
-data EvSub = EvNil
-           | CoCons EvSub FcCoVar FcCoercion
-           | TmCons EvSub FcTmVar FcTerm
+substFcTyInProp :: FcTySubst -> FcProp -> FcProp
+substFcTyInProp = sub_rec
 
-instance Monoid EvSub where
-  mempty = EvNil
-  mappend sub EvNil = sub
-  mappend sub (CoCons s c co) = CoCons (mappend sub s) c co
-  mappend sub (TmCons s c co) = TmCons (mappend sub s) c co
-
-class EvSubst x y where
-  (|-->) :: x -> y -> EvSub
-
-instance EvSubst FcCoVar FcCoercion where
-  (|-->) = CoCons EvNil
-
-instance EvSubst FcTmVar FcTerm where
-  (|-->) = TmCons EvNil
-
-instance ApplySubst EvSub FcTerm where
-  applySubst EvNil t = t
-  applySubst (CoCons s c co) t = applySubst s (substVar c co t)
-  applySubst (TmCons s tv tm) t = applySubst s (substVar tv tm t)
-
-instance ApplySubst EvSub FcCoercion where
-  applySubst EvNil t = t
-  applySubst (CoCons s c co) t = applySubst s (substVar c co t)
-  applySubst (TmCons s _ _ ) t = applySubst s t
 
 -- * The Subst class
 -- ------------------------------------------------------------------------------

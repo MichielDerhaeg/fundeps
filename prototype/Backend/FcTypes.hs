@@ -175,11 +175,25 @@ newtype FcAxVar = FcAV { unFcAV :: Name }
 
 data FcAxiomInfo = FcAxiomInfo
   { fc_ax_var  :: FcAxVar   -- ^ g
-  , fc_ax_tv  :: [FcTyVar] -- ^ Universal Type variables -- as
+  , fc_ax_uv  :: [FcTyVar] -- ^ Universal Type variables -- as
   , fc_ax_fv  :: FcFamVar  -- ^ Type Family variable -- F
   , fc_ax_fvs :: [FcTyVar] -- ^ Type Family type arguments -- us
   , fc_ax_ty  :: FcType    -- ^ Equal Type -- v
   }
+
+axiomToProp (FcAxiomInfo g as f us v) =
+  FcProp (FcTyFam f (FcTyVar <$> us)) (v)
+
+instance PrettyPrint FcAxiomInfo where
+  ppr (FcAxiomInfo g as f us v) =
+    braces $ vcat $ punctuate comma $
+      [ text "fc_fam_var" <+> colon <+> ppr g
+      , text "fc_ax_uv"   <+> colon <+> ppr as
+      , text "fc_ax_fv"   <+> colon <+> ppr f
+      , text "fc_ax_fvs"   <+> colon <+> ppr us
+      , text "fc_ax_ty"   <+> colon <+> ppr v
+      ]
+  needsParens _ = False
 
 -- -- | Take the type apart the hindley milner way
 -- destructFcTypeHM :: FcType -> ([FcTyVar], [FcType], FcType)
