@@ -470,7 +470,8 @@ elabHsAlt scr_ty res_ty (HsAlt (HsPat dc xs) rhs) = do
   storeEqCs [ scr_ty :~: foldl TyApp (TyCon tc) (map TyVar bs)  -- The scrutinee type must match the pattern type
             , res_ty :~: rhs_ty ]                               -- All right hand sides should be the same
 
-  return (FcAlt (FcConPat fc_dc (map rnTmVarToFcTmVar xs) [] [] []) fc_rhs)
+  (_kinds, fc_tys) <- liftGenM (unzip <$> mapM wfElabPolyTy arg_tys) -- TODO poly types?
+  return (FcAlt (FcConPat fc_dc [] [] ((rnTmVarToFcTmVar <$> xs) |: fc_tys)) fc_rhs)
 
 -- | Covert a renamed type variable to a System F type
 rnTyVarToFcType :: RnTyVar -> FcType
@@ -650,8 +651,8 @@ elabClsDecl (ClsD rn_cs cls (a :| _) method method_ty) = do
 
     let fc_tm = FcTmTyAbs (rnTyVarToFcTyVar a) $
                   FcTmAbs da fc_cls_head $
-                    FcTmCase (FcTmVar da)
-                             [FcAlt (FcConPat dc xs [] [] []) (FcTmVar (xs !! i))]
+                    FcTmCase (FcTmVar da) -- TODO undefined types
+                             [FcAlt (FcConPat dc [] [] (xs |: undefined)) (FcTmVar (xs !! i))]
     let proj = FcValBind d fc_scheme fc_tm
 
     return (d :| scheme, proj)
@@ -684,8 +685,8 @@ elabMethodSig method a cls sigma = do
 
   let fc_method_rhs = fcTmTyAbs (map rnTyVarToFcTyVar bs) $
                         fcTmAbs dbinds $
-                          FcTmCase (FcTmVar (head ds))
-                                   [FcAlt (FcConPat dc xs [] [] [])
+                          FcTmCase (FcTmVar (head ds)) -- TODO undefined types
+                                   [FcAlt (FcConPat dc [] [] (xs |: undefined))
                                           (fcDictApp (fcTmTyApp (FcTmVar (last xs)) (tail rn_bs)) (tail ds))]
 
   let fc_val_bind = FcValBind (rnTmVarToFcTmVar method) fc_method_ty fc_method_rhs
