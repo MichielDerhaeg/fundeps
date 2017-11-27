@@ -13,7 +13,7 @@ class Collection c e | c -> e where
 instance Collection [a] a where
     singleton x = [x]
 
-singleton2 :: (Collection c1 e, Collection c2 c1 ) => e -> c2
+singleton2 :: (Collection c1 e, Collection c2 c1) => e -> c2
 singleton2 c = singleton (singleton c)
 ```
 
@@ -103,7 +103,7 @@ sort :: Ord a => [a] -> [a]
 Superclass constraint implications match in the other direction because having
 ``Ord a`` implies we have ``Eq a``.
 
-E.g. we need to solve ``Eq [aλ]``, through matching the rules in the wrong order
+E.g. we need to solve ``Eq [a]``, through matching the rules in the wrong order
 we end up with ``Ord [a]`` as a constraint to be solved, which we can't.
 Calculate transitive superclasses when adding local given constraints.
 
@@ -149,3 +149,5 @@ Related work
   * Elaboration on Functional Dependencies
   * Quantified Class Constraints
   * How to make *ad-hoc* polymorphism less *ad hoc*
+
+[Powerpoint link](https://seafile.derhaeg.be/f/416a34ab2d9b4efba599/)
