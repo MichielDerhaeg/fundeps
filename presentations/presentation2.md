@@ -151,3 +151,9 @@ Related work
   * How to make *ad-hoc* polymorphism less *ad hoc*
 
 [Powerpoint link](https://seafile.derhaeg.be/f/416a34ab2d9b4efba599/)
+
+Notes
+=====
+make slide about elaboration/ir koen style
+more explicit problem statement
+example for non-termination?
