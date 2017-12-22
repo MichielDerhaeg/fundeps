@@ -1,5 +1,28 @@
 \section{Functional Dependencies}
 % syntax
 % examples
+\begin{verbatim}
+class Collection c e where
+    singleton :: e -> c
+\end{verbatim}
+
+\begin{verbatim}
+class Collection c e | c -> e where
+    singleton :: e -> c
+\end{verbatim}
+
+\begin{verbatim}
+instance Collection [a] a where
+    singleton x = [x]
+\end{verbatim}
+
+\begin{verbatim}
+instance Collection ByteArray Byte
+instance Collection ByteArray Bit
+\end{verbatim}
+
+\begin{verbatim}
+singleton2 :: (Singleton c2 c1, Collection c1 e) => e => c2
+singleton2 e = singleton (singleton e)
+\end{verbatim}
 % semantics
-% implementation and stuff later?

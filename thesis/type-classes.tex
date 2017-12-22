@@ -1,2 +1,27 @@
 \section{Type Classes}
-% 
+
+% syntax
+% examples
+% semantics
+\begin{verbatim}
+class Eq a where
+    (==) :: a -> a -> Bool
+\end{verbatim}
+
+\begin{verbatim}
+instance Eq Bool where
+    True == True = True
+    False == False = True
+    _ == _ = False
+\end{verbatim}
+
+\begin{verbatim}
+instance Eq a => Eq [a] where
+    [] == [] == rue
+    (a:as) == (b:bs) = b == b && as == bs
+\end{verbatim}
+
+\begin{verbatim}
+class Eq a => Ord a where
+    (<=) :: a -> a -> Bool
+\end{verbatim}

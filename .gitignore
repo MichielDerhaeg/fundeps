@@ -11,6 +11,9 @@ tags
 *.snm
 *.toc
 *.vrb
+*.bbl
+*.blg
 
+thesis/*.pdf
 reports/*.pdf
 presentations/*.pdf
