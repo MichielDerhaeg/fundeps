@@ -1,5 +1,39 @@
 % vim:ft=tex
 \section{Introduction}
-So we got Wadler and Blot and stuff with type classes \cite{Wadler:1989:MAP:75277.75283}
-And extended with multi-params and afterwards with functional dependencies
-because that was better by Mark P. Jones \cite{Jones00typeclasses}
+Wadler and Blot \cite{Wadler:1989:MAP:75277.75283} introduced type classes as a
+way to express ad-hoc polymorphism and became extremely popular and an essential
+part of the Haskell programming language. This feature was quickly extended to
+allow for multiple type parameters. Type classes originally allowed us to
+express properties of a collection of types and now to relations between types
+as well. By usage of these multi-parameter type classes situations could easily
+arise where the type of one or several parameters could not be determined
+unambiguously. To resolve these amibuities Mark P. Jones intruduced the notion
+of Functional Dependencies \cite{Jones00typeclasses} between the type parameters
+of type classes so one would be uniquely determined by the other and the
+amibuities would be resolved. It's a technique that originated from relation
+database theory but applied to the design of type systems. It became a very
+popular type system feature that is still used very often to date. Not just to
+resolve amibuities, but also for the static enforcement of semantic properties
+and type-level programming.
+
+Implemented in GHC % TODO
+
+Proved to be problematic. Some programs that are entirely correct would be
+rejected by GHC's type checker because at the time it seemd to be impossible to
+translate the typing relationship into System F. A polymorphic lambda calculus
+often used by functional programming language compilers as an intermediate
+representation. No implementation uses pure System F to encode their source
+language in. It is usually extended to make the translation more straightforward
+, readable or simply to support more advanced features. E.g. it was extended to
+support GADTs. But Functional Dependencies did not seem to be worth it.
+
+To support features like Associated Types and Type Families, it was proposed by
+Sulzmann et al. \cite{Sulzmann:2007:SFT:1190315.1190324} to extend System F with
+type equality coercions. Which is now called System $F_C$ and currently used by
+GHC as the new intermediate representation.
+
+Despite the continued popularity of Functional Dependencies it was never
+investigated if it could be implemented using the new representation until
+recently. Karachalias and Schrijvers \cite{Karachalias:2017:EFD:3122955.3122966}
+described a type inference algorithm for functional dependencies and a way to
+translate them into System $F_C$
