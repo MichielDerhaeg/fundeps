@@ -8,31 +8,51 @@ If we would like to define polymorphic methods for collections and their
 elements. We could define a multi-parameter class \texttt{Collection} where it's
 \texttt{c} represents the collection type and and \texttt{e} the element type.
 \begin{verbatim}
-class Collection c e where
-    singleton :: e -> c
+    class Collection c e where
+      singleton :: e -> c
 \end{verbatim}
 In this example we have only implemented a method \texttt{singleton} which
 should put an element on it's own in the collection.
 The following example is an instance declaration for lists of a polymorphic type
 \texttt{a}.
 \begin{verbatim}
-instance Collection [a] a where
-    singleton x = [x]
+    instance Collection [a] a where
+      singleton x = [x]
 \end{verbatim}
 
+Using the methods of these type classes can prove to be quite problematic. The
+following example is a function that applies the \texttt{singleton} function
+twice to the given argument. Notice that the type signature contains a type
+\texttt{c1} that appear in the type class constraints but not in the right hand
+side of the type signature. No matter the context in which this function is
+used, it's impossible to uniquely determine the type of \texttt{c1}.
 
 \begin{verbatim}
-class Collection c e | c -> e where
-    singleton :: e -> c
+    singleton2 :: (Collection c2 c1, Collection c1 e) => e => c2
+    singleton2 e = singleton (singleton e)
 \end{verbatim}
 
+Even if there is only one available instance that could possibly satisfy these
+constraints and provide a type to assume the role of \texttt{c1}, we can't
+because type classes are open. The programmer can implement new instance
+delcarations for every type class even if he/she didn't implement it themselves.
+
+If adding a new instance declaration could cause the type inferred for
+\texttt{c1} to change, so would the associated behaviour and this would be
+unacceptable. This is the completeness problem of type classes and occurs with
+normal type classes as well these issues  are very prevalent with the
+multi-parameter variant. Therefore a solution has been implemented: functional
+dependencies.
 \begin{verbatim}
-instance Collection ByteArray Byte
-instance Collection ByteArray Bit
+    class Collection c e | c -> e where
+      singleton :: e -> c
 \end{verbatim}
+The \texttt{c $\rightarrow$ e} that was added to the \texttt{Collection} class
+declaration is the functional dependency between \texttt{c} and \texttt{e}. This
+enforces that \texttt{e} has to be uniquely determined by \texttt{c}.
 
 \begin{verbatim}
-singleton2 :: (Singleton c2 c1, Collection c1 e) => e => c2
-singleton2 e = singleton (singleton e)
+    instance Collection ByteArray Byte
+    instance Collection ByteArray Bit
 \end{verbatim}
 % semantics
