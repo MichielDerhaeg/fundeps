@@ -1,18 +1,29 @@
 \section{Functional Dependencies}
+Multi-parameter type classes are syntactically straightforward. The class
+declaration simply specifies a second type parameter (or more) that can be used
+in the class' methods. The intuition behind these type classes is that they
+describe relationships between the type parameters.
 
+If we would like to define polymorphic methods for collections and their
+elements. We could define a multi-parameter class \texttt{Collection} where it's
+\texttt{c} represents the collection type and and \texttt{e} the element type.
 \begin{verbatim}
 class Collection c e where
     singleton :: e -> c
 \end{verbatim}
+In this example we have only implemented a method \texttt{singleton} which
+should put an element on it's own in the collection.
+The following example is an instance declaration for lists of a polymorphic type
+\texttt{a}.
+\begin{verbatim}
+instance Collection [a] a where
+    singleton x = [x]
+\end{verbatim}
+
 
 \begin{verbatim}
 class Collection c e | c -> e where
     singleton :: e -> c
-\end{verbatim}
-
-\begin{verbatim}
-instance Collection [a] a where
-    singleton x = [x]
 \end{verbatim}
 
 \begin{verbatim}
