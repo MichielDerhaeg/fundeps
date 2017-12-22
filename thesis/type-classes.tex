@@ -55,10 +55,15 @@ represents ordering. The implication in the declaration specifies a hierarchy
 between type classes. Which means that the \textbf{superclass}, in this case
 \texttt{Eq} instance should be provided for the type as a prerequisite for being
 able to provide one for \texttt{Ord}
+
+Note that the implication should be interpreted in the inverse direction and
+actually means: if we have a instance for \texttt{Ord} we alse have one for
+\texttt{Eq}.
 \begin{verbatim}
 class Eq a => Ord a where
     (<=) :: a -> a -> Bool
 \end{verbatim}
-Note that the implication should be interpreted in the inverse direction and
-actually means: if we have a instance for \texttt{Ord} we alse have one for
-\texttt{Eq}.
+
+Type classes could be extended to not just support one type parameter but
+multiple parameters and we can define functional dependencies between these
+types. These concepts will be described in the next section.
