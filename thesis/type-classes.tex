@@ -1,5 +1,7 @@
 \section{Type Classes}
 
+\george{align the equations.}
+
 % syntax
 % examples
 % semantics
@@ -20,6 +22,7 @@ instance Eq a => Eq [a] where
     [] == [] == rue
     (a:as) == (b:bs) = b == b && as == bs
 \end{verbatim}
+\george{Pattern matching is non-exhaustive. Not in my presence dude :P}
 
 \begin{verbatim}
 class Eq a => Ord a where
