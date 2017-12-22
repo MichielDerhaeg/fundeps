@@ -1,6 +1,11 @@
 \documentclass[]{article}
 \usepackage{lmodern}
 \usepackage{amssymb,amsmath}
+\usepackage{amstext}
+\usepackage{cite}
+\usepackage[utf8]{inputenc}
+\usepackage{xcolor}
+\usepackage{mathpartir}
 \usepackage{ifxetex,ifluatex}
 \usepackage{fixltx2e} % provides \textsubscript
 \ifnum 0\ifxetex 1\fi\ifluatex 1\fi=0 % if pdftex
@@ -46,6 +51,8 @@
 \let\oldsubparagraph\subparagraph
 \renewcommand{\subparagraph}[1]{\oldsubparagraph{#1}\mbox{}}
 \fi
+\newcommand{\highlight}[1]{%
+  \colorbox{gray!30}{$\displaystyle#1$}}
 
 % set default figure placement to htbp
 \makeatletter
@@ -59,7 +66,13 @@ Functional dependencies}
 
 \begin{document}
 \maketitle
+\tableofcontents
 
-placeholder
+\include{intro}
+\include{type-classes}
+\include{functional-dependencies}
+\include{system-fc}
 
+\bibliography{references}{}
+\bibliographystyle{plain}
 \end{document}

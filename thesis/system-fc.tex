@@ -1,0 +1,80 @@
+\section{System $F_C$}
+
+%TODO explain normal System F as well? really short maybe?
+
+In this section we'll define and discuss System $F_C$, the new target language
+of the compiler. It is extended from System F in a few ways that makes it able
+to support a multitude of more advanced source-language type system features
+like Type Families, Generalised Algebraic Datatypes, and most relevant to us,
+Functional Dependencies.
+
+System $F_C$ extends polymorphic lambda calculus with explicit type equality
+witnesses, or proofs, called coercions. And with type-level functions and
+top-level axioms which are their instantiations.
+
+\subsection{Syntax}
+
+%TODO highlight new stuff
+\begin{figure}
+\begin{align*}
+    v &::= a \;  \; | \;  \; T \;  \; | \;  \; v_1 \;  \; | \;  \; v_2  \; | \;
+    \highlight{F(\overline{v})}  \; | \;  \forall a. v  \; | \; \highlight{\psi
+    \Rightarrow v} &\textit{Types}\\ \\
+    \highlight{\gamma} &::= \highlight{\langle v \rangle \; | \; \text{sym} \; \gamma \; | \;
+    \text{left} \; \gamma \; | \; \text{right} \; \gamma \; | \; \gamma_1 ;
+    \gamma_2 \; | \; \psi \Rightarrow \gamma} &\textit{Coercions} \\ 
+    \; &\quad \highlight{| \; \; F(\overline{\gamma}) \; | \; \forall a . \; \gamma \; | \;
+    \gamma_1 [\gamma_2] \; | \; g \; \overline{v} \; | \; c \; | \; \gamma_1 @
+    \gamma_2 \; | \; \gamma_1 \; \gamma_2} \\ \\
+    \highlight{\psi} &::= \highlight{v_1 \sim v_2} &\textit{Propositions}\\ \\
+    t &::= x \; | \; K \; | \; \Lambda a . \; t \; | \; t \; v \; | \;
+    \lambda(x\; : \; v). \; t \; | \; t_1 \; t_2 \; | \; \highlight{\Lambda(c \; : \psi).
+    \; t} &\textit{Terms} \\
+          &\quad | \; \; t \; \gamma \; | \; \highlight{t \triangleright \gamma} \; | \;
+    \textbf{case} \; t_1 \; \textbf{of} \; p \rightarrow t_2 \; | \;
+    \textbf{let} \; x : v = t_1 \; \textbf{in} \; t_2 \\ \\
+    p &::= K \; \highlight{\overline{b} \; (\overline{c : \psi})} \; (\overline{d : \tau})
+    \; (\overline{f : v}) &\textit{Patterns}\\ \\
+    decl &::= \textbf{data} \; T \; \overline{a} \; \textbf{where} \; K : v
+         &\textit{Declarations}\\
+         &\quad | \; \; \textbf{let} \; x : v = t \\
+         &\quad | \; \; \highlight{\textbf{type} \; F(\overline{a})} \\
+         &\quad | \; \; \highlight{\textbf{axiom} \; g \; \overline{a} :
+         F(\overline{u}) \sim \; v} \\
+\end{align*}
+\caption{System $F_C$ syntax}
+\label{fc-syntax}
+\end{figure}
+
+The highlighted parts are the things that are different from standard System F.
+
+\subsubsection{Type equality coercions}
+
+Coercions, denoted by $\gamma$, are the main interesting addition to the target
+language. These are proofs which are usually constructed during the elaboration
+of the source language. These coercions can then be used during typechecking to
+explicitly cast a term $e : v_1$ to type $v_2$ if a coercion is provided that
+witnesses the equality between these types.
+
+\subsubsection{Type functions}
+
+\subsection{Typing}
+% TODO other typing rules
+\begin{figure}[h]
+$$
+\inferrule
+{P;\Gamma \vdash_{tm} t : v_1 \\ P;\Gamma \vdash_{co} \gamma : v_1 \sim v_2}
+{P;\Gamma \vdash_{tm} t \triangleright \gamma v_2}
+\; (\textsc{TmCast})
+$$
+\caption{System $F_C$ typing rules}
+\label{fc-type}
+\end{figure}
+
+
+\subsection{Operational Semantics}
+
+% why systemfc?
+% syntax directed => easy to type check
+% should be easy to construct
+% powerful enough to express many things

@@ -1,4 +1,4 @@
-MD_FILES=$(wildcard *.md)
+MD_FILES=
 TEX_FILES=$(wildcard *.tex) $(MD_FILES:%.md=%.tex)
 
 .SUFFIXES: .md .tex
