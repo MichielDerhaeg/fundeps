@@ -21,8 +21,8 @@ instance Eq Bool where
 instance Eq a => Eq [a] where
     [] == [] == rue
     (a:as) == (b:bs) = b == b && as == bs
+    _ == _ = False
 \end{verbatim}
-\george{Pattern matching is non-exhaustive. Not in my presence dude :P}
 
 \begin{verbatim}
 class Eq a => Ord a where
