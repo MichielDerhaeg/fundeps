@@ -1,7 +1,7 @@
 % vim:ft=tex
 \section{Related Work}
 
-\subsection{Types and Programming Languages}
+\paragraph{Types and Programming Languages}
 
 Types and Programming Languages~\cite{pierce2002types} provides a comprehensive
 introduction to type system and programming
@@ -11,7 +11,7 @@ It provided an intuitive and formal description of System F and of
 Hindley-Milner, both of which are fundamental for understanding Haskell's type
 system and it's compilation process.
 
-\subsection{System F with Type Equality Coercions}
+\paragraph{System F with Type Equality Coercions}
 
 System F with Type Equality Coercions\cite{Sulzmann:2007:SFT:1190315.1190324}
 originally introduced System $F_C$. Even though the version of System $F_C$ used
@@ -19,7 +19,7 @@ in the implementation deviates slightly from the one presented in this paper, it
 still serves as a more complete reference and as a nice introduction to the key
 idea's of System $F_C$.
 
-\subsection{How to make \textit{ad-hoc} polymorphism less \textit{ad hoc}}
+\paragraph{How to make \textit{ad-hoc} polymorphism less \textit{ad hoc}}
 
 How to make \textit{ad-hoc} polymorphism less
 \textit{ad-hoc}\cite{Wadler:1989:MAP:75277.75283} is the original
@@ -27,7 +27,7 @@ proposal for ad-hoc polymorphism by the use of type classes and mainly serves a
 historical purpose. It provides some intuition for reasoning about type classes
 and their translation into System F as dictionaries.
 
-\subsection{Type Classes Functional with Dependencies}
+\paragraph{Type Classes Functional with Dependencies}
 
 Type Classes with Functional Dependencies\cite{Jones00typeclasses} nicely
 illustrates the problems with multi-parameter type classes and ambiguities, how
@@ -36,19 +36,19 @@ was derived from relational database theory. It provides a very high level
 sketch on how one might implement a type inference algorithm that supports
 functional dependencies.
 
-\subsection{Elaboration on Functional Dependencies}
+\paragraph{Elaboration on Functional Dependencies}
 
-Elaboration on Functional
+The Elaboration on Functional
 Dependencies\cite{Karachalias:2017:EFD:3156695.3122966} paper contains the
 specification of the type inference algorithm and elaboration into System $F_C$
 that will be used for the implementation that will be presented by this thesis.
 This is the most important related work as most of the work presented in this
 thesis will be based upon this.
 
-Aditionally, this paper provides a specification for a variant of System $F_C$
+Additionally, this paper provides a specification for a variant of System $F_C$
 that is currently used to implement System $F_C$ in the implementation.
 
-\subsection{Quantified Class Constraints}
+\paragraph{Quantified Class Constraints}
 
 The relation to Quantified Class
 Constraints\cite{Bottu:2017:QCC:3156695.3122967} is artificial. The original
@@ -57,7 +57,7 @@ feature that is presented in this paper. This paper served as a specification
 that facilitated easier navigation through the existing codebase as the code
 closely corresponded to the presented theory.
 
-\subsection{OutsideIn(X)}
+\paragraph{OutsideIn(X)}
 
 OutsideIn(X)\cite{outsideinx-modular-type-inference-with-local-assumptions}
 served as an excellent guide to the current state of affairs on how type

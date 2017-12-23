@@ -2,7 +2,7 @@
 \section{Problem Statement}
 Despite the popularity of functional dependencies, the feature remains unreliably
 implemented in GHC. Due to the lack expressiveness of the previous intermediate
-representation based on System F, it's impossible to elaborate (translate)
+representation based on System F, it is impossible to elaborate (translate)
 Haskell programs that are entirely correct (well-typed and perfectly valid
 according to the specification) in GHC and are thus rejected by GHC's type checker.
 
@@ -19,17 +19,17 @@ valid program.
 \texttt{f} is a function that simply returns its argument but has a rather
 exotic type signature. It contains a polymorphic type \texttt{b} and a type
 class constraint for \texttt{C Int b}. Due to the functional dependency in the
-class declaration of \texttt{C} we know that \texttt{b} in the type class
+class declaration of \texttt{C}, we know that \texttt{b} in the type class
 constraint could only have one possible type: \texttt{Bool}. This can be
 derived from the instance declaration. \texttt{b} should therefore always be
-equal to \texttt{Bool}. This means that this program is well-typed and prefectly
+equal to \texttt{Bool}. This means that this program is well-typed and perfectly
 valid. Despite that this program is entirely correct, the relationship between
 \texttt{Int} and \texttt{Bool} can not be translated into System F.
 
 When support for type families and associated types was added to GHC, the
 intermediate representation was extended to support type level functions similar
-to type families and explicit type equality coercions. This new representation
-was called System $F_C$. Instead of it being another ad-hoc extension, it was a
+to type families and explicit type equality coercions~\cite{Sulzmann:2007:SFT:1190315.1190324}. This new representation
+is called System $F_C$. Instead of it being another ad-hoc extension, it was a
 more general and powerful solution that could host a multitude of existing and
 future type system features, e.g. GADTs, while remaining relatively simple
 and straightforward to translate to.
@@ -45,7 +45,7 @@ inference algorithm for functional dependencies and a way to elaborate them into
 System $F_C$.
 
 This thesis will present a fully functional implementation of the aforementioned
-algorithm and a description of important implementation specific details and
+algorithm and a description of important implementation-specific details and
 complications that may arise throughout the development of this implementation.
 
 Eventually, this implementation is not only aiming to implement support for functional dependencies,
@@ -79,20 +79,20 @@ $\quad\quad\quad\quad\quad$ $CDict$ $::$ $\forall a$ $b$. $(FC \; a \sim b)
 \end{verbatim}
 $\quad\quad\quad\rightsquigarrow$ axiom $g$ : $FC$ $Int$ $\sim$ $Bool$
 
-$\quad\quad\quad\rightsquigarrow$ let $d$ : $CDict$ $(g : FC$ $Int \sim Bool)$
+$\quad\quad\quad\rightsquigarrow$ let $d$ = $CDict$ $(g : FC$ $Int \sim Bool)$
 
 \begin{verbatim}
     f :: C Int b => b -> Bool
     f x = x
 \end{verbatim}
 $\quad\quad\quad\rightsquigarrow$ let $f$ =
-$\Lambda b. \; \lambda d : CDict \; Int \; b. \;\lambda x : b. \; \text{case} \; d
+$\Lambda b. \; \lambda (d : CDict \; Int \; b). \;\lambda (x : b). \; \text{case} \; d
 \; \text{of}$
 
-$\quad\quad\quad\quad\quad\quad\quad\quad\quad % heh :p
+$\quad\quad\quad\quad\quad\quad\quad\quad\quad % heh :p :P :P
 CDict \; (c : FC \; Int \sim b ) \rightarrow x \triangleright (\text{sym} \; c) ; g$
 
-Type classes are translated into System F to something called 'dictionaries'.
+Type classes are translated into System F to the so called ``dictionaries''.
 These are values that contain the functions of the method implementations of the
 instance declaration. These dictionaries are explicitly passed around as
 parameters to functions with type class constraints so their methods can be
@@ -100,7 +100,7 @@ available to them at runtime. In System $F_C$ however, these dictionaries can
 also be used to hold coercions.
 
 The functional dependency in the class declaration of \texttt{C} will generate a
-type level function 'type $FC$ $a$' to represent the functional dependency. A
+type level function ``type~$FC$~$a$'' to represent the functional dependency. A
 coercion that proves the equality between $FC$ $a$ and $b$ (denoted by $FC$ $a
 \sim b$) will be contained by the dictionary $CDict$ generated for the type
 class.
@@ -108,21 +108,21 @@ class.
 The instance declaration for \texttt{C Int Bool} generated a top level axiom
 $g$ which states that $FC$ $Int$ is indeed equal to $Bool$ (denoted by $FC$ $Int
 \sim Bool$). The instance declaration also generates a dictionary value that
-would contain the instances method implementations, if it had any, and the top
-level axiom as a coercion.
+would contain the method implementations of the instance, if it had any, and the top
+level axiom as a coercion constant.
 
 In the elaboration of the function \texttt{f}, the polymorphic type \texttt{b}
 becomes an explicit type parameter. This originates from plain System $F$ and it
-is how it supports parametric polymophism. The type class constraint becomes a
+is how it supports parametric polymorphism. The type class constraint becomes a
 normal term parameter that holds the corresponding dictionary. And lastly, the
 parameter \texttt{x} of type \texttt{b}.
 
-The function body of $f$ pattern matches agains the dictionary to expose the
+The function body of $f$ pattern matches against the dictionary to expose the
 coercion within, which is used by the compiler to construct a coercion to
 explicitly cast $x$ from \texttt{b} to \texttt{Bool}
 
-The 'sym' in the coercion swaps the type equality and the semicolon witnisses
-transitivity of two coercions. The generated should be interpreted as follows:
+The ``sym'' in the coercion swaps the type equality and the semicolon witnesses
+transitivity of two coercions. The generated coercion should be interpreted as follows:
 
 $\quad\quad((\text{sym} \; (c : FC \; Int \sim b)) : b \sim FC \; Int) ; (g : FC
 \; Int \sim Bool) ) : b \sim Bool$

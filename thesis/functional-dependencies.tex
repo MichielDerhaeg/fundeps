@@ -13,7 +13,7 @@ element type.
       singleton :: e -> c
 \end{verbatim}
 This example only specifies one method \texttt{singleton} which
-should put an element in it's own collection.
+should put an element in its own collection.
 The following example is an instance declaration for lists of a polymorphic type
 \texttt{a}.
 \begin{verbatim}
@@ -26,7 +26,7 @@ following example is a function that applies the \texttt{singleton} function
 twice to the given argument. Notice that the type signature contains a type
 \texttt{c1} that appears in the type class constraints but not in the right hand
 side of the type signature. No matter the context in which this function is
-used, it's impossible to uniquely determine type \texttt{c1}.
+used, it is impossible to uniquely determine type \texttt{c1}.
 
 \begin{verbatim}
     singleton2 :: (Collection c2 c1, Collection c1 e) => e => c2
@@ -39,25 +39,25 @@ type could never be determined because type classes are open. The programmer
 is free to implement new instance declarations for every type class.
 
 If adding a new instance declaration could cause the type inferred for
-\texttt{c1} to change, so would the associated behaviour and this would be
+\texttt{c1} to change, so would the associated behavior and this would be
 unacceptable (the behavior of the program would be determined not by the programmer but by the compiler). This problem is known as {\em incoherence}.
 Single-parameter type classes can exhibit this behavior
-but this issue is very prevalent with the
+too but this issue is very prevalent with the
 multi-parameter variant. Therefore, a solution has been implemented: functional
 dependencies.
 \begin{verbatim}
     class Collection c e | c -> e where
       singleton :: e -> c
 \end{verbatim}
-The \texttt{c $\rightarrow$ e} that was added to the \texttt{Collection} class
+The \texttt{c -> e} that was added to the \texttt{Collection} class
 declaration is the functional dependency between \texttt{c} and \texttt{e}. This
 enforces that \texttt{e} has to be uniquely determined by \texttt{c}.
 This means that in our \texttt{collection2} example, \texttt{c1} would no longer
-be ambiguous because it's uniquely determined by \texttt{c2}.
+be ambiguous because it is uniquely determined by \texttt{c2}.
 
 The next example is a more concrete example of what the functional dependency
 enforces. Let \texttt{ByteArray} be a type that contains a sequence of
-\texttt{Byte}s or \texttt{Bit}s, depending on how it's accessed.
+\texttt{Byte}s or \texttt{Bit}s, depending on how it is accessed.
 \begin{verbatim}
     instance Collection ByteArray Byte
         singleton = ...
@@ -66,12 +66,12 @@ enforces. Let \texttt{ByteArray} be a type that contains a sequence of
 \end{verbatim}
 Both of these types of elements can warrant their own instance declaration for
 \texttt{Collection}. But if the functional dependency is specified, we have to
-be able to determine the element type \texttt{e} when only the the collection
+be able to determine the element type \texttt{e} when only the collection
 type \texttt{c} is known and therefore only one of these instances is allowed
 and the other one has to be removed in order to satisfy the type checker.
 
 And exactly because this property is enforced, the \texttt{singleton2} issue was
-resolved because the type checker won't allow the programmer to add instance
+resolved. In short, the type checker will not allow the programmer to add instance
 declarations that would otherwise cause an ambiguity. The type system ensures
 there can be only one instance declaration and can therefore use this
 information during type inference.

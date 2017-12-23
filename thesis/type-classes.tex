@@ -1,5 +1,5 @@
 \section{Type Classes}
-In this section we'll informally describe type classes and their semantics. In the
+In this section we will informally describe type classes and their semantics. In the
 following example we defined a type class for testing the equality of values
 called \texttt{Eq}:
 
@@ -19,13 +19,13 @@ has a implied type class constraint:
     (==) :: Eq a => a -> a -> Bool
 \end{verbatim}
 Type signatures that contain type class constraints like the one above are called
-\textit{qualified types}~\george{citation here} and could possibly appear in the type signatures of the
-functions where these polymophic methods are used.
+\textit{qualified types}~\cite{JonesThesis} and could possibly appear in the type signatures of the
+functions where these polymorphic methods are used.
 % TODO example of usage?
 
-To use these polymophic methods we provide an instance declaration for every type
+To use these polymorphic methods we provide an instance declaration for every type
 we wish to use them on. The following is an example of a type class instance
-delcaration for the \texttt{Bool} type which contains an implementation of the
+declaration for the \texttt{Bool} type which contains an implementation of the
 methods for which a type signature was specified in the corresponding class
 declaration.
 \begin{verbatim}
@@ -36,7 +36,7 @@ declaration.
 \end{verbatim}
 
 A instance declaration for polymorphic types (types with type parameters) might
-require certain instance delcarations for these parametrized types. In order to avoid unneccessarily restricting such instances,
+require certain instance declarations for these parametrized types. In order to avoid unnecessarily restricting such instances,
 we can specify required class constraints in the {\em instance context} of an instance declaration:
 \begin{verbatim}
     instance Eq a => Eq [a] where
