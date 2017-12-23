@@ -36,7 +36,7 @@ declaration.
 \end{verbatim}
 
 A instance declaration for polymorphic types (types with type parameters) might
-require certain instance delcarations for these parametriced types. Because
+require certain instance delcarations for these parametrized types. Because
 these types are not known we can specify these type classes as an implication in
 the instance delcaration.
 \begin{verbatim}
@@ -45,19 +45,19 @@ the instance delcaration.
       (a:as) == (b:bs) = a == b && as == bs
       _      == _      = False
 \end{verbatim}
-To implement the equality for lists, it is required that the equality is also
-defined for it's element type. Hence the implication \texttt{Eq a => Eq[a]}
-tells us that if we have a instance of Eq for a type \texttt{a}, we
-automatically also have an instance for the list of \texttt{a}'s
+It is required that the equality is also defined for the element type to
+implement the equality for lists. Hence the implication \texttt{Eq a => Eq[a]}
+tells us that if we have a instance of \textttEq{} for a type \texttt{a}, we
+automatically also have an instance for a list of \texttt{a}'s
 
 The next example is a class declaration of the \texttt{Ord} type class which
 represents ordering. The implication in the declaration specifies a hierarchy
-between type classes. Which means that the \textbf{superclass}, in this case
-\texttt{Eq} instance should be provided for the type as a prerequisite for being
-able to provide one for \texttt{Ord} % TODO broken
+between type classes. Which means that providing an instance declaration for the
+\textbf{superclass}, in this case \texttt{Eq}, is a prerequisite for being
+able to define an instance declaration for \texttt{Ord}
 
 Note that the implication should be interpreted in the inverse direction and
-actually means: if we have a instance for \texttt{Ord} we alse have one for
+actually means: if we have a instance for \texttt{Ord} we also have one for
 \texttt{Eq}.
 \begin{verbatim}
     class Eq a => Ord a where

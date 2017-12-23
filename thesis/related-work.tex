@@ -1,12 +1,35 @@
 % vim:ft=tex
 \section{Related Work}
-\subsection{Type Classes}
+% TODO where and how to i cite these?
+\subsection{Types and Programming Languages\cite{pierce2002types}}
+This book provides a comprehensive introduction to type system and programming
+language theory. It introduces the basic concepts and notational conventions
+required to comprehend anything slightly more advanced related to type systems.
+It provided an intuitive and formal description of System F and of
+Hindley-Milner, both of which are fundamental for understanding Haskell's type
+system and it's compilation process.
+\subsection{System F with Type Equality
+Coercions\cite{Sulzmann:2007:SFT:1190315.1190324}}
+This paper originally introduced System $F_C$
+\subsection{How to make \textit{ad-hoc} polymorphism less \textit{ad
+hoc}\cite{Wadler:1989:MAP:75277.75283}}
 historical proposal
-\subsection{Functional Dependencies}
+\subsection{Type Classes Functional Dependencies\cite{Jones00typeclasses}}
 historical proposal
-\subsection{Elaboration on Functional Dependencies}
-gonna implement this stuff
-\subsection{Quantified Class Constraints}
-artificial because original prototype implemented this
-\subsection{OutsideIn(X)}
-common framework for fds gadts and type families study relation
+\subsection{Elaboration on Functional
+Dependencies\cite{Karachalias:2017:EFD:3156695.3122966}}
+
+\subsection{Quantified Class Constraints\cite{Bottu:2017:QCC:3156695.3122967}}
+The relation to this work is artificial. The original prototype compiler my work
+is based on was built to support the type system feature that is presented in
+this paper. This paper served as a specification that facilitated easier
+navigation through the existing codebase as the code closely corresponded to the
+presented theory.
+\subsection{OutsideIn(X)\cite{outsideinx-modular-type-inference-with-local-assumptions}}
+This paper served as an excellent guide to the current state of affairs on how
+type inference is done in GHC. And also as an introduction to the general
+structure of more advanced type inference algorithms. Lastly, this paper
+describes a type inference algorithm that supports both GADTs and Type Families
+and will therefore be used as a specification to implement both of these
+features in the prototype compiler to study the interaction between these and
+our implementation.

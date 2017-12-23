@@ -1,17 +1,18 @@
 \section{Functional Dependencies}
 Multi-parameter type classes are syntactically straightforward. The class
-declaration simply specifies a second type parameter (or more) that can be used
+declaration simply specifies additional type parameters that can be used
 in the class' methods. The intuition behind these type classes is that they
 describe relationships between the type parameters.
 
 If we would like to define polymorphic methods for collections and their
 elements. We could define a multi-parameter class \texttt{Collection} where it's
-\texttt{c} represents the collection type and and \texttt{e} the element type.
+parameter \texttt{c} represents the collection type and and \texttt{e} the
+element type.
 \begin{verbatim}
     class Collection c e where
       singleton :: e -> c
 \end{verbatim}
-In this example we have only implemented a method \texttt{singleton} which
+This example only specifies one method \texttt{singleton} which
 should put an element on it's own in the collection.
 The following example is an instance declaration for lists of a polymorphic type
 \texttt{a}.
@@ -33,14 +34,15 @@ used, it's impossible to uniquely determine the type of \texttt{c1}.
 \end{verbatim}
 
 Even if there is only one available instance that could possibly satisfy these
-constraints and provide a type to assume the role of \texttt{c1}, we can't
-because type classes are open. The programmer can implement new instance
-delcarations for every type class even if he/she didn't implement it themselves.
+constraints and provide a type to assume the role of \texttt{c1}, type exact
+type could never be determined because type classes are open. The programmer
+could implement new instance delcarations for every type class even if he/she
+didn't implement them themselves.
 
 If adding a new instance declaration could cause the type inferred for
 \texttt{c1} to change, so would the associated behaviour and this would be
 unacceptable. This is the completeness problem of type classes and occurs with
-normal type classes as well these issues  are very prevalent with the
+normal type classes as well but these issues are very prevalent with the
 multi-parameter variant. Therefore a solution has been implemented: functional
 dependencies.
 \begin{verbatim}
@@ -50,9 +52,28 @@ dependencies.
 The \texttt{c $\rightarrow$ e} that was added to the \texttt{Collection} class
 declaration is the functional dependency between \texttt{c} and \texttt{e}. This
 enforces that \texttt{e} has to be uniquely determined by \texttt{c}.
+This means that in our \texttt{collection2} example \texttt{c1} would no longer
+be ambiguous because it's uniquely determined by \texttt{c2}.
 
+The next example is a more concrete example of what the functional dependency
+enforces. Let \texttt{ByteArray} a type that contains a sequence of
+\texttt{Byte}s or \texttt{Bit}s depending on how it's accessed.
 \begin{verbatim}
     instance Collection ByteArray Byte
+        singleton = ...
     instance Collection ByteArray Bit
+        singleton = ...
 \end{verbatim}
-% semantics
+Both of these types of elements can warrant their own instance declaration for
+\texttt{Collection}. But if the functional dependency is specified, we have to
+be able to determine the element type \texttt{e} when only the the collection
+type \texttt{c} is known and therefore only one of these instances is allowed
+and the other one has to be removed in order to satisfy the type checker.
+
+And exactly because this property is enforced, the \texttt{singleton2} issue was
+resolved because the type checker won't allow the programmer to add instance
+declarations that would otherwise cause an ambiguity. The type system ensures
+there can be only one instance declaration and can therefore use this
+information during type inference.
+
+% TODO certains things are still rejected blalba, next section we'll say more
