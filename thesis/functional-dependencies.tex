@@ -1,19 +1,19 @@
 \section{Functional Dependencies}
 Multi-parameter type classes are syntactically straightforward. The class
 declaration simply specifies additional type parameters that can be used
-in the class' methods. The intuition behind these type classes is that they
+in the class methods. The intuition behind these type classes is that they
 describe relationships between the type parameters.
 
-If we would like to define polymorphic methods for collections and their
-elements. We could define a multi-parameter class \texttt{Collection} where it's
-parameter \texttt{c} represents the collection type and and \texttt{e} the
+For example, if we would like to define polymorphic methods for collections and their
+elements, we could define a multi-parameter class \texttt{Collection} where
+parameter \texttt{c} represents the collection type and \texttt{e} the
 element type.
 \begin{verbatim}
     class Collection c e where
       singleton :: e -> c
 \end{verbatim}
 This example only specifies one method \texttt{singleton} which
-should put an element on it's own in the collection.
+should put an element in it's own collection.
 The following example is an instance declaration for lists of a polymorphic type
 \texttt{a}.
 \begin{verbatim}
@@ -24,9 +24,9 @@ The following example is an instance declaration for lists of a polymorphic type
 Using the methods of these type classes can prove to be quite problematic. The
 following example is a function that applies the \texttt{singleton} function
 twice to the given argument. Notice that the type signature contains a type
-\texttt{c1} that appear in the type class constraints but not in the right hand
+\texttt{c1} that appears in the type class constraints but not in the right hand
 side of the type signature. No matter the context in which this function is
-used, it's impossible to uniquely determine the type of \texttt{c1}.
+used, it's impossible to uniquely determine type \texttt{c1}.
 
 \begin{verbatim}
     singleton2 :: (Collection c2 c1, Collection c1 e) => e => c2
@@ -34,16 +34,16 @@ used, it's impossible to uniquely determine the type of \texttt{c1}.
 \end{verbatim}
 
 Even if there is only one available instance that could possibly satisfy these
-constraints and provide a type to assume the role of \texttt{c1}, type exact
+constraints and provide a type to assume the role of \texttt{c1}, the exact
 type could never be determined because type classes are open. The programmer
-could implement new instance delcarations for every type class even if he/she
-didn't implement them themselves.
+is free to implement new instance declarations for every type class.
 
 If adding a new instance declaration could cause the type inferred for
 \texttt{c1} to change, so would the associated behaviour and this would be
-unacceptable. This is the completeness problem of type classes and occurs with
-normal type classes as well but these issues are very prevalent with the
-multi-parameter variant. Therefore a solution has been implemented: functional
+unacceptable (the behavior of the program would be determined not by the programmer but by the compiler). This problem is known as {\em incoherence}.
+Single-parameter type classes can exhibit this begavior
+but this issue is very prevalent with the
+multi-parameter variant. Therefore, a solution has been implemented: functional
 dependencies.
 \begin{verbatim}
     class Collection c e | c -> e where
@@ -52,12 +52,12 @@ dependencies.
 The \texttt{c $\rightarrow$ e} that was added to the \texttt{Collection} class
 declaration is the functional dependency between \texttt{c} and \texttt{e}. This
 enforces that \texttt{e} has to be uniquely determined by \texttt{c}.
-This means that in our \texttt{collection2} example \texttt{c1} would no longer
+This means that in our \texttt{collection2} example, \texttt{c1} would no longer
 be ambiguous because it's uniquely determined by \texttt{c2}.
 
 The next example is a more concrete example of what the functional dependency
-enforces. Let \texttt{ByteArray} a type that contains a sequence of
-\texttt{Byte}s or \texttt{Bit}s depending on how it's accessed.
+enforces. Let \texttt{ByteArray} be a type that contains a sequence of
+\texttt{Byte}s or \texttt{Bit}s, depending on how it's accessed.
 \begin{verbatim}
     instance Collection ByteArray Byte
         singleton = ...
