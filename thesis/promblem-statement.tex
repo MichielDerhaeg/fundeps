@@ -119,14 +119,14 @@ parameter \texttt{x} of type \texttt{b}.
 
 The function body of $f$ pattern matches agains the dictionary to expose the
 coercion within, which is used by the compiler to construct a coercion to
-explicitly cast $x$ form \texttt{B} to \texttt{Bool}
+explicitly cast $x$ from \texttt{b} to \texttt{Bool}
 
 The 'sym' in the coercion swaps the type equality and the semicolon witnisses
-transitivity of two coercions.
+transitivity of two coercions. The generated should be interpreted as follows:
 
 $\quad\quad((\text{sym} \; (c : FC \; Int \sim b)) : b \sim FC \; Int) ; (g : FC
 \; Int \sim Bool) ) : b \sim Bool$
 
 This means that the coercion proves the equality of $b$ and $Bool$ and
 \texttt{x} can be cast safely using the cast operation (denoted by
-$\triangleright$) and the constructed coercion.
+$\triangleright$) and the generated coercion.
