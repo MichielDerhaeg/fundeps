@@ -1,3 +1,23 @@
 % vim:ft=tex
 \section{Planning}
-At the time of writing
+At the time of writing the implemtation is capable of type checking Haskell '98
+and elaborating into System $F_C$. However the latter isn't currently being
+used.
+
+\begin{itemize}
+    \item Usually in Hindley-Milner style type systems during type inference, we
+        gather type equalities and compute a solution by solving them all at
+        once. In more advanced type inference algorithms, there maybe be
+        residual equalities that might remain unsolved, perhaps even
+        indefinitely. The haskell typechecker needs to be extended to support
+        these unsolved constraints so they might be solved later. I expect this
+        to be done by the end of Januari.
+    \item Afterwards the most important part and the main bulk of the work
+        starts, which involves implementing the algorithm proposed by
+        Karachalias and Schrijvers \cite{Karachalias:2017:EFD:3156695.3122966}
+        Depending on the severity of the complications that may be encountered
+        along the way, I suspect this will take at least two months and so
+        expect this to be finished by the beginning of April.
+    \item Lastly, GADTs and type families will be implemented and will hopefully
+        be done by the end of May.
+\end{itemize}
