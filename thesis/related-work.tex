@@ -1,58 +1,69 @@
 % vim:ft=tex
 \section{Related Work}
 
-\george{Cite them the first time you mention their name. Take the citations off
-the titles, since they show up in the table of contents. I gave an example of this in TAPL}
-
-% TODO where and how to i cite these?
 \subsection{Types and Programming Languages}
 
-Types and Programming Languages~\cite{pierce2002types} provides a comprehensive introduction to type system and programming
+Types and Programming Languages~\cite{pierce2002types} provides a comprehensive
+introduction to type system and programming
 language theory. It introduces the basic concepts and notational conventions
 required to comprehend anything slightly more advanced related to type systems.
 It provided an intuitive and formal description of System F and of
 Hindley-Milner, both of which are fundamental for understanding Haskell's type
 system and it's compilation process.
-\subsection{System F with Type Equality
-Coercions\cite{Sulzmann:2007:SFT:1190315.1190324}}
 
-This paper originally introduced System $F_C$
+\subsection{System F with Type Equality Coercions}
 
-\subsection{How to make \textit{ad-hoc} polymorphism less \textit{ad
-hoc}\cite{Wadler:1989:MAP:75277.75283}}
+System F with Type Equality Coercions\cite{Sulzmann:2007:SFT:1190315.1190324}
+originally introduced System $F_C$. Even though the version of System $F_C$ used
+in the implementation deviates slightly from the one presented in this paper, it
+still serves as a more complete reference and as a nice introduction to the key
+idea's of System $F_C$.
 
-This is the original proposal for ad-hoc polymorphism by the use of type classes
-and mainly serves a historical purpose. It provides some intuition for reasoning
-about type classes and their translation into System F.
+\subsection{How to make \textit{ad-hoc} polymorphism less \textit{ad hoc}}
 
-\subsection{Type Classes Functional Dependencies\cite{Jones00typeclasses}}
-This paper nicely illustrates the problems of multi-parameter type classes and
-the 
-\subsection{Elaboration on Functional
-Dependencies\cite{Karachalias:2017:EFD:3156695.3122966}}
+How to make \textit{ad-hoc} polymorphism less
+\textit{ad-hoc}\cite{Wadler:1989:MAP:75277.75283} is the original
+proposal for ad-hoc polymorphism by the use of type classes and mainly serves a
+historical purpose. It provides some intuition for reasoning about type classes
+and their translation into System F as dictionaries.
 
-This paper contains the specification of the type inference algorithm and
-elaboration into System $F_C$ that will be used for the implementation that will
-be presented by this thesis. This is the most important related work as most of
-the work presented in this thesis will be based upon this.
+\subsection{Type Classes Functional with Dependencies}
+
+Type Classes with Functional Dependencies\cite{Jones00typeclasses} nicely
+illustrates the problems with multi-parameter type classes and ambiguities, how
+functional dependencies can solve these issues, and how the proposed solution
+was derived from relational database theory. It provides a very high level
+sketch on how one might implement a type inference algorithm that supports
+functional dependencies.
+
+\subsection{Elaboration on Functional Dependencies}
+
+Elaboration on Functional
+Dependencies\cite{Karachalias:2017:EFD:3156695.3122966} paper contains the
+specification of the type inference algorithm and elaboration into System $F_C$
+that will be used for the implementation that will be presented by this thesis.
+This is the most important related work as most of the work presented in this
+thesis will be based upon this.
 
 Aditionally, this paper provides a specification for a variant of System $F_C$
 that is currently used to implement System $F_C$ in the implementation.
 
-\subsection{Quantified Class Constraints\cite{Bottu:2017:QCC:3156695.3122967}}
+\subsection{Quantified Class Constraints}
 
-The relation to this work is artificial. The original prototype compiler my work
-is based on was built to support the type system feature that is presented in
-this paper. This paper served as a specification that facilitated easier
-navigation through the existing codebase as the code closely corresponded to the
-presented theory.
+The relation to Quantified Class
+Constraints\cite{Bottu:2017:QCC:3156695.3122967} is artificial. The original
+prototype compiler my work is based on was built to support the type system
+feature that is presented in this paper. This paper served as a specification
+that facilitated easier navigation through the existing codebase as the code
+closely corresponded to the presented theory.
 
-\subsection{OutsideIn(X)\cite{outsideinx-modular-type-inference-with-local-assumptions}}
+\subsection{OutsideIn(X)}
 
-This paper served as an excellent guide to the current state of affairs on how
-type inference is done in GHC. And also as an introduction to the general
-structure of more advanced type inference algorithms. Lastly, this paper
-describes a type inference algorithm that supports both GADTs and Type Families
-and will therefore be used as a specification to implement both of these
-features in the prototype compiler to study the interaction between these and
-our implementation.
+OutsideIn(X)\cite{outsideinx-modular-type-inference-with-local-assumptions}
+served as an excellent guide to the current state of affairs on how type
+inference is done in GHC. And also as an introduction to the general structure
+of more advanced type inference algorithms. Lastly, this paper describes a type
+inference algorithm that supports both GADTs and Type Families and will
+therefore be used as a specification to implement both of these features in the
+prototype compiler to study the interaction between these and our
+implementation.
