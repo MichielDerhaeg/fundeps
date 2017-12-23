@@ -19,13 +19,15 @@ However the implementation of this feature in GHC proved to be problematic and
 doesn't behave according to the specification.  Some programs that are entirely
 correct
 would be rejected by GHC's type checker because at the time it seemed to be
-impossible to translate the typing relation into System F~\george{citation here}, a polymorphic
+impossible to translate the typing relation into System
+F~\cite{Sulzmann:2007:SFT:1190315.1190324}\cite{Karachalias:2017:EFD:3156695.3122966}
+here}, a polymorphic
 lambda calculus often used by functional programming language compilers as an
 intermediate representation. No implementation uses pure System F to encode
 their source language. It is usually extended to make the translation more
 straightforward, readable or simply to support more advanced features. For
 example, algabraic datatypes are a common addition. In GHC specifically, the intermediate language has been extended
-with support for GADTs~\george{citation here}, which seemed oversophisticated extension to an
+with support for GADTs~\cite{Sulzmann:2007:SFT:1190315.1190324}, which seemed oversophisticated extension to an
 intermediate representation at the time. Motivated by
 keeping the intermediate language as simple as possible, it was never extended
 to support Functional Dependencies and it's implementation remained incomplete.
