@@ -1,7 +1,7 @@
 % vim:ft=tex
 \section{Introduction}
-Wadler and Blot \cite{Wadler:1989:MAP:75277.75283} introduced type classes as a
-way to express ad-hoc polymorphism which became an essential part of the Haskell
+Wadler and Blott \cite{Wadler:1989:MAP:75277.75283} introduced type classes as a
+way to express ad-hoc polymorphism, and they have become an essential part of the Haskell
 programming language. This feature was quickly extended to allow for multiple
 type parameters. Type classes originally allowed us to express properties of a
 collection of types and now relations between types as well. By using
@@ -19,25 +19,25 @@ However the implementation of this feature in GHC proved to be problematic and
 doesn't behave according to the specification.  Some programs that are entirely
 correct
 would be rejected by GHC's type checker because at the time it seemed to be
-impossible to translate the typing relation into System F. A polymorphic
+impossible to translate the typing relation into System F~\george{citation here}, a polymorphic
 lambda calculus often used by functional programming language compilers as an
 intermediate representation. No implementation uses pure System F to encode
 their source language. It is usually extended to make the translation more
 straightforward, readable or simply to support more advanced features. For
-example, algabraic datatypes are a common addition. It was later even extended
-with support for GADTs, which seemed oversophisticated extension to an
-intermediate representation. Motivated by
+example, algabraic datatypes are a common addition. In GHC specifically, the intermediate language has been extended
+with support for GADTs~\george{citation here}, which seemed oversophisticated extension to an
+intermediate representation at the time. Motivated by
 keeping the intermediate language as simple as possible, it was never extended
 to support Functional Dependencies and it's implementation remained incomplete.
 
-To support features like Associated Types and Type Families, it was proposed by
+To support features like Associated Types~\george{citation here} and Type Families~\george{citation here}, it was proposed by
 Sulzmann et al. \cite{Sulzmann:2007:SFT:1190315.1190324} to extend System F with
-type equality coercions. Which is now called System $F_C$ and currently used by
-GHC as the new intermediate representation. This new extension was expressive
+type equality coercions. This calculus is called System $F_C$ and currently used by
+GHC as the new intermediate representation. This new extension is expressive
 enough to express most of the more advanced type system features.
 
 Despite the continued popularity of Functional Dependencies it was never
-investigated if it could be implemented using the new representation until
-recently. Karachalias and Schrijvers \cite{Karachalias:2017:EFD:3122955.3122966}
+investigated if they could be implemented using the new representation until
+recently. Karachalias and Schrijvers \cite{Karachalias:2017:EFD:3156695.3122966}
 described a type inference algorithm for functional dependencies and a way to
 translate them into System $F_C$.
