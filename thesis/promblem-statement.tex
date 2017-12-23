@@ -64,23 +64,28 @@ reusing the available framework that is currently in place in GHC.
 \end{verbatim}
 $\quad\quad\quad\rightsquigarrow$ data $CDict$ $a$ $b$ where
 
+$\quad\quad\quad\quad\quad$ $CDict$ $::$ $\forall a$ $b$. $(F \; a \sim b)
+\Rightarrow$ $CDict$ $a$ $b$
+
 $\quad\quad\quad\quad$ type $FC$ $a$
 
 \begin{verbatim}
     instance C Int Bool
 \end{verbatim}
-$\quad\quad\quad\rightsquigarrow$ let $d$ :
+$\quad\quad\quad\rightsquigarrow$ axiom $g$ : $FC$ $Int$ $\sim$ $Bool$
 
-$\quad\quad\quad\rightsquigarrow$ axiom $fCIntBool$ : $FC$ $Int$ $Bool$
+$\quad\quad\quad\rightsquigarrow$ let $d$ : $CDict$ $(g : FC$ $Int \sim Bool)$
 
 \begin{verbatim}
     f :: C Int b => b -> Bool
     f x = x
 \end{verbatim}
 $\quad\quad\quad\rightsquigarrow$ let $f$ =
-% provide solution maybe entirely complete solution this time
-% show problem termination?
-% planning
+$\Lambda b. \; \lambda d : CDict \; Int \; b. \;\lambda x : b. \; \text{case} \; d
+\; \text{of}$
+
+$\quad\quad\quad\quad\quad\quad\quad\quad\quad % heh :p
+CDict \; (c : F \; Int \sim b ) \rightarrow x \triangleright (\text{sym} \; c) ; g$
 
 \george{Yes, show and explain the elaboration of the example here, finish it.}
 
