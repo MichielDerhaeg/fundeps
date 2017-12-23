@@ -15,8 +15,9 @@ the design of type systems. It became a very popular type system feature that is
 still used very often to date. Not just to resolve amibuities, but also for the
 static enforcement of semantic properties and type-level programming.
 
-However the implementation of this feature in GHC proved to be problematic
-doesn't according to the specification.  Some programs that are entirely correct
+However the implementation of this feature in GHC proved to be problematic and
+doesn't behave according to the specification.  Some programs that are entirely
+correct
 would be rejected by GHC's type checker because at the time it seemed to be
 impossible to translate the typing relation into System F. A polymorphic
 lambda calculus often used by functional programming language compilers as an
@@ -24,7 +25,8 @@ intermediate representation. No implementation uses pure System F to encode
 their source language. It is usually extended to make the translation more
 straightforward, readable or simply to support more advanced features. For
 example, algabraic datatypes are a common addition. It was later even extended
-with support for GADTs, which seemed oversophisticated at the time. Motivated by
+with support for GADTs, which seemed oversophisticated extension to an
+intermediate representation. Motivated by
 keeping the intermediate language as simple as possible, it was never extended
 to support Functional Dependencies and it's implementation remained incomplete.
 
