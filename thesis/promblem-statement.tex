@@ -59,15 +59,20 @@ that might reveal potential inaccuracies. And secondly, as a feasibility study
 that shows that it is possible to fully implement functional dependencies by
 reusing the available framework that is currently in place in GHC.
 
+%TODO put somewhere else?
+The next example illustrates how the previous, broken example can be correctly
+elaborated into System $F_C$. Everything that appears after a $\rightsquigarrow$
+represents the generated System $F_C$
 \begin{verbatim}
     class C a b | a -> b
 \end{verbatim}
+
+$\quad\quad\quad\rightsquigarrow$ type $FC$ $a$
+
 $\quad\quad\quad\rightsquigarrow$ data $CDict$ $a$ $b$ where
 
-$\quad\quad\quad\quad\quad$ $CDict$ $::$ $\forall a$ $b$. $(F \; a \sim b)
+$\quad\quad\quad\quad\quad$ $CDict$ $::$ $\forall a$ $b$. $(FC \; a \sim b)
 \Rightarrow$ $CDict$ $a$ $b$
-
-$\quad\quad\quad\quad$ type $FC$ $a$
 
 \begin{verbatim}
     instance C Int Bool
@@ -85,8 +90,43 @@ $\Lambda b. \; \lambda d : CDict \; Int \; b. \;\lambda x : b. \; \text{case} \;
 \; \text{of}$
 
 $\quad\quad\quad\quad\quad\quad\quad\quad\quad % heh :p
-CDict \; (c : F \; Int \sim b ) \rightarrow x \triangleright (\text{sym} \; c) ; g$
+CDict \; (c : FC \; Int \sim b ) \rightarrow x \triangleright (\text{sym} \; c) ; g$
 
-\george{Yes, show and explain the elaboration of the example here, finish it.}
+Type classes are translated into System F to something called 'dictionaries'.
+These are values that contain the functions of the method implementations of the
+instance declaration. These dictionaries are explicitly passed around as
+parameters to functions with type class constraints so their methods can be
+available to them at runtime. In System $F_C$ however, these dictionaries can
+also be used to hold coercions.
 
+The functional dependency in the class declaration of \texttt{C} will generate a
+type level function 'type $FC$ $a$' to represent the functional dependency. A
+coercion that proves the equality between $FC$ $a$ and $b$ (denoted by $FC$ $a
+\sim b$) will be contained by the dictionary $CDict$ generated for the type
+class.
 
+The instance declaration for \texttt{C Int Bool} generated a top level axiom
+$g$ which states that $FC$ $Int$ is indeed equal to $Bool$ (denoted by $FC$ $Int
+\sim Bool$). The instance declaration also generates a dictionary value that
+would contain the instances method implementations, if it had any, and the top
+level axiom as a coercion.
+
+In the elaboration of the function \texttt{f}, the polymorphic type \texttt{b}
+becomes an explicit type parameter. This originates from plain System $F$ and it
+is how it supports parametric polymophism. The type class constraint becomes a
+normal term parameter that holds the corresponding dictionary. And lastly, the
+parameter \texttt{x} of type \texttt{b}.
+
+The function body of $f$ pattern matches agains the dictionary to expose the
+coercion within, which is used by the compiler to construct a coercion to
+explicitly cast $x$ form \texttt{B} to \texttt{Bool}
+
+The 'sym' in the coercion swaps the type equality and the semicolon witnisses
+transitivity of two coercions.
+
+$\quad\quad((\text{sym} \; (c : FC \; Int \sim b)) : b \sim FC \; Int) ; (g : FC
+\; Int \sim Bool) ) : b \sim Bool$
+
+This means that the coercion proves the equality of $b$ and $Bool$ and
+\texttt{x} can be cast safely using the cast operation (denoted by
+$\triangleright$) and the constructed coercion.
