@@ -1,13 +1,84 @@
 % vim:ft=tex
 \section{Problem Statement}
+Despite the poularity of functional dependencies, it remains unreliably
+implemented in GHC. Due to the lack expressiveness of the previous intermediate
+representation based on System F, it's impossible to elaborate (translate).
+Haskell programs that are entirely correct, well-typed and perfectly valid
+according to the specification, would be rejected by GHC's type checker.
+
+The following example illustrates such a case where GHC would reject a perfectly
+valid program.
 \begin{verbatim}
     class C a b | a -> b
     instance C Int Bool
     f :: C Int b => b -> Bool
     f x = x
 \end{verbatim}
-% describe and explain problem
+
+\texttt{f} is a function that simply returns it's argument but has a rather
+exotic type signature. It contains a polymorphic type \texttt{b} and a type
+class constraint for \texttt{C Int b}. Due to the functional dependency in the
+class declaration of \texttt{C} we know that \texttt{b} in the type class
+constraint could only have one possible type. Which is \texttt{Bool}, what could
+be derived from the instance declaration. \texttt{b} should therefore always be
+equal to \texttt{Bool}. This means that this program is well-typed and prefectly
+valid. Despite that this program is entirely correct, the relationship between
+\texttt{Int} and \texttt{Bool} can not be translated into System F.
+
+When support for type families and associated types were added to GHC, the
+intermediate representation was extended to support type level functions similar
+to type families and explicit type equality coercions. This new representation
+was called System $F_C$. Instead of it being another ad-hoc extension, it was a
+more general and powerful solution that could host a multitude of existing and
+future type system features, e.g. GADTs, while remaining relatively simple
+, and straightforward to produce by the compiler.
+
+The new representation features explicit type equality coercions, proofs that
+could be constructed by the compiler, that witnesses type equalities. These
+coercions could then be used to explicitly and safely type cast expressions.
+
+The possibility of implementing functional dependencies by elaborating them into
+System $F_C$ was not fully explored any further until recently. Karachalias and
+Schrijvers\cite{Karachalias:2017:EFD:3156695.3122966} presented a type
+inference algorithm for functional dependencies and a way to elaborate them into
+System $F_C$.
+
+This thesis will present a fully functional implementation of the aforementioned
+algorithm and a description of important implementation specific details and
+complications that may have arisen during the development of this
+implementation.
+
+Eventually, this implementation is not only to support functional dependencies,
+but GADTs and type families as well. So the interaction between these features
+and their implementations can be studied. Especially conflicts and complications
+that may arise of during the development of all of these features might be very
+interesting.
+
+Firstly, this implementation will serve as a validation of the specification
+that might reveal potential inaccuracies. And secondly, as a feasibility study
+that shows that it's possible to fully implement functional dependencies by
+reusing the available framework that is currently in place in GHC which might
+incenentivize people to implement it in GHC.
+
+\begin{verbatim}
+    class C a b | a -> b
+\end{verbatim}
+$\quad\quad\quad\rightsquigarrow$ data $CDict$ $a$ $b$ where
+
+$\quad\quad\quad\quad$ type $FC$ $a$
+
+\begin{verbatim}
+    instance C Int Bool
+\end{verbatim}
+$\quad\quad\quad\rightsquigarrow$ let $d$ : 
+
+$\quad\quad\quad\rightsquigarrow$ axiom $fCIntBool$ : $FC$ $Int$ $Bool$
+
+\begin{verbatim}
+    f :: C Int b => b -> Bool
+    f x = x
+\end{verbatim}
+$\quad\quad\quad\rightsquigarrow$ let $f$ = 
 % provide solution maybe entirely complete solution this time
-% goal
-% motivation
+% show problem termination?
 % planning
