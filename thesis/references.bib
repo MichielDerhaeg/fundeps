@@ -35,24 +35,6 @@
  keywords = {Haskell, System FC, functional dependencies},
 }
 
-@inproceedings{Karachalias:2017:EFD:3122955.3122966,
- author = {Karachalias, Georgios and Schrijvers, Tom},
- title = {Elaboration on Functional Dependencies: Functional Dependencies Are Dead, Long Live Functional Dependencies!},
- booktitle = {Proceedings of the 10th ACM SIGPLAN International Symposium on Haskell},
- series = {Haskell 2017},
- year = {2017},
- isbn = {978-1-4503-5182-9},
- location = {Oxford, UK},
- pages = {133--147},
- numpages = {15},
- url = {http://doi.acm.org/10.1145/3122955.3122966},
- doi = {10.1145/3122955.3122966},
- acmid = {3122966},
- publisher = {ACM},
- address = {New York, NY, USA},
- keywords = {Haskell, System FC, functional dependencies},
-}
-
 @inproceedings{Jones00typeclasses,
  author = {Mark P. Jones},
  title = {Type classes with functional dependencies},
@@ -78,4 +60,57 @@
  publisher = {ACM},
  address = {New York, NY, USA},
  keywords = {advanced type features, typed intermediate language},
+}
+
+@book{pierce2002types,
+  title={Types and Programming Languages},
+  author={Pierce, B.C.},
+  isbn={9780262162098},
+  lccn={2001044428},
+  series={Types and Programming Languages},
+  url={https://books.google.be/books?id=ti6zoAC9Ph8C},
+  year={2002},
+  publisher={MIT Press}
+}
+
+@article{Bottu:2017:QCC:3156695.3122967,
+ author = {Bottu, Gert-Jan and Karachalias, Georgios and Schrijvers, Tom and Oliveira, Bruno C. d. S. and Wadler, Philip},
+ title = {Quantified Class Constraints},
+ journal = {SIGPLAN Not.},
+ issue_date = {October 2017},
+ volume = {52},
+ number = {10},
+ month = sep,
+ year = {2017},
+ issn = {0362-1340},
+ pages = {148--161},
+ numpages = {14},
+ url = {http://doi.acm.org/10.1145/3156695.3122967},
+ doi = {10.1145/3156695.3122967},
+ acmid = {3122967},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {Haskell, type classes, type inference},
+}
+
+@article{outsideinx-modular-type-inference-with-local-assumptions,
+author = {Vytiniotis, Dimitrios and Peyton Jones, Simon and Schrijvers, Tom and Sulzmann, Martin},
+title = {OutsideIn(X): Modular type inference with local assumptions},
+booktitle = {},
+year = {2011},
+month = {September},
+abstract = {
+
+Advanced type system features, such as GADTs, type classes and type families, have proven to be invaluable language extensions for ensuring data invariants and program correctness. Unfortunately, they pose a tough problem for type inference when they are used as local type assumptions. Local type assumptions often result in the lack of principal types and cast the generalisation of local let-bindings prohibitively difficult to implement and specify. User-declared axioms only make this situation worse. In this paper, we explain the problems and-perhaps controversially-argue for abandoning local let-binding generalisation. We give empirical results that local let generalisation is only sporadically used by Haskell programmers. Moving on, we present a novel constraint-based type inference approach for local type assumptions. Our system, called OutsideIn(X), is parameterised over the particular underlying constraint domain X, in the same way as HM(X). This stratification allows us to use a common metatheory and inference algorithm. OutsideIn(X) extends the constraints of X by introducing implication constraints on top. We describe the strategy for solving these implication constraints, which, in turn, relies on a constraint solver for X. We characterise the properties of the constraint solver for X so that the resulting algorithm only accepts programs with principal types, even when the type system specification accepts programs that do not enjoy principal types. Going beyond the general framework, we give a particular constraint solver for X = type classes + GADTs + type families, a non-trivial challenge in its own right. This constraint solver has been implemented and distributed as part of GHC 7.
+
+
+},
+publisher = {Cambridge University Press},
+url = {https://www.microsoft.com/en-us/research/publication/outsideinx-modular-type-inference-with-local-assumptions/},
+address = {},
+pages = {333–412},
+journal = {Journal of Functional Programming},
+volume = {21},
+chapter = {},
+isbn = {},
 }
