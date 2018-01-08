@@ -15,7 +15,6 @@ import Utils.PrettyPrint
 import Utils.Utils
 import Utils.Annotated
 import Utils.FreeVars
-import Utils.Trace
 import Utils.Errors
 
 import Control.Monad.Writer

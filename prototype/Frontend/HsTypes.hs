@@ -10,7 +10,7 @@ import Utils.Kind
 import Utils.Annotated
 import Utils.Unique
 import Utils.FreeVars
-import Utils.SnocList
+--import Utils.SnocList -- TODO use instead of list
 import Utils.PrettyPrint
 
 import Data.List (nub, (\\))

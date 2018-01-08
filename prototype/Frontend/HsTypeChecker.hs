@@ -112,12 +112,19 @@ elabHsDataConInfo :: HsDataConInfo -> TcM FcDataConInfo
 elabHsDataConInfo (HsDCInfo _dc as tc tys fc_dc) = do
   fc_tc  <- lookupTyCon tc
   fc_tys <- map snd <$> extendTcCtxTysM as (mapM wfElabPolyTy tys)
-  return $ FcDCInfo fc_dc (map rnTyVarToFcTyVar as) fc_tc fc_tys
+  return $ FcDCInfo fc_dc (map rnTyVarToFcTyVar as) mempty mempty fc_tc fc_tys
 elabHsDataConInfo (HsDCClsInfo _dc as tc super tys fc_dc) = do
   fc_tc  <- lookupTyCon tc
   fc_sc  <- extendTcCtxTysM as (mapM elabClsCt super)
   fc_tys <- map snd <$> extendTcCtxTysM as (mapM wfElabPolyTy tys)
-  return $ FcDCInfo fc_dc (map rnTyVarToFcTyVar as) fc_tc (fc_sc ++ fc_tys)
+  return $
+    FcDCInfo
+      fc_dc
+      (map rnTyVarToFcTyVar as)
+      mempty
+      mempty
+      fc_tc
+      (fc_sc ++ fc_tys)
 
 buildInitFcAssocs :: TcM (AssocList FcTyCon FcTyConInfo, AssocList FcDataCon FcDataConInfo)
 buildInitFcAssocs = do

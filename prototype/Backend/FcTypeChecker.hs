@@ -64,29 +64,58 @@ lookupDataConInfoM :: FcDataCon -> FcM FcDataConInfo
 lookupDataConInfoM = lookupFcGblEnvM fc_env_dc_info
 
 -- | Lookup the type of a data constructor
-lookupDataConTyM :: FcDataCon -> FcM ([FcTyVar], [FcType], FcTyCon)
+lookupDataConTyM :: FcDataCon -> FcM ([FcTyVar], [FcTyVar], [FcProp], [FcType], FcTyCon)
 lookupDataConTyM dc = lookupDataConInfoM dc >>= \info ->
-  return (fc_dc_univ info, fc_dc_arg_tys info, fc_dc_parent info)
+  return (fc_dc_univ info, fc_dc_exis info, fc_dc_prop info, fc_dc_arg_tys info, fc_dc_parent info)
 
--- TODO document
+-- TODO document us
 lookupFamInfoM :: FcFamVar -> FcM FcFamInfo
 lookupFamInfoM = lookupFcGblEnvM fc_env_tf_info
 
 lookupAxiomInfoM :: FcAxVar -> FcM FcAxiomInfo
 lookupAxiomInfoM = lookupFcGblEnvM fc_env_ax_info
 
+addFamInfoM :: FcFamInfo -> FcM ()
+addFamInfoM info =
+  modify
+    (\env ->
+       env
+       { fc_env_tf_info =
+           extendAssocList (fc_fam_var info) info (fc_env_tf_info env)
+       })
+
+addAxiomInfoM :: FcAxiomInfo -> FcM ()
+addAxiomInfoM info =
+  modify
+    (\env ->
+       env
+       { fc_env_ax_info =
+           extendAssocList (fc_ax_var info) info (fc_env_ax_info env)
+       })
+
+notInFcGblEnvM :: (Eq a, PrettyPrint a, MonadError CompileError m, MonadState s m) => (s -> AssocList a b) -> a -> m ()
+notInFcGblEnvM f x = gets f >>= \l -> case lookupInAssocList x l of
+  Just _  -> fcFail (text "notInFcGblEnvM" <+> colon <+> ppr x <+> text "is already bound")
+  Nothing -> return ()
+
 -- * Type checking
 -- ----------------------------------------------------------------------------
 
-mkDataConTy :: ([FcTyVar], [FcType], FcTyCon) -> FcType
-mkDataConTy (as, arg_tys, tc) = fcTyAbs as $ fcTyArr arg_tys $ fcTyConApp tc (map FcTyVar as)
+mkDataConTy :: ([FcTyVar], [FcTyVar], [FcProp], [FcType], FcTyCon) -> FcType
+mkDataConTy (as, bs, psis, arg_tys, tc) =
+  fcTyAbs as $
+  fcTyAbs bs $
+  fcTyQual psis $
+  fcTyArr arg_tys $
+    fcTyConApp tc (map FcTyVar as)
 
 -- | Type check a data declaration
+-- | TODO stuff through global environment for now, maybe change later
 tcFcDataDecl :: FcDataDecl -> FcM ()
-tcFcDataDecl (FcDataDecl _tc as dcs) = do -- TODO do propositions need to be in front?
+tcFcDataDecl (FcDataDecl _tc as dcs) = do
   forM_ as notInCtxM  -- GEORGE: Ensure is not already bound
   forM_ dcs $ \(_dc, tys) -> do
-    kinds <- extendCtxM' as (map kindOf as) (mapM tcType tys)
+    kinds <- extendCtxM' as (kindOf <$> as) (mapM tcType tys)
     unless (all (==KStar) (kinds) ) $
       fcFail $ text "tcFcDataDecl: Kind mismatch (FcDataDecl)"
 
@@ -103,6 +132,23 @@ tcFcValBind (FcValBind x ty tm) = do
                                 $$ parens (text "inferred:" <+> ppr ty'))
   extendCtxM' x ty ask -- GEORGE: Return the extended environment
 
+tcFcAxiomDecl :: FcAxiomDecl -> FcM ()
+tcFcAxiomDecl (FcAxiomDecl g as fam us v) = do
+  notInFcGblEnvM fc_env_ax_info g
+  mapM_ notInCtxM as
+  FcFamInfo _ as' <- lookupFamInfoM fam
+  unless (length us == length as') $
+    fcFail $
+    text "FcAxiomDecl" <+> colon <+> text "quantified variables length mismatch"
+  extendCtxM' as (kindOf <$> as) $ mapM_ tcType (v : us)
+  addAxiomInfoM (FcAxiomInfo g as fam us v)
+
+tcFcFamDecl :: FcFamDecl -> FcM ()
+tcFcFamDecl (FcFamDecl f as) = do
+  notInFcGblEnvM fc_env_tf_info f
+  mapM_ notInCtxM as
+  addFamInfoM (FcFamInfo f as)
+
 -- | Type check a program
 tcFcProgram :: FcProgram -> FcM FcType
 -- Type check a datatype declaration
@@ -113,11 +159,11 @@ tcFcProgram (FcPgmDataDecl datadecl pgm) = do
 tcFcProgram (FcPgmValDecl valbind pgm) = do
   fc_ctx <- tcFcValBind valbind
   setCtxM fc_ctx $ tcFcProgram pgm
-tcFcProgram (FcPgmAxiomDecl _axdecl pgm) = do
-  -- TODO axioms should already be in global env?
+tcFcProgram (FcPgmAxiomDecl axdecl pgm) = do
+  tcFcAxiomDecl axdecl
   tcFcProgram pgm
-tcFcProgram (FcPgmFamDecl _famdecl pgm) = do
-  -- TODO typing rules say to do nothing?
+tcFcProgram (FcPgmFamDecl famdecl pgm) = do
+  tcFcFamDecl famdecl
   tcFcProgram pgm
 -- Type check the top-level program expression
 tcFcProgram (FcPgmTerm tm) = tcTerm tm
@@ -165,14 +211,14 @@ tcTerm (FcTmLet x ty tm1 tm2) = do
 tcTerm (FcTmCase scr alts) = do
   scr_ty <- tcTerm scr
   tcAlts scr_ty alts
-tcTerm (FcTmPropAbs c phi tm) = do
+tcTerm (FcTmPropAbs c psi tm) = do
   notInCtxM c
-  tcProp phi
-  FcTyQual phi <$> extendCtxM' c phi (tcTerm tm)
+  tcProp psi
+  FcTyQual psi <$> extendCtxM' c psi (tcTerm tm)
 tcTerm (FcTmCoApp tm co) = tcTerm tm >>= \case
-  (FcTyQual phi2 ty) -> do
-    phi1 <- tcCoercion co
-    unless (eqFcProp phi1 phi2) $ fcFail (text "TODO") -- TODO what kind of proposition equality?
+  (FcTyQual psi2 ty) -> do
+    psi1 <- tcCoercion co
+    unless (eqFcProp psi1 psi2) $ fcFail (text "TODO") -- TODO what kind of proposition equality?
     return ty
   _ -> fcFail (text "TODO")
 tcTerm (FcTmCast tm co) = do
@@ -197,9 +243,9 @@ tcType (FcTyApp ty1 ty2) = do
     KArr k1a k1b | k1a == k2 -> return k1b
     _otherwise               -> fcFail $ text "tcType: Kind mismatch (FcTyApp)"
 tcType (FcTyCon tc) = lookupTyConKindM tc
-tcType (FcTyQual phi ty) = tcProp phi >> tcType ty
+tcType (FcTyQual psi ty) = tcProp psi >> tcType ty
 tcType (FcTyFam f tys) = do
-  unless (null tys) $ fcFail (text "TODO")
+  when (null tys) $ fcFail (text "TODO")
   _ <- lookupFamInfoM f
   head <$> mapM tcType tys -- TODO kinds? just doing something here
 
@@ -214,18 +260,31 @@ tcAlts scr_ty alts
       return ty
 
 tcAlt :: FcType -> FcAlt -> FcM FcType -- TODO fc pattern typing
-tcAlt scr_ty (FcAlt (FcConPat dc _ _ xs) rhs) = case tyConAppMaybe scr_ty of
-  Just (tc, tys) -> do
-    mapM_ notInCtxM (labelOf xs) -- GEORGE: Ensure not bound already
-    (as, arg_tys, dc_tc) <- lookupDataConTyM dc
+tcAlt scr_ty (FcAlt (FcConPat dc bs cs xs) rhs) = case tyConAppMaybe scr_ty of
+  Just (tc, tys) -> do -- T tys
+    mapM_ notInCtxM bs
+    mapM_ notInCtxM (labelOf cs)
+    mapM_ notInCtxM (labelOf xs)
+    (as, bs', psis, arg_tys, dc_tc) <- lookupDataConTyM dc
     unless (dc_tc == tc) $
-      fcFail (text "tcAlt" <+> colon <+> text "The type of the scrutinee does not match that of the pattern")
-    let ty_subst     = mconcat (zipWithExact (|->) as tys)
-    let real_arg_tys = map (substFcTyInTy ty_subst) arg_tys
-    extendCtxM' (labelOf xs) real_arg_tys (tcTerm rhs)
-  Nothing -> fcFail (text "destructScrTy" <+> colon <+> text "Not a tycon application")
+      patError "The type of the scrutinee does not match that of the pattern"
+    let as_subst = mconcat (zipWithExact (|->) as tys)
+    let bs_subst = mconcat (zipWithExact (|->) bs' (FcTyVar <$> bs))
+    let ty_subst = as_subst `mappend` bs_subst
+    let real_arg_tys = substFcTyInTy ty_subst <$> arg_tys
+    let real_psis = substFcTyInProp ty_subst <$> psis
+    unless (and (zipWithExact eqFcTypes real_arg_tys (dropLabel xs))) $
+      patError "The types of the pattern arguments do not match"
+    unless (and (zipWithExact eqFcProp real_psis (dropLabel cs))) $
+      patError "The types of the coercions do not match"
+    extendCtxM' (labelOf xs) real_arg_tys $
+      extendCtxM' (labelOf cs) real_psis $
+        tcTerm rhs
+  Nothing ->
+    fcFail (text "destructScrTy" <+> colon <+> text "Not a tycon application")
+  where
+    patError str = fcFail $ text "tcAlt" <+> colon <+> text str
 
--- TODO what to do with kinds?
 tcCoercion :: FcCoercion -> FcM FcProp
 tcCoercion (FcCoVar c) = lookupCtxM' c
 tcCoercion (FcCoAx g tys) = do
@@ -252,8 +311,10 @@ tcCoercion (FcCoApp co1 co2) = do
   FcProp ty3 ty4 <- tcCoercion co2
   let ty1ty3 = FcTyApp ty1 ty3
   let ty2ty4 = FcTyApp ty2 ty4
-  _ <- tcType ty1ty3
-  _ <- tcType ty2ty4
+  k1 <- tcType ty1ty3
+  k2 <- tcType ty2ty4
+  unless (k1 == k2) $
+    fcFail (text "FcCoApp" <+> colon <+> text "kind mismatch")
   return $ FcProp ty1ty3 ty2ty4
 tcCoercion (FcCoLeft co) = tcCoercion co >>= \case
     FcProp (FcTyApp ty1 _ty2) (FcTyApp ty3 _ty4) ->
@@ -269,8 +330,10 @@ tcCoercion (FcCoFam f crcs) = do
   info <- lookupFamInfoM f
   unless (length crcs == length (fc_fam_univ info)) $ fcFail (text "TODO")
   (tys1, tys2) <- unzip . (fmap propToTuple) <$> mapM tcCoercion crcs
-  mapM_ tcType tys1
-  mapM_ tcType tys2
+  ks1 <- mapM tcType tys1
+  ks2 <- mapM tcType tys2
+  unless (ks1 == ks2) $
+    fcFail $ text "FcCoFam" <+> colon <+> text "kind mismatch"
   return $ FcProp (FcTyFam f tys1) (FcTyFam f tys2)
   where
     propToTuple (FcProp ty1 ty2) = (ty1, ty2)
@@ -278,30 +341,38 @@ tcCoercion (FcCoAbs a co) = do
   notInCtxM a
   (ty1, ty2) <- extendCtxM' a (kindOf a) $ do
     FcProp ty1 ty2 <- tcCoercion co
-    _ <- tcType ty1
-    _ <- tcType ty2
+    k1 <- tcType ty1
+    k2 <- tcType ty2
+    unless (k1 == k2) $ fcFail $
+      text "FcCoAbs" <+> colon <+> text "kind mismatch"
     return (ty1, ty2)
   return $ FcProp (FcTyAbs a ty1) (FcTyAbs a ty2)
 tcCoercion (FcCoInst co1 co2) = tcCoercion co1 >>= \case
   FcProp (FcTyAbs a ty1) (FcTyAbs b ty2) -> do
     unless (a == b) $ fcFail (text "TODO")
+    k1 <- tcType ty1
+    k2 <- tcType ty2 -- can't hurt
+    unless (k1 == k2) $ fcFail $
+      text "FcCoInst" <+> colon <+> text "kind mismatch"
     FcProp ty3 ty4 <- tcCoercion co2
     return $ FcProp (substVar a ty3 ty1) (substVar b ty4 ty2)
   _ -> fcFail (text "TODO")
-tcCoercion (FcCoQual phi co) = do
+tcCoercion (FcCoQual psi co) = do
   FcProp ty1 ty2 <- tcCoercion co
-  tcProp phi
-  return $ FcProp (FcTyQual phi ty1) (FcTyQual phi ty2)
+  tcProp psi
+  return $ FcProp (FcTyQual psi ty1) (FcTyQual psi ty2)
 tcCoercion (FcCoQInst co1 co2) = tcCoercion co1 >>= \case
-  FcProp (FcTyQual phi1 ty1) (FcTyQual phi2 ty2) -> do
+  FcProp (FcTyQual psi1 ty1) (FcTyQual psi2 ty2) -> do
     prop <- tcCoercion co2
-    if eqFcProp prop phi1 && eqFcProp prop phi2
-      then return (FcProp ty1 ty2)
-      else fcFail (text "TODO")
+    unless (eqFcProp prop psi1 && eqFcProp prop psi2) $
+      fcFail (text "TODO")
+    return $ FcProp ty1 ty2
   _ -> fcFail (text "TODO")
 
 tcProp :: FcProp -> FcM ()
-tcProp (FcProp ty1 ty2) = tcType ty1 >> tcType ty2 >> return ()
+tcProp (FcProp ty1 ty2) = do
+  unlessM ((==) <$> tcType ty1 <*> tcType ty2) $
+    fcFail $ text "FcProp" <+> colon <+> text "kind mismatch"
 
 -- | Ensure that all types are syntactically the same
 ensureIdenticalTypes :: [FcType] -> FcM ()
