@@ -13,7 +13,7 @@ import Utils.Kind
 import Utils.Unique
 import Utils.AssocList
 import Utils.Ctx
-import Utils.PrettyPrint
+import Utils.PrettyPrint hiding ((<>))
 import Utils.Errors
 import Utils.Utils
 import Utils.Annotated
@@ -114,8 +114,10 @@ mkDataConTy (as, bs, psis, arg_tys, tc) =
 tcFcDataDecl :: FcDataDecl -> FcM ()
 tcFcDataDecl (FcDataDecl _tc as dcs) = do
   forM_ as notInCtxM  -- GEORGE: Ensure is not already bound
-  forM_ dcs $ \(_dc, tys) -> do
-    kinds <- extendCtxM' as (kindOf <$> as) (mapM tcType tys)
+  forM_ dcs $ \(_dc, bs, psis, tys) -> do
+    let ty_vars = as <> bs
+    kinds <- extendCtxM' ty_vars (kindOf <$> ty_vars)
+               (mapM_ tcProp psis >> mapM tcType tys)
     unless (all (==KStar) (kinds) ) $
       fcFail $ text "tcFcDataDecl: Kind mismatch (FcDataDecl)"
 
@@ -259,7 +261,8 @@ tcAlts scr_ty alts
       let (ty:_) = rhs_tys
       return ty
 
-tcAlt :: FcType -> FcAlt -> FcM FcType -- TODO fc pattern typing
+-- TODO spec returns arrow type, checking pattern type and returning rhs type is easier
+tcAlt :: FcType -> FcAlt -> FcM FcType
 tcAlt scr_ty (FcAlt (FcConPat dc bs cs xs) rhs) = case tyConAppMaybe scr_ty of
   Just (tc, tys) -> do -- T tys
     mapM_ notInCtxM bs
@@ -270,7 +273,7 @@ tcAlt scr_ty (FcAlt (FcConPat dc bs cs xs) rhs) = case tyConAppMaybe scr_ty of
       patError "The type of the scrutinee does not match that of the pattern"
     let as_subst = mconcat (zipWithExact (|->) as tys)
     let bs_subst = mconcat (zipWithExact (|->) bs' (FcTyVar <$> bs))
-    let ty_subst = as_subst `mappend` bs_subst
+    let ty_subst = as_subst <> bs_subst
     let real_arg_tys = substFcTyInTy ty_subst <$> arg_tys
     let real_psis = substFcTyInProp ty_subst <$> psis
     unless (and (zipWithExact eqFcTypes real_arg_tys (dropLabel xs))) $

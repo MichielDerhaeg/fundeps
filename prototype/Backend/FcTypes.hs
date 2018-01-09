@@ -317,8 +317,8 @@ fcDictApp tm ds = foldl FcTmApp tm (map FcTmVar ds)
 -- | Data Type Declaration
 data FcDataDecl = FcDataDecl { fdata_decl_tc   :: FcTyCon                 -- ^ Type Constructor
                              , fdata_decl_tv   :: [FcTyVar]               -- ^ Universal Type variables
-                             , fdata_decl_cons :: [(FcDataCon, [FcType])] -- ^ Data Constructors
-                             } -- TODO extend
+                             , fdata_decl_cons :: [(FcDataCon, [FcTyVar], [FcProp], [FcType])] -- ^ Data Constructors
+                             } -- FIXME decl_cons dirty
 
 -- | Top-level Value Binding
 data FcValBind = FcValBind { fval_bind_var :: FcTmVar   -- ^ Variable Name
@@ -437,15 +437,15 @@ instance PrettyPrint FcAlt where
   needsParens _    = True
 
 -- | Pretty print data declarations
-instance PrettyPrint FcDataDecl where
+instance PrettyPrint FcDataDecl where -- TODO fix
   ppr (FcDataDecl tc as dcs) = hsep [colorDoc green (text "data"), ppr tc, hsep (map ppr ann_as), cons]
     where
       ann_as = map (\a -> (a :| kindOf a)) as
-      ppr_dc (dc, tys) = hsep (colorDoc yellow (char '|') : ppr dc : map pprPar tys)
+      ppr_dc (dc, bs, psis, tys) = hsep (colorDoc yellow (char '|') : ppr dc : map pprPar tys)
 
       cons = sep $ case dcs of
         []               -> []
-        ((dc, tys):rest) -> hsep (equals : ppr dc : map pprPar tys) : map ppr_dc rest
+        ((dc, bs, psis, tys):rest) -> hsep (equals : ppr dc : map pprPar tys) : map ppr_dc rest
 
   needsParens _ = False
 

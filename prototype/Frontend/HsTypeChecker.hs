@@ -634,7 +634,7 @@ elabClsDecl (ClsD rn_cs cls (a :| _) method method_ty) = do
   (_kind, fc_method_ty) <- extendCtxTyM a (kindOf a) (wfElabPolyTy method_ty)
 
   -- Generate the datatype declaration
-  let fc_data_decl = FcDataDecl tc [rnTyVarToFcTyVar a] [(dc, fc_sc_tys ++ [fc_method_ty])]
+  let fc_data_decl = FcDataDecl tc [rnTyVarToFcTyVar a] [(dc, mempty, mempty, fc_sc_tys ++ [fc_method_ty])]
 
   -- Generate the method implementation
   (fc_val_bind, hs_method_ty) <- elabMethodSig method a cls method_ty
@@ -724,7 +724,7 @@ elabDataDecl (DataD tc as dcs) = do
     (kinds, fc_tys) <- unzip <$> extendCtxKindAnnotatedTysM as (mapM wfElabMonoTy tys) -- Elaborate the argument types
     unless (all (==KStar) kinds) $
       tcFail (text "elabDataDecl" <+> colon <+> text "not all datacon args have kind star")
-    return (fc_dc, fc_tys)
+    return (fc_dc, mempty, mempty, fc_tys)
   return (FcDataDecl fc_tc fc_as fc_dcs)
 
 -- | Extend the typing environment with some kind annotated type variables
