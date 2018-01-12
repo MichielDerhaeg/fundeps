@@ -5,6 +5,8 @@
 
 module Backend.FcTypeChecker (fcTypeCheck) where
 
+import Debug.Trace
+
 import Backend.FcTypes
 
 import Utils.Substitution
@@ -276,7 +278,15 @@ tcAlt scr_ty alt@(FcAlt (FcConPat dc bs cs xs) rhs) = case tyConAppMaybe scr_ty 
     let ty_subst = as_subst <> bs_subst
     let real_arg_tys = substFcTyInTy ty_subst <$> arg_tys
     let real_psis = substFcTyInProp ty_subst <$> psis
-    unless (and (zipWithExact eqFcTypes real_arg_tys (dropLabel xs))) $
+    traceM $ renderWithColor $ ppr arg_tys
+    traceM $ renderWithColor $ ppr real_arg_tys
+    traceM $ renderWithColor $ ppr $ dropLabel xs
+    traceM $ renderWithColor $ ppr as
+    traceM $ renderWithColor $ ppr tys
+    traceM $ renderWithColor $ text ""
+    -- TODO less dirty
+    bools <- sequence $ zipWithExact alphaEqFcTypes real_arg_tys (dropLabel xs)
+    unless (and (bools)) $
       patError "The types of the pattern arguments do not match"
     unless (and (zipWithExact eqFcProp real_psis (dropLabel cs))) $
       patError "The types of the coercions do not match"

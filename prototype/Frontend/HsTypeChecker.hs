@@ -373,12 +373,12 @@ freshenRnTyVars tvs = do
   return (new_tvs, subst)
 
 -- | Instantiate a polytype with fresh unification variables
-instPolyTy :: RnPolyTy -> TcM ([RnTyVar], RnClsCs, RnMonoTy)
+instPolyTy :: RnPolyTy -> TcM ([RnTyVar], RnClsCs, RnMonoTy, HsTySubst)
 instPolyTy poly_ty = do
   (bs, subst) <- freshenRnTyVars (map labelOf as)
   let new_cs = substInClsCs subst cs
   let new_ty = substInMonoTy subst ty
-  return (bs, new_cs, new_ty)
+  return (bs, new_cs, new_ty, subst)
   where
     (as, cs, ty) = destructPolyTy poly_ty
 
@@ -423,7 +423,7 @@ elabTmAbs x tm = do
 elabTmVar :: RnTmVar -> GenM (RnMonoTy, FcTerm)
 elabTmVar x = do
   poly_ty     <- liftGenM (lookupTmVarM x)
-  (bs,cs,ty)  <- liftGenM (instPolyTy poly_ty)
+  (bs,cs,ty,_)  <- liftGenM (instPolyTy poly_ty)
   _           <- extendTcCtxTysM bs $ liftGenM (wfElabClsCs cs)
   (ds,ann_cs) <- liftGenM (annotateCts cs)
   storeAnnCts ann_cs -- store the constraints
@@ -670,10 +670,6 @@ elabClsDecl (ClsD rn_cs cls (a :| _) method method_ty) = do
 
     xs <- replicateM (length rn_cs + 1) freshFcTmVar               -- n+1 fresh variables
 
-    traceM $ renderWithColor $  text "cls_decl" <+> colon <+> (ppr xs
-                             $$ ppr ( fc_sc_tys ++ [fc_method_ty] )
-                             $$ ppr '\n')
-
     let fc_tm =
           FcTmTyAbs (rnTyVarToFcTyVar a) $
           FcTmAbs da fc_cls_head $
@@ -696,7 +692,9 @@ elabClsDecl (ClsD rn_cs cls (a :| _) method method_ty) = do
 elabMethodSig :: RnTmVar -> RnTyVar -> RnClass-> RnPolyTy -> TcM (FcValBind, RnPolyTy)
 elabMethodSig method a cls sigma = do
   -- Create the actual type, freshen it up and take it apart
-  (bs, cs, ty) <- instPolyTy (mkRealMethodTy a cls sigma)
+  (bs, cs, ty, subst) <- instPolyTy (mkRealMethodTy a cls sigma)
+  traceM $ renderWithColor $ ppr subst
+  traceM $ renderWithColor $ ppr sigma
 
   -- Source and target method types
   let method_ty = constructPolyTy (zipWithExact (:|) bs (map kindOf bs), cs, ty)
@@ -714,17 +712,23 @@ elabMethodSig method a cls sigma = do
 
   let rn_bs = map rnTyVarToFcType bs
 
+  -- Elaborate the pattern variable types
+  fresh_sigma <- freshenLclBndrs sigma
+  fc_dict_method_ty <- elabPolyTy $ substInPolyTy subst fresh_sigma -- less dirty
+  super_cs <- lookupClsSuper cls
+  -- TODO cleaner way to find refreshed types? works with single-param tc's
+  let cs_subst = rnTyVarToFcTyVar a |-> rnTyVarToFcType (head bs)
+  fc_cs_tys <- (fmap (substFcTyInTy cs_subst)) <$> mapM elabClsCt super_cs
+
   let fc_method_rhs =
         fcTmTyAbs (map rnTyVarToFcTyVar bs) $
         fcTmAbs dbinds $
         FcTmCase
           (FcTmVar (head ds)) -- TODO undefined types
           [ FcAlt
-              (FcConPat dc mempty mempty (xs |: undefined))
+              (FcConPat dc mempty mempty (xs |: (fc_cs_tys ++ [fc_dict_method_ty])))
               (fcDictApp (fcTmTyApp (FcTmVar (last xs)) (tail rn_bs)) (tail ds))
           ]
-
-  traceM $ renderWithColor $ ppr fc_method_rhs
 
   let fc_val_bind = FcValBind (rnTmVarToFcTmVar method) fc_method_ty fc_method_rhs
 
