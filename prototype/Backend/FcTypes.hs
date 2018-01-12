@@ -222,6 +222,11 @@ tyConAppMaybe ty = go ty []
     go (FcTyCon tc)       tys = Just (tc, tys)
     go _other_ty         _tys = Nothing
 
+constructFcDCType :: ([FcTyVar], [FcProp], [FcType], FcTyCon, [FcTyVar]) -> FcType
+constructFcDCType (bs, psis, tys, tc, as) =
+  fcTyAbs (as `mappend` bs) $
+  fcTyQual psis $ fcTyArr tys $ fcTyApp (FcTyCon tc) $ map FcTyVar as
+
 -- * Some smart constructors (uncurried variants)
 -- ----------------------------------------------------------------------------
 
@@ -437,22 +442,26 @@ instance PrettyPrint FcAlt where
   needsParens _    = True
 
 -- | Pretty print data declarations
-instance PrettyPrint FcDataDecl -- TODO fix
-                                            where
+instance PrettyPrint FcDataDecl where
   ppr (FcDataDecl tc as dcs) =
-    hsep [colorDoc green (text "data"), ppr tc, hsep (map ppr ann_as), cons]
+   hang data_ty_decl 2 . vcat $ map ppr_dc dcs
     where
+      data_ty_decl =
+        hsep
+          [ colorDoc green (text "data")
+          , ppr tc
+          , hsep (ppr <$> ann_as)
+          , colorDoc green (text "where")
+          ]
+
       ann_as = map (\a -> (a :| kindOf a)) as
 
       ppr_dc (dc, bs, psis, tys) =
-        hsep (colorDoc yellow (char '|') : ppr dc : map pprPar tys)
+        hsep [ppr dc, dcolon, ppr (constructFcDCType (bs, psis, tys, tc, as))]
 
-      cons =
-        sep $
-        case dcs of
-          [] -> []
-          ((dc, bs, psis, tys):rest) ->
-            hsep (equals : ppr dc : map pprPar tys) : map ppr_dc rest
+      ppr_bs bs = case bs of
+        [] -> empty
+        bs -> text "forall " <> sep (map ppr bs)
 
   needsParens _ = False
 
