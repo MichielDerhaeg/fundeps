@@ -437,15 +437,22 @@ instance PrettyPrint FcAlt where
   needsParens _    = True
 
 -- | Pretty print data declarations
-instance PrettyPrint FcDataDecl where -- TODO fix
-  ppr (FcDataDecl tc as dcs) = hsep [colorDoc green (text "data"), ppr tc, hsep (map ppr ann_as), cons]
+instance PrettyPrint FcDataDecl -- TODO fix
+                                            where
+  ppr (FcDataDecl tc as dcs) =
+    hsep [colorDoc green (text "data"), ppr tc, hsep (map ppr ann_as), cons]
     where
       ann_as = map (\a -> (a :| kindOf a)) as
-      ppr_dc (dc, bs, psis, tys) = hsep (colorDoc yellow (char '|') : ppr dc : map pprPar tys)
 
-      cons = sep $ case dcs of
-        []               -> []
-        ((dc, bs, psis, tys):rest) -> hsep (equals : ppr dc : map pprPar tys) : map ppr_dc rest
+      ppr_dc (dc, bs, psis, tys) =
+        hsep (colorDoc yellow (char '|') : ppr dc : map pprPar tys)
+
+      cons =
+        sep $
+        case dcs of
+          [] -> []
+          ((dc, bs, psis, tys):rest) ->
+            hsep (equals : ppr dc : map pprPar tys) : map ppr_dc rest
 
   needsParens _ = False
 

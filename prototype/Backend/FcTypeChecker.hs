@@ -263,7 +263,7 @@ tcAlts scr_ty alts
 
 -- TODO spec returns arrow type, checking pattern type and returning rhs type is easier
 tcAlt :: FcType -> FcAlt -> FcM FcType
-tcAlt scr_ty (FcAlt (FcConPat dc bs cs xs) rhs) = case tyConAppMaybe scr_ty of
+tcAlt scr_ty alt@(FcAlt (FcConPat dc bs cs xs) rhs) = case tyConAppMaybe scr_ty of
   Just (tc, tys) -> do -- T tys
     mapM_ notInCtxM bs
     mapM_ notInCtxM (labelOf cs)
@@ -287,6 +287,7 @@ tcAlt scr_ty (FcAlt (FcConPat dc bs cs xs) rhs) = case tyConAppMaybe scr_ty of
     fcFail (text "destructScrTy" <+> colon <+> text "Not a tycon application")
   where
     patError str = fcFail $ text "tcAlt" <+> colon <+> text str
+                          $$ ppr alt
 
 tcCoercion :: FcCoercion -> FcM FcProp
 tcCoercion (FcCoVar c) = lookupCtxM' c
