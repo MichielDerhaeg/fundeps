@@ -5,8 +5,6 @@ module Main
   , runTest
   ) where
 
-import Debug.Trace
-
 import           Backend.FcTypeChecker  (fcTypeCheck)
 import           Frontend.HsParser      (hsParse)
 import           Frontend.HsRenamer     (hsRename)

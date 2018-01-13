@@ -459,10 +459,6 @@ instance PrettyPrint FcDataDecl where
       ppr_dc (dc, bs, psis, tys) =
         hsep [ppr dc, dcolon, ppr (constructFcDCType (bs, psis, tys, tc, as))]
 
-      ppr_bs bs = case bs of
-        [] -> empty
-        bs -> text "forall " <> sep (map ppr bs)
-
   needsParens _ = False
 
 -- | Pretty print top-level value bindings
