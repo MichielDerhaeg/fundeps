@@ -1,17 +1,11 @@
 
-
-- Clean up implementation
-  * freshenlcl ctrchemes
-- Closure functions
+- Fundeps parser
 - System F -> System Fc
-    * Grammar
-    * Type Checker
     * Evaluator
-- Type Inference
 
 ------
 Extras
 ------
 + Type Families
 + GADTs
-
++ don't translate environments to fc, just use the program info
