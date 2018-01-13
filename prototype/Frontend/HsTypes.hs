@@ -10,7 +10,7 @@ import Utils.Kind
 import Utils.Annotated
 import Utils.Unique
 import Utils.FreeVars
-import Utils.SnocList
+--import Utils.SnocList -- TODO use instead of list
 import Utils.PrettyPrint
 
 import Data.List (nub, (\\))
@@ -359,12 +359,16 @@ type AnnClsCs = [AnnClsCt]
 type AnnScheme = Ann DictVar CtrScheme
 type AnnSchemes = [AnnScheme]
 
+type EqAxioms = [FcAxiomInfo]
+
 -- | The program theory is just a list of name-annotated constrains
 type ProgramTheory = AnnSchemes
 
 data FullTheory = FT { theory_super :: ProgramTheory
                      , theory_inst  :: ProgramTheory
-                     , theory_local :: ProgramTheory }
+                     , theory_local :: ProgramTheory
+                     , theory_axiom :: EqAxioms
+                     }
 
 -- | Extend the superclass component of the theory
 ftExtendSuper :: FullTheory -> ProgramTheory -> FullTheory
@@ -380,11 +384,11 @@ ftExtendLocal theory local_cs = theory { theory_local = theory_local theory `map
 
 -- | Collapse the full program theory to a program theory (just concatenate)
 ftToProgramTheory :: FullTheory -> ProgramTheory
-ftToProgramTheory (FT super inst local) = mconcat [super,inst,local]
+ftToProgramTheory (FT super inst local _axiom) = mconcat [super,inst,local]
 
 -- | Drop the superclass component of the full theory and turn it into a program theory (concatenate)
 ftDropSuper :: FullTheory -> ProgramTheory
-ftDropSuper (FT _super inst local) = local `mappend` inst
+ftDropSuper (FT _super inst local _axiom) = local `mappend` inst
 
 -- * Collecting Free Variables Out Of Objects
 -- ------------------------------------------------------------------------------
@@ -488,7 +492,7 @@ instance PrettyPrint ClassInfo where
   needsParens _ = False
 
 instance PrettyPrint FullTheory where
-  ppr (FT super inst local)
+  ppr (FT super inst local _axiom)
     = braces $ vcat $ punctuate comma
     $ [ text "theory_super" <+> colon <+> ppr super
       , text "theory_inst"  <+> colon <+> ppr inst

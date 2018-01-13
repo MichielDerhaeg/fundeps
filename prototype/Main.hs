@@ -49,5 +49,5 @@ runTest filePath = do
         "------------------------------ Program Theory -----------------------------"
       putStrLn $ renderWithColor $ ppr theory
       putStrLn
-        "-------------------------- System F Program Type --------------------------"
+        "-------------------------- System Fc Program Type -------------------------"
       putStrLn $ renderWithColor $ ppr fc_ty

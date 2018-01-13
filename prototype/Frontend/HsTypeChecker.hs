@@ -112,12 +112,19 @@ elabHsDataConInfo :: HsDataConInfo -> TcM FcDataConInfo
 elabHsDataConInfo (HsDCInfo _dc as tc tys fc_dc) = do
   fc_tc  <- lookupTyCon tc
   fc_tys <- map snd <$> extendTcCtxTysM as (mapM wfElabPolyTy tys)
-  return $ FcDCInfo fc_dc (map rnTyVarToFcTyVar as) fc_tc fc_tys
+  return $ FcDCInfo fc_dc (map rnTyVarToFcTyVar as) mempty mempty fc_tc fc_tys
 elabHsDataConInfo (HsDCClsInfo _dc as tc super tys fc_dc) = do
   fc_tc  <- lookupTyCon tc
   fc_sc  <- extendTcCtxTysM as (mapM elabClsCt super)
   fc_tys <- map snd <$> extendTcCtxTysM as (mapM wfElabPolyTy tys)
-  return $ FcDCInfo fc_dc (map rnTyVarToFcTyVar as) fc_tc (fc_sc ++ fc_tys)
+  return $
+    FcDCInfo
+      fc_dc
+      (map rnTyVarToFcTyVar as)
+      mempty
+      mempty
+      fc_tc
+      (fc_sc ++ fc_tys)
 
 buildInitFcAssocs :: TcM (AssocList FcTyCon FcTyConInfo, AssocList FcDataCon FcDataConInfo)
 buildInitFcAssocs = do
@@ -291,6 +298,18 @@ elabScheme (CtrScheme as cs cls_ct) = elabAbs as $ elabImpls cs $ elabClsCt cls_
     elabAbs ((a :| _):as') fc = FcTyAbs (rnTyVarToFcTyVar a) <$> elabAbs as' fc
     elabAbs [] fc = fc
 
+-- | Elaborate a polytype
+elabPolyTy :: RnPolyTy -> TcM FcType
+elabPolyTy (PQual ty) = elabQualTy ty
+elabPolyTy (PPoly (a :| _) ty) =
+  FcTyAbs (rnTyVarToFcTyVar a) <$> elabPolyTy ty
+
+-- | Elaborate a qualified type
+elabQualTy :: RnQualTy -> TcM FcType
+elabQualTy (QQual cls_ct ty) =
+  mkFcArrowTy <$> elabClsCt cls_ct <*> elabQualTy ty
+elabQualTy (QMono ty) = elabMonoTy ty
+
 -- * Constraint store
 -- ------------------------------------------------------------------------------
 
@@ -354,7 +373,7 @@ freshenRnTyVars tvs = do
 -- | Instantiate a polytype with fresh unification variables
 instPolyTy :: RnPolyTy -> TcM ([RnTyVar], RnClsCs, RnMonoTy)
 instPolyTy poly_ty = do
-  (bs, subst) <- freshenRnTyVars (map labelOf as)
+  (bs,subst) <- freshenRnTyVars (map labelOf as)
   let new_cs = substInClsCs subst cs
   let new_ty = substInMonoTy subst ty
   return (bs, new_cs, new_ty)
@@ -470,7 +489,8 @@ elabHsAlt scr_ty res_ty (HsAlt (HsPat dc xs) rhs) = do
   storeEqCs [ scr_ty :~: foldl TyApp (TyCon tc) (map TyVar bs)  -- The scrutinee type must match the pattern type
             , res_ty :~: rhs_ty ]                               -- All right hand sides should be the same
 
-  return (FcAlt (FcConPat fc_dc (map rnTmVarToFcTmVar xs)) fc_rhs)
+  fc_tys <- liftGenM $ mapM elabPolyTy arg_tys
+  return (FcAlt (FcConPat fc_dc [] [] ((rnTmVarToFcTmVar <$> xs) |: fc_tys)) fc_rhs)
 
 -- | Covert a renamed type variable to a System F type
 rnTyVarToFcType :: RnTyVar -> FcType
@@ -626,7 +646,7 @@ elabClsDecl (ClsD rn_cs cls (a :| _) method method_ty) = do
   (_kind, fc_method_ty) <- extendCtxTyM a (kindOf a) (wfElabPolyTy method_ty)
 
   -- Generate the datatype declaration
-  let fc_data_decl = FcDataDecl tc [rnTyVarToFcTyVar a] [(dc, fc_sc_tys ++ [fc_method_ty])]
+  let fc_data_decl = FcDataDecl tc [rnTyVarToFcTyVar a] [(dc, mempty, mempty, fc_sc_tys ++ [fc_method_ty])]
 
   -- Generate the method implementation
   (fc_val_bind, hs_method_ty) <- elabMethodSig method a cls method_ty
@@ -648,10 +668,16 @@ elabClsDecl (ClsD rn_cs cls (a :| _) method method_ty) = do
 
     xs <- replicateM (length rn_cs + 1) freshFcTmVar               -- n+1 fresh variables
 
-    let fc_tm = FcTmTyAbs (rnTyVarToFcTyVar a) $
-                  FcTmAbs da fc_cls_head $
-                    FcTmCase (FcTmVar da)
-                             [FcAlt (FcConPat dc xs) (FcTmVar (xs !! i))]
+    let fc_tm =
+          FcTmTyAbs (rnTyVarToFcTyVar a) $
+          FcTmAbs da fc_cls_head $
+          FcTmCase
+            (FcTmVar da)
+            [ FcAlt
+                (FcConPat dc [] [] (xs |: (fc_sc_tys ++ [fc_method_ty])))
+                (FcTmVar (xs !! i))
+            ]
+
     let proj = FcValBind d fc_scheme fc_tm
 
     return (d :| scheme, proj)
@@ -663,40 +689,54 @@ elabClsDecl (ClsD rn_cs cls (a :| _) method method_ty) = do
 --   b) the actual source type (with the proper class qualification)
 elabMethodSig :: RnTmVar -> RnTyVar -> RnClass-> RnPolyTy -> TcM (FcValBind, RnPolyTy)
 elabMethodSig method a cls sigma = do
-  -- Create the actual type, freshen it up and take it apart
-  (bs, cs, ty) <- instPolyTy (mkRealMethodTy a cls sigma)
+  -- Create fresh variables and substitute
+  ([a'],a_subst) <- freshenRnTyVars [a]
+  let (bs, cs, ty) = destructPolyTy sigma
+  (bs',bs_subst) <- freshenRnTyVars (labelOf bs)
+  let new_as = a':bs'
+  let subst = a_subst <> bs_subst
+  let cs' = substInClsCs subst (ClsCt cls (TyVar a):cs)
+  let ty' = substInMonoTy subst ty
 
   -- Source and target method types
-  let method_ty = constructPolyTy (zipWithExact (:|) bs (map kindOf bs), cs, ty)
+  let method_ty =
+        constructPolyTy
+          ( zipWithExact (:|) new_as (map kindOf new_as)
+          , cs'
+          , ty')
   (_kind, fc_method_ty) <- wfElabPolyTy method_ty
 
-  -- Annotate the constraints with fresh dictionary variables
-  (ds, ann_cs) <- annotateCts cs
-
   dc <- lookupClsDataCon cls  -- pattern constructor
-  n  <- length <$> lookupClsSuper cls
-  xs <- replicateM (n+1) freshFcTmVar -- n superclass variables + 1 for the method
+  super_cs <- lookupClsSuper cls
+  xs <- replicateM (length super_cs +1) freshFcTmVar -- n superclass variables + 1 for the method
 
+  -- Annotate the constraints with fresh dictionary variables
+  (ds, ann_cs) <- annotateCts $ cs'
   -- elaborate the annotated dictionary variables to System F term binders
   dbinds <- annCtsToTmBinds ann_cs
 
-  let rn_bs = map rnTyVarToFcType bs
+  let fc_bs = map rnTyVarToFcType bs'
 
-  let fc_method_rhs = fcTmTyAbs (map rnTyVarToFcTyVar bs) $
-                        fcTmAbs dbinds $
-                          FcTmCase (FcTmVar (head ds))
-                                   [FcAlt (FcConPat dc xs)
-                                          (fcDictApp (fcTmTyApp (FcTmVar (last xs)) (tail rn_bs)) (tail ds))]
+  -- Elaborate the dictionary types
+  let cs_subst = rnTyVarToFcTyVar a |-> rnTyVarToFcType a'
+  fc_cs_tys <- (fmap (substFcTyInTy cs_subst)) <$> mapM elabClsCt super_cs
+
+  -- Elaborate the type of the dictionary contained method
+  fc_dict_method_ty <- elabPolyTy $ substInPolyTy a_subst sigma
+
+  let fc_method_rhs =
+        fcTmTyAbs (map rnTyVarToFcTyVar new_as) $
+        fcTmAbs dbinds $
+        FcTmCase
+          (FcTmVar (head ds))
+          [ FcAlt
+              (FcConPat dc mempty mempty (xs |: (fc_cs_tys ++ [fc_dict_method_ty])))
+              (fcDictApp (fcTmTyApp (FcTmVar (last xs)) (fc_bs)) (tail ds))
+          ]
 
   let fc_val_bind = FcValBind (rnTmVarToFcTmVar method) fc_method_ty fc_method_rhs
 
   return (fc_val_bind, method_ty)
-
--- | Construct the real method type out of the class specification
--- (a, TC, forall bs. C => ty) ~~~~~> forall a bs. (TC a, C) => ty
-mkRealMethodTy :: RnTyVar -> RnClass -> RnPolyTy -> RnPolyTy
-mkRealMethodTy a cls polyty = case destructPolyTy polyty of
-  (bs, cs, ty) -> constructPolyTy ((a :| kindOf a) : bs, ClsCt cls (TyVar a) : cs, ty)
 
 -- | Elaborate a list of annotated dictionary variables to a list of System F term binders.
 annCtsToTmBinds :: AnnClsCs -> TcM [(FcTmVar, FcType)]
@@ -716,7 +756,7 @@ elabDataDecl (DataD tc as dcs) = do
     (kinds, fc_tys) <- unzip <$> extendCtxKindAnnotatedTysM as (mapM wfElabMonoTy tys) -- Elaborate the argument types
     unless (all (==KStar) kinds) $
       tcFail (text "elabDataDecl" <+> colon <+> text "not all datacon args have kind star")
-    return (fc_dc, fc_tys)
+    return (fc_dc, mempty, mempty, fc_tys)
   return (FcDataDecl fc_tc fc_as fc_dcs)
 
 -- | Extend the typing environment with some kind annotated type variables
@@ -948,7 +988,7 @@ hsElaborate rn_gbl_env us pgm = runExcept
                                    ; assocs <- buildInitFcAssocs
                                    ; return (result, assocs) }
   where
-    tc_init_theory  = FT mempty mempty mempty
+    tc_init_theory  = FT mempty mempty mempty mempty
     tc_init_ctx     = mempty
     tc_init_gbl_env = TcEnv mempty mempty mempty
 
