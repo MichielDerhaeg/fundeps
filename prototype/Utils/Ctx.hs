@@ -14,6 +14,9 @@ module Utils.Ctx
 , FcTcCtx, extendCtxM'
 , lookupCtxM', notInCtxM
 , setCtxM'
+, RnCtx
+, extendCtx
+, lookupCtx
 ) where
 
 import Utils.PrettyPrint hiding ((<>))
@@ -181,3 +184,19 @@ instance Context (SnocList FcTcBinding) FcCoVar FcProp where
   lookupCtx (ctx :> _) b = lookupCtx ctx b
   lookupCtx SN _ = Nothing
   extendCtx ctx src trg = ctx :> FcTcCoBnd src trg
+
+type RnCtx = SnocList RnBinding
+data RnBinding = RnTmVarBnd PsTmVar RnTmVar
+               | RnTyVarBnd PsTyVar RnTyVar
+
+instance Context RnCtx PsTmVar RnTmVar where
+  lookupCtx (ctx :> RnTmVarBnd a a') b = if a == b then Just a' else lookupCtx ctx b
+  lookupCtx (ctx :> _) b = lookupCtx ctx b
+  lookupCtx SN _ = Nothing
+  extendCtx ctx src trg = ctx :> RnTmVarBnd src trg
+
+instance Context RnCtx PsTyVar RnTyVar where
+  lookupCtx (ctx :> RnTyVarBnd a a') b = if a == b then Just a' else lookupCtx ctx b
+  lookupCtx (ctx :> _) b = lookupCtx ctx b
+  lookupCtx SN _ = Nothing
+  extendCtx ctx src trg = ctx :> RnTyVarBnd src trg
