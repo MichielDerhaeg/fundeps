@@ -40,10 +40,6 @@ instance PrettyPrint RnEnv where
     ]
   needsParens _ = False
 
--- | The renaming context maps parsed term and type variables to renamed term
--- and type variables, respectively.
-type RnCtx = Ctx PsTmVar RnTmVar PsTyVar RnTyVar
-
 type RnM = UniqueSupplyT (ReaderT RnCtx (StateT RnEnv (Except CompileError)))
 
 -- * Basic Monadic Setters and Getters
@@ -103,13 +99,13 @@ rnSym s = getUniqueM >>= return . mkName s
 
 -- | Rename a method name. It has to be unbound
 rnMethodName :: PsTmVar -> RnM RnTmVar
-rnMethodName x = ask >>= \ctx -> case lookupTmVarCtx ctx x of
+rnMethodName x = ask >>= \ctx -> case lookupCtx ctx x of
   Just {} -> rnFail (text "Method name" <+> ppr x <+> text "already bound")
   Nothing -> rnTmVar x
 
 -- | Lookup an already-bound method name
 lookupMethodName :: PsTmVar -> RnM RnTmVar
-lookupMethodName x = ask >>= \ctx -> case lookupTmVarCtx ctx x of
+lookupMethodName x = ask >>= \ctx -> case lookupCtx ctx x of
   Just rnx -> return rnx
   Nothing  -> rnFail (text "Method name" <+> ppr x <+> text "unbound")
 
@@ -133,7 +129,7 @@ rnTyPat = liftM (second nub) . go
       (rnty2, bv2) <- go ty2
       return (HsTyAppPat rnty1 rnty2, bv1 ++ bv2)
     go (HsTyVarPat (a :| k)) = do
-      rna <- lookupTyVarM a
+      rna <- lookupCtxM' a
       unless (kindOf rna == k) $
         rnFail (text "rnTyPat:" <+> text "Inconsistent kind assignment")
       return (HsTyVarPat (rna :| kindOf rna), [rna])
@@ -142,7 +138,7 @@ rnTyPat = liftM (second nub) . go
 rnMonoTy :: PsMonoTy -> RnM RnMonoTy
 rnMonoTy (TyCon tc)      = TyCon <$> lookupTyCon tc
 rnMonoTy (TyApp ty1 ty2) = TyApp <$> rnMonoTy ty1 <*> rnMonoTy ty2
-rnMonoTy (TyVar psa)     = TyVar <$> lookupTyVarM psa
+rnMonoTy (TyVar psa)     = TyVar <$> lookupCtxM' psa
 
 -- | Rename a qualified type
 rnQualTy :: PsQualTy -> RnM RnQualTy
@@ -166,7 +162,7 @@ rnPolyTy :: PsPolyTy -> RnM RnPolyTy
 rnPolyTy (PQual ty)   = PQual <$> rnQualTy ty
 rnPolyTy (PPoly a ty) = do
   rna  <- rnTyVar a
-  rnty <- extendCtxTyM (labelOf a) rna (rnPolyTy ty)
+  rnty <- extendCtxM' (labelOf a) rna (rnPolyTy ty)
   return (PPoly (rna :| kindOf rna) rnty)
 
 -- * Rename Terms
@@ -178,17 +174,17 @@ rnTmVar psx = mkRnTmVar <$> rnSym (symOf psx)
 
 -- | Rename a term
 rnTerm :: PsTerm -> RnM RnTerm
-rnTerm (TmVar x)          = TmVar <$> lookupTmVarM x
+rnTerm (TmVar x)          = TmVar <$> lookupCtxM' x
 rnTerm (TmCon dc)         = TmCon <$> lookupDataCon dc
 rnTerm (TmAbs psx pstm)   = do
   rnx  <- rnTmVar psx
-  rntm <- extendCtxTmM psx rnx (rnTerm pstm)
+  rntm <- extendCtxM' psx rnx (rnTerm pstm)
   return (TmAbs rnx rntm)
 rnTerm (TmApp tm1 tm2)    = TmApp <$> rnTerm tm1 <*> rnTerm tm2
 rnTerm (TmLet x tm1 tm2)  = do
   rnx   <- rnTmVar x
-  rntm1 <- extendCtxTmM x rnx (rnTerm tm1)
-  rntm2 <- extendCtxTmM x rnx (rnTerm tm2)
+  rntm1 <- extendCtxM' x rnx (rnTerm tm1)
+  rntm2 <- extendCtxM' x rnx (rnTerm tm2)
   return (TmLet rnx rntm1 rntm2)
 rnTerm (TmCase scr alts)  = TmCase <$> rnTerm scr <*> mapM rnAlt alts
 
@@ -211,12 +207,12 @@ lookupDataCon dc = hs_dc_data_con <$> lookupDataConInfoRnM dc
 
 -- GEORGE: Make this a separate function in Utils.Ctx?
 extendTmVars :: [(PsTmVar, RnTmVar)] -> RnM a -> RnM a
-extendTmVars binds m = extendCtxTmsM xs xs' m
+extendTmVars binds m = extendCtxM' xs xs' m
   where (xs,xs') = unzip binds
 
 -- GEORGE: Make this a separate function in Utils.Ctx?
 extendTyVars :: [(PsTyVar, RnTyVar)] -> RnM a -> RnM a
-extendTyVars binds m = extendCtxTysM as as' m
+extendTyVars binds m = extendCtxM' as as' m
   where (as,as') = unzip binds
 
 -- * Rename Programs and Declarations
@@ -243,16 +239,16 @@ rnClsDecl (ClsD cs cls a method method_ty) = do
   rn_a <- rnTyVar a
 
   -- Rename the superclass constraints
-  rn_cs <- extendCtxTyM (labelOf a) rn_a (mapM rnClsCt cs)
+  rn_cs <- extendCtxM' (labelOf a) rn_a (mapM rnClsCt cs)
 
   -- Rename the method type
-  rn_method_ty <- extendCtxTyM (labelOf a) rn_a (rnPolyTy method_ty)
+  rn_method_ty <- extendCtxM' (labelOf a) rn_a (rnPolyTy method_ty)
 
   -- Get the current typing environment (so that we can extend it with the method binding)
   rn_ctx <- ask
 
   return ( ClsD rn_cs rn_cls (rn_a |: kindOf rn_a) rn_method rn_method_ty
-         , extendCtxTm rn_ctx method rn_method )
+         , extendCtx rn_ctx method rn_method )
 
 -- | Rename an instance declaration
 rnInsDecl :: PsInsDecl -> RnM RnInsDecl
@@ -275,7 +271,7 @@ rnInsDecl (InsD cs cls_name ty_pat method_name method_tm) = do
 
 extendKindedVarsCtxM :: [RnTyVar] -> RnM a -> RnM a
 extendKindedVarsCtxM []     m = m
-extendKindedVarsCtxM (a:as) m = extendCtxTyM (rnTyVarToPsTyVar a) a (extendKindedVarsCtxM as m)
+extendKindedVarsCtxM (a:as) m = extendCtxM' (rnTyVarToPsTyVar a) a (extendKindedVarsCtxM as m)
 
 -- | Lookup the name of the method of a particular class
 lookupClassMethodName :: PsClass -> RnM RnTmVar
