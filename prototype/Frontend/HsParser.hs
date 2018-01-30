@@ -100,6 +100,18 @@ infixl 5 <&>
 (<&>) :: Applicative f => f a -> f b -> f (a, b)
 (<&>) = liftA2 (,)
 
+-- | Left associative operator chaining
+chainl1 :: Alternative m => m a -> m (a -> a -> a) -> m a
+chainl1 p op = scan where
+  scan = p <**> rst
+  rst = (\f y g x -> g (f x y)) <$> op <*> p <*> rst <|> pure id
+
+-- | Right associative operator chaining
+chainr1 :: Alternative m => m a -> m (a -> a -> a) -> m a
+chainr1 p op = scan where
+  scan = p <**> rst
+  rst = (flip <$> op <*> scan) <|> pure id
+
 -- * Parse Declarations and Programs
 -- ------------------------------------------------------------------------------
 
@@ -263,13 +275,3 @@ pFundeps = option [] $ symbol "|" *> commaSep1 pFundep
 -- | Parse a functional dependency
 pFundep :: PsM PsFundep
 pFundep = Fundep <$> some pTyVar <* symbol "->" <*> some pTyVar
-
-chainl1 :: Alternative m => m a -> m (a -> a -> a) -> m a
-chainl1 p op = scan where
-  scan = p <**> rst
-  rst = (\f y g x -> g (f x y)) <$> op <*> p <*> rst <|> pure id
-
-chainr1 :: Alternative m => m a -> m (a -> a -> a) -> m a
-chainr1 p op = scan where
-  scan = p <**> rst
-  rst = (flip <$> op <*> scan) <|> pure id
