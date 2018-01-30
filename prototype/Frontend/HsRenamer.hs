@@ -153,6 +153,10 @@ rnQualTy (QQual ct ty) = QQual <$> rnClsCt ct <*> rnQualTy ty
 rnClsCt :: PsClsCt -> RnM RnClsCt
 rnClsCt (ClsCt cls ty) = ClsCt <$> rnClass cls <*> rnMonoTy ty
 
+-- | Rename a functional dependency
+rnFundep :: PsFundep -> RnM RnFundep
+rnFundep (Fundep as bs) = Fundep <$> mapM lookupTyVarM as <*> mapM lookupTyVarM bs
+
 -- | Rename a class name
 rnClass :: PsClass -> RnM RnClass
 rnClass cls = do
@@ -225,7 +229,7 @@ extendTyVars binds m = extendCtxTysM as as' m
 -- | Rename a class declaration
 -- GEORGE: It does not return the environment extension, rather the extended environment.
 rnClsDecl :: PsClsDecl -> RnM (RnClsDecl, RnCtx)
-rnClsDecl (ClsD cs cls a method method_ty) = do
+rnClsDecl (ClsD cs cls as fundeps method method_ty) = do
   -- Rename the class name
   rn_cls <- do
     cls_infos <- getClsInfoRnM
@@ -239,20 +243,30 @@ rnClsDecl (ClsD cs cls a method method_ty) = do
   -- Store the class info in the global environment
   addClsInfoRnM cls (RnClsInfo rn_cls rn_method)
 
-  -- Rename the type argument
-  rn_a <- rnTyVar a
+  -- Rename the type arguments
+  rn_as <- mapM rnTyVar as
 
   -- Rename the superclass constraints
-  rn_cs <- extendCtxTyM (labelOf a) rn_a (mapM rnClsCt cs)
+  rn_cs <- extendCtxTysM (labelOf as) rn_as (mapM rnClsCt cs)
+
+  -- Rename the functional dependencies
+  rn_fundeps <- extendCtxTysM (labelOf as) rn_as (mapM rnFundep fundeps)
 
   -- Rename the method type
-  rn_method_ty <- extendCtxTyM (labelOf a) rn_a (rnPolyTy method_ty)
+  rn_method_ty <- extendCtxTysM (labelOf as) rn_as (rnPolyTy method_ty)
 
   -- Get the current typing environment (so that we can extend it with the method binding)
   rn_ctx <- ask
 
-  return ( ClsD rn_cs rn_cls (rn_a |: kindOf rn_a) rn_method rn_method_ty
-         , extendCtxTm rn_ctx method rn_method )
+  return
+    ( ClsD
+        rn_cs
+        rn_cls
+        (rn_as |: (kindOf <$> rn_as))
+        rn_fundeps
+        rn_method
+        rn_method_ty
+    , extendCtxTm rn_ctx method rn_method)
 
 -- | Rename an instance declaration
 rnInsDecl :: PsInsDecl -> RnM RnInsDecl

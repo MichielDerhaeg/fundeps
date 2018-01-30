@@ -18,7 +18,7 @@ import qualified Text.Parsec.Token as T
 
 -- Parser
 import Text.Parsec.Char (lower, upper, oneOf, alphaNum)
-import Text.Parsec.Combinator (chainl1, chainr1, sepBy1, eof)
+import Text.Parsec.Combinator (chainl1, chainr1, sepBy1, eof, many1, option)
 import Text.Parsec.Prim (Parsec, (<?>), try, parse)
 
 -- * The Parsing Monad
@@ -110,6 +110,10 @@ semiSep = T.semiSep lexer
 commaSep :: PsM a -> PsM [a]
 commaSep = T.commaSep lexer
 
+-- | Parse a comma-separated list of things of at least one element
+commaSep1 :: PsM a -> PsM [a]
+commaSep1 = T.commaSep1 lexer
+
 -- | The Monoidal applicative operator
 infixl 5 <&>
 (<&>) :: Applicative f => f a -> f b -> f (a, b)
@@ -127,12 +131,13 @@ pProgram  =  PgmCls  <$> pClsDecl  <*> pProgram
 
 -- | Parse a class declaration
 pClsDecl :: PsM PsClsDecl
-pClsDecl  =  (\ctx cls a (m,ty) -> ClsD ctx cls a m ty)
+pClsDecl  =  (\ctx cls as fds (m,ty) -> ClsD ctx cls as fds m ty)
          <$  reserved "class"
          <*> pClassCts
          <*  reservedOp "=>"
          <*> pClass
-         <*> parens pTyVarWithKind
+         <*> many1 (parens pTyVarWithKind)
+         <*> pFundeps
          <*  reserved "where"
          <*> braces (pTmVar <&> (reservedOp "::" *> pPolyTy))
 
@@ -268,3 +273,10 @@ pPat = HsPat <$> pDataCon <*> many pTmVar
 pAlt :: PsM PsAlt
 pAlt = HsAlt <$> pPat <* reservedOp "->" <*> pTerm
 
+-- | Parse functional dependency annotations of a class declaration
+pFundeps :: PsM [PsFundep]
+pFundeps = option [] $ reservedOp "|" *> commaSep1 pFundep
+
+-- | Parse a functional dependency
+pFundep :: PsM PsFundep
+pFundep = Fundep <$> many1 pTyVar <* reservedOp "->" <*> many1 pTyVar

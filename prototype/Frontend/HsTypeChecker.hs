@@ -51,19 +51,35 @@ buildInitTcEnv pgm (RnEnv _rn_cls_infos dc_infos tc_infos) = do -- GEORGE: Assum
     buildStoreClsInfos (PgmInst _ p) = buildStoreClsInfos p
     buildStoreClsInfos (PgmData _ p) = buildStoreClsInfos p
     buildStoreClsInfos (PgmCls  c p) = case c of
-      ClsD rn_cs rn_cls (rn_a :| _kind) rn_method method_ty -> do
+      ClsD rn_cs rn_cls rn_as rn_fundeps rn_method method_ty -> do
         -- Generate And Store The TyCon Info
         rn_tc <- HsTC . mkName (mkSym ("T" ++ (show $ symOf rn_cls))) <$> getUniqueM
-        let tc_info = HsTCInfo rn_tc [rn_a] (FcTC (nameOf rn_tc))
+        let tc_info = HsTCInfo rn_tc (labelOf rn_as) (FcTC (nameOf rn_tc))
         addTyConInfoTcM rn_tc tc_info
 
         -- Generate And Store The DataCon Info
         rn_dc  <- HsDC . mkName (mkSym ("K" ++ (show $ symOf rn_cls))) <$> getUniqueM
-        let dc_info = HsDCClsInfo rn_dc [rn_a] rn_tc rn_cs [method_ty] (FcDC (nameOf rn_dc))
+        let dc_info =
+              HsDCClsInfo
+                rn_dc
+                (labelOf rn_as)
+                rn_tc
+                rn_cs
+                [method_ty]
+                (FcDC (nameOf rn_dc))
         addDataConInfoTcM rn_dc dc_info
 
         -- Generate And Store The Class Info
-        let cls_info = ClassInfo rn_cs rn_cls [rn_a] rn_method method_ty rn_tc rn_dc
+        let cls_info =
+              ClassInfo
+                rn_cs
+                rn_cls
+                (labelOf rn_as)
+                rn_fundeps
+                rn_method
+                method_ty
+                rn_tc
+                rn_dc
         addClsInfoTcM rn_cls cls_info
 
         -- Continue with the rest
@@ -633,7 +649,7 @@ closureAll as theory cs =
 --   b) The method implementation
 --   c) The extended typing environment
 elabClsDecl :: RnClsDecl -> TcM (FcDataDecl, FcValBind, [FcValBind], ProgramTheory, TcCtx)
-elabClsDecl (ClsD rn_cs cls (a :| _) method method_ty) = do
+elabClsDecl (ClsD rn_cs cls [a :| _] _fundeps method method_ty) = do
   -- Generate a fresh type and data constructor for the class
   -- GEORGE: They should already be generated during renaming.
   tc <- lookupClsTyCon   cls

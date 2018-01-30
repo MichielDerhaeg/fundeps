@@ -89,14 +89,20 @@ instance Named a => Named (Class a) where
 type PsClass = Class Sym
 type RnClass = Class Name
 
+data Fundep a = Fundep [HsTyVar a] [HsTyVar a]
+
+type PsFundep = Fundep Sym
+type RnFundep = Fundep Name
+
 data ClassInfo
-  = ClassInfo { cls_super     :: RnClsCs   -- ^ The superclass constraints
-              , cls_class     :: RnClass   -- ^ The class name
-              , cls_type_args :: [RnTyVar] -- ^ Type arguments
-              , cls_method    :: RnTmVar   -- ^ Method name
-              , cls_method_ty :: RnPolyTy  -- ^ Method type
-              , cls_tycon     :: RnTyCon   -- ^ Elaborated Type Constructor
-              , cls_datacon   :: RnDataCon -- ^ Elaborated Data Constructor
+  = ClassInfo { cls_super     :: RnClsCs    -- ^ The superclass constraints
+              , cls_class     :: RnClass    -- ^ The class name
+              , cls_type_args :: [RnTyVar]  -- ^ Type arguments
+              , cls_fundeps   :: [RnFundep] -- ^ Functional dependencies
+              , cls_method    :: RnTmVar    -- ^ Method name
+              , cls_method_ty :: RnPolyTy   -- ^ Method type
+              , cls_tycon     :: RnTyCon    -- ^ Elaborated Type Constructor
+              , cls_datacon   :: RnDataCon  -- ^ Elaborated Data Constructor
               }
 
 data RnClsInfo
@@ -307,11 +313,12 @@ data Program a = PgmExp  (Term a)                 -- ^ Expression
                | PgmData (DataDecl a) (Program a) -- ^ Datatype declaration
 
 -- | Class declaration
-data ClsDecl a = ClsD { csuper :: ClsCs a           -- ^ Superclass constraints
-                      , cname  :: Class a           -- ^ Class name
-                      , cvar   :: HsTyVarWithKind a -- ^ Type variable
-                      , cmena  :: HsTmVar a         -- ^ Method name
-                      , cmety  :: PolyTy a }        -- ^ Method type
+data ClsDecl a = ClsD { csuper  :: ClsCs a             -- ^ Superclass constraints
+                      , cname   :: Class a             -- ^ Class name
+                      , cvars   :: [HsTyVarWithKind a] -- ^ Type variables
+                      , cfds    :: [Fundep a]          -- ^ Functional dependencies
+                      , cmena   :: HsTmVar a           -- ^ Method name
+                      , cmety   :: PolyTy a }          -- ^ Method type
 
 -- | Instance declaration
 data InsDecl a = InsD { icons :: ClsCs a        -- ^ Constraints
@@ -479,11 +486,12 @@ instance Symable a => PrettyPrint (Class a) where
 
 -- | Pretty print type class info
 instance PrettyPrint ClassInfo where
-  ppr (ClassInfo cs cls type_args method method_ty tycon datacon)
+  ppr (ClassInfo cs cls type_args fundeps method method_ty tycon datacon)
     = braces $ vcat $ punctuate comma
     $ [ text "cls_super"     <+> colon <+> ppr cs
       , text "cls_class"     <+> colon <+> ppr cls
       , text "cls_type_args" <+> colon <+> ppr type_args
+      , text "cls_fundeps"   <+> colon <+> ppr fundeps
       , text "cls_method"    <+> colon <+> ppr method
       , text "cls_method_ty" <+> colon <+> ppr method_ty
       , text "cls_tycon"     <+> colon <+> ppr tycon
@@ -598,12 +606,23 @@ instance (Symable a, PrettyPrint a) => PrettyPrint (Program a) where
 
 -- | Pretty print class declarations
 instance (Symable a, PrettyPrint a) => PrettyPrint (ClsDecl a) where
-  ppr (ClsD cs cName cVar mName mTy)
-    = hang (colorDoc green (text "class") <+> pprCs cs <+> darrow <+> ppr cName <+> pprPar cVar <+> colorDoc green (text "where"))
-           2
-           (ppr (symOf mName) <+> dcolon <+> ppr mTy)
+  ppr (ClsD cs cName cVars cFds mName mTy) =
+    hang
+      (colorDoc green (text "class") <+>
+       pprCs cs <+>
+       darrow <+> ppr cName <+> hsep (fmap ppr cVars)
+       <+> pprFds
+       <+> colorDoc green (text "where")
+      )
+      2
+      (ppr (symOf mName) <+> dcolon <+> ppr mTy)
     where
       pprCs = parens . sep . punctuate comma . map ppr
+      pprFds =
+        if null cFds
+          then empty
+          else colorDoc yellow (text "|") <+>
+               (hsep . punctuate comma $ fmap ppr cFds)
 
   needsParens _ = False
 
@@ -634,3 +653,12 @@ instance (Symable a, PrettyPrint a) => PrettyPrint (DataDecl a) where
 instance PrettyPrint EqCt where
   ppr (ty1 :~: ty2) = ppr ty1 <+> text "~" <+> ppr ty2
   needsParens _ = True
+
+-- | Pretty print functional dependencies
+instance (Symable a, PrettyPrint a) => PrettyPrint (Fundep a) where
+  ppr (Fundep as bs) =
+    hsep (fmap ppr as) <+>
+    colorDoc yellow (text "->") <+>
+    hsep (fmap ppr bs)
+
+  needsParens _ = False
