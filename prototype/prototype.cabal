@@ -6,8 +6,8 @@ license:             BSD3
 
 executable prototype
   main-is:             Main.hs
-  build-depends:       base >=4.8 && <5
-                     , parsec
+  build-depends:       base
+                     , megaparsec
                      , pretty
                      , mtl
   other-modules:       Backend.FcTypeChecker

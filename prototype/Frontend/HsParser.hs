@@ -10,109 +10,90 @@ import Utils.Errors
 import Utils.PrettyPrint (text)
 
 -- | Utilities
-import Data.Functor (($>))
 import Control.Applicative
 
 -- Lexer
-import qualified Text.Parsec.Token as T
+import qualified Text.Megaparsec.Char.Lexer as L
 
 -- Parser
-import Text.Parsec.Char (lower, upper, oneOf, alphaNum)
-import Text.Parsec.Combinator (chainl1, chainr1, sepBy1, eof, many1, option)
-import Text.Parsec.Prim (Parsec, (<?>), try, parse)
+import Text.Megaparsec
+import Text.Megaparsec.Char
 
 -- * The Parsing Monad
 -- ------------------------------------------------------------------------------
 
-type PsM a = Parsec String () a
+type PsM a = Parsec (ErrorItem Char) String a
 
 -- | Parse a complete program from a file
 hsParse :: String -> FilePath -> Either CompileError PsProgram
 hsParse contents path =
   case parse parser path contents of
-    Left err -> Left (CompileError HsParser (text (show err)))
+    Left err -> Left (CompileError HsParser (text (parseErrorPretty err)))
     Right p  -> Right p
   where
-    parser = whiteSpace *> pProgram <* eof
+    parser = space *> pProgram <* eof
 
 -- * The Lexer and Utilities
 -- ------------------------------------------------------------------------------
 
--- | Haskell subset we use
-haskellDef :: T.LanguageDef st
-haskellDef = T.LanguageDef
-               { T.commentStart    = "{-"
-               , T.commentEnd      = "-}"
-               , T.commentLine     = "--"
-               , T.nestedComments  = True
-               , T.identStart      = lower -- letter
-               , T.identLetter     = alphaNum <|> oneOf "_'"
-               , T.opStart         = T.opLetter haskellDef
-               , T.opLetter        = oneOf ":!#$%&*+./<=>?@\\^|-~"
-               , T.reservedOpNames = [ "::","=","\\","|","->","@","=>" ]
-               , T.reservedNames   = [ "let","in","case","of", "data"
-                                     , "class", "instance", "where", "forall" ]
-               , T.caseSensitive   = True
-               }
-
--- | The lexer
-lexer :: T.TokenParser st
-lexer = T.makeTokenParser haskellDef
-
--- | Parse an identifier that starts with a lowercase
-lowerIdent :: PsM Sym
-lowerIdent = mkSym <$> T.identifier lexer
-
--- | Parse an identifier that starts with an uppercase
-upperIdent :: PsM Sym
-upperIdent = lexeme $ do
-  c  <- upper
-  cs <- many (alphaNum <|> oneOf "_'")
-  return (mkSym (c:cs))
+-- | The space comsumer
+sc :: PsM ()
+sc = L.space space1 (L.skipLineComment "--") (L.skipBlockComment "{--" "--}")
 
 -- | Turn a parser into a lexeme parser
 lexeme :: PsM a -> PsM a
-lexeme = T.lexeme lexer
+lexeme = L.lexeme sc
 
--- | Parse a reserved keyword
-reserved :: String -> PsM ()
-reserved = T.reserved lexer
+-- | List of reserved names
+reservedNames :: [String]
+reservedNames =
+  ["let", "in", "case", "of", "data", "class", "instance", "where", "forall"]
 
--- | Parse a reserved operator
-reservedOp :: String -> PsM ()
-reservedOp = T.reservedOp lexer
+-- | Parse an identifier given a parser for the first character
+identifier :: PsM Char -> PsM Sym
+identifier firstChar = mkSym <$> (lexeme . try) (p >>= check)
+  where
+    p = (:) <$> firstChar <*> many (alphaNumChar <|> oneOf "_'")
+    check x =
+      if x `elem` reservedNames
+        then fail $ "keyword " ++ show x ++ " cannot be an identifier"
+        else return x
+
+-- | Parse an identifier that starts with a lowercase
+lowerIdent :: PsM Sym
+lowerIdent = identifier lowerChar
+
+-- | Parse an identifier that starts with an uppercase
+upperIdent :: PsM Sym
+upperIdent = identifier upperChar
 
 -- | Parse a specific string
 symbol :: String -> PsM ()
-symbol s = T.symbol lexer s *> return ()
-
--- | Parse zero or more whitespace
-whiteSpace :: PsM () -- Use at the start of the file
-whiteSpace = T.whiteSpace lexer
+symbol s = L.symbol sc s *> return ()
 
 -- | Parse something enclosed in parentheses
 parens :: PsM a -> PsM a
-parens = T.parens lexer
+parens = between (symbol "(") (symbol ")")
 
 -- | Parse something enclosed in brackets
 braces :: PsM a -> PsM a
-braces = T.braces lexer
+braces = between (symbol "{") (symbol "}")
 
 -- | Parse a dot
 dot :: PsM ()
-dot = T.dot lexer $> ()
+dot = symbol "."
 
 -- | Parse a semicolon-separated list of things
 semiSep :: PsM a -> PsM [a]
-semiSep = T.semiSep lexer
+semiSep = (`sepBy` symbol ";")
 
 -- | Parse a comma-separated list of things
 commaSep :: PsM a -> PsM [a]
-commaSep = T.commaSep lexer
+commaSep = (`sepBy` symbol ",")
 
 -- | Parse a comma-separated list of things of at least one element
 commaSep1 :: PsM a -> PsM [a]
-commaSep1 = T.commaSep1 lexer
+commaSep1 = (`sepBy1` symbol ",")
 
 -- | The Monoidal applicative operator
 infixl 5 <&>
@@ -132,34 +113,34 @@ pProgram  =  PgmCls  <$> pClsDecl  <*> pProgram
 -- | Parse a class declaration
 pClsDecl :: PsM PsClsDecl
 pClsDecl  =  (\ctx cls as fds (m,ty) -> ClsD ctx cls as fds m ty)
-         <$  reserved "class"
+         <$  symbol "class"
          <*> pClassCts
-         <*  reservedOp "=>"
+         <*  symbol "=>"
          <*> pClass
-         <*> many1 (parens pTyVarWithKind)
+         <*> some (parens pTyVarWithKind)
          <*> pFundeps
-         <*  reserved "where"
-         <*> braces (pTmVar <&> (reservedOp "::" *> pPolyTy))
+         <*  symbol "where"
+         <*> braces (pTmVar <&> (symbol "::" *> pPolyTy))
 
 -- | Parse an instance declaration
 pInstDecl :: PsM PsInsDecl
 pInstDecl  =  (\ctx cls ty (m,tm) -> InsD ctx cls ty m tm)
-          <$  reserved "instance"
+          <$  symbol "instance"
           <*> pClassCts
-          <*  reservedOp "=>"
+          <*  symbol "=>"
           <*> pClass
           <*> pPrimTyPat
-          <*  reserved "where"
-          <*> braces (pTmVar <&> (reservedOp "=" *> pTerm))
+          <*  symbol "where"
+          <*> braces (pTmVar <&> (symbol "=" *> pTerm))
 
 -- | Parse a datatype declaration
 pDataDecl :: PsM PsDataDecl
 pDataDecl  =  DataD
-          <$  reserved "data"
+          <$  symbol "data"
           <*> pTyCon
           <*> many (parens pTyVarWithKind)
-          <*  reservedOp "="
-          <*> sepBy1 (pDataCon <&> many pPrimTy) (reservedOp "|")
+          <*  symbol "="
+          <*> sepBy1 (pDataCon <&> many pPrimTy) (symbol "|")
 
 
 -- * Parse all kinds of names
@@ -190,13 +171,14 @@ pDataCon = HsDC <$> upperIdent <?> "a data constructor"
 
 -- | Parse a polytype
 pPolyTy :: PsM PsPolyTy
-pPolyTy  =  PPoly <$  reserved "forall" <*> parens pTyVarWithKind <* dot <*> pPolyTy
-        <|> PQual <$> pQualTy
+pPolyTy =
+  PPoly <$ symbol "forall" <*> parens pTyVarWithKind <* dot <*> pPolyTy <|>
+  PQual <$> pQualTy
 
 -- | Parse a qualified type -- Type Well-formedness says 1 constraint
 pQualTy :: PsM PsQualTy
-pQualTy  =  try (QQual <$> pClassCtr <* reservedOp "=>" <*> pQualTy)
-        <|> QMono <$> pMonoTy
+pQualTy =
+  try (QQual <$> pClassCtr <* symbol "=>" <*> pQualTy) <|> QMono <$> pMonoTy
 
 -- | Parse a primitive monotype
 pPrimTy :: PsM PsMonoTy
@@ -205,7 +187,7 @@ pPrimTy = parens pMonoTy <|> TyCon <$> pTyCon <|> TyVar <$> pTyVar
 -- | Parse a monotype
 pMonoTy :: PsM PsMonoTy
 pMonoTy = chainr1 (chainl1 pPrimTy (pure TyApp))
-                  (mkPsArrowTy <$ reservedOp "->")
+                  (mkPsArrowTy <$ symbol "->")
 
 -- | Parse a primitive type pattern
 pPrimTyPat :: PsM PsTyPat
@@ -218,8 +200,9 @@ pTyPat = chainl1 pPrimTyPat (pure HsTyAppPat)
 
 -- | Parse a kind
 pKind :: PsM Kind
-pKind  =  chainr1 (parens pKind <|> (KStar <$ symbol "*")) (KArr <$ reservedOp "->")
-      <?> "a kind"
+pKind =
+  chainr1 (parens pKind <|> (KStar <$ symbol "*")) (KArr <$ symbol "->")
+  <?> "a kind"
 
 -- | Parse a class constraint
 pClassCtr :: PsM PsClsCt
@@ -231,7 +214,7 @@ pClassCts = parens (commaSep pClassCtr)
 
 -- | Parse a kind-annotated type variable (without the parentheses!!)
 pTyVarWithKind :: PsM PsTyVarWithKind
-pTyVarWithKind = liftA2 (:|) pTyVar (reservedOp "::" *> pKind)
+pTyVarWithKind = liftA2 (:|) pTyVar (symbol "::" *> pKind)
 
 -- * Parse terms
 -- ------------------------------------------------------------------------------
@@ -250,19 +233,19 @@ pAppTerm = chainl1 pPrimTerm (pure TmApp)
 pTerm :: PsM PsTerm
 pTerm  =  pAppTerm
       <|> TmAbs
-          <$  reservedOp "\\"
+          <$  symbol "\\"
           <*> pTmVar
           <*  dot
           <*> pTerm
       <|> uncurry TmLet
-          <$  reserved "let"
-          <*> braces (pTmVar <&> (reservedOp "=" *> pTerm))
-          <*  reserved "in"
+          <$  symbol "let"
+          <*> braces (pTmVar <&> (symbol "=" *> pTerm))
+          <*  symbol "in"
           <*> pTerm
       <|> TmCase
-          <$  reserved "case"
+          <$  symbol "case"
           <*> pTerm
-          <*  reserved "of"
+          <*  symbol "of"
           <*> braces (semiSep pAlt)
 
 -- | Parse a pattern
@@ -271,12 +254,22 @@ pPat = HsPat <$> pDataCon <*> many pTmVar
 
 -- | Parse a case alternative
 pAlt :: PsM PsAlt
-pAlt = HsAlt <$> pPat <* reservedOp "->" <*> pTerm
+pAlt = HsAlt <$> pPat <* symbol "->" <*> pTerm
 
 -- | Parse functional dependency annotations of a class declaration
 pFundeps :: PsM [PsFundep]
-pFundeps = option [] $ reservedOp "|" *> commaSep1 pFundep
+pFundeps = option [] $ symbol "|" *> commaSep1 pFundep
 
 -- | Parse a functional dependency
 pFundep :: PsM PsFundep
-pFundep = Fundep <$> many1 pTyVar <* reservedOp "->" <*> many1 pTyVar
+pFundep = Fundep <$> some pTyVar <* symbol "->" <*> some pTyVar
+
+chainl1 :: Alternative m => m a -> m (a -> a -> a) -> m a
+chainl1 p op = scan where
+  scan = p <**> rst
+  rst = (\f y g x -> g (f x y)) <$> op <*> p <*> rst <|> pure id
+
+chainr1 :: Alternative m => m a -> m (a -> a -> a) -> m a
+chainr1 p op = scan where
+  scan = p <**> rst
+  rst = (flip <$> op <*> scan) <|> pure id
