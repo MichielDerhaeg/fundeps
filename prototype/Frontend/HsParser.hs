@@ -11,6 +11,8 @@ import Utils.PrettyPrint (text)
 
 -- | Utilities
 import Control.Applicative
+import Data.Functor (($>))
+import Control.Monad.Reader
 
 -- Lexer
 import qualified Text.Megaparsec.Char.Lexer as L
@@ -22,12 +24,13 @@ import Text.Megaparsec.Char
 -- * The Parsing Monad
 -- ------------------------------------------------------------------------------
 
-type PsM a = Parsec (ErrorItem Char) String a
+type PsM = ReaderT SpaceConsumer (Parsec (ErrorItem Char) String)
+newtype SpaceConsumer = SC (PsM ())
 
 -- | Parse a complete program from a file
 hsParse :: String -> FilePath -> Either CompileError PsProgram
 hsParse contents path =
-  case parse parser path contents of
+  case parse (runReaderT parser (SC sc)) path contents of
     Left err -> Left (CompileError HsParser (text (parseErrorPretty err)))
     Right p  -> Right p
   where
@@ -40,9 +43,16 @@ hsParse contents path =
 sc :: PsM ()
 sc = L.space space1 (L.skipLineComment "--") (L.skipBlockComment "{--" "--}")
 
+-- | Turn a parser indent aware
+indent :: PsM a -> PsM a
+indent p =
+  ask >>= \(SC sc') ->
+    L.lineFold sc' $ \sc'' ->
+      local (const (SC (try sc'' <|> return ()))) (p <* sc')
+
 -- | Turn a parser into a lexeme parser
 lexeme :: PsM a -> PsM a
-lexeme = L.lexeme sc
+lexeme x = ask >>= \(SC sc') -> L.lexeme sc' x
 
 -- | List of reserved names
 reservedNames :: [String]
@@ -69,7 +79,7 @@ upperIdent = identifier upperChar
 
 -- | Parse a specific string
 symbol :: String -> PsM ()
-symbol s = L.symbol sc s *> return ()
+symbol s = ask >>= \(SC sc') -> L.symbol sc' s $> ()
 
 -- | Parse something enclosed in parentheses
 parens :: PsM a -> PsM a
@@ -124,30 +134,28 @@ pProgram  =  PgmCls  <$> pClsDecl  <*> pProgram
 
 -- | Parse a class declaration
 pClsDecl :: PsM PsClsDecl
-pClsDecl  =  (\ctx cls as fds (m,ty) -> ClsD ctx cls as fds m ty)
+pClsDecl  =  indent $ (\ctx cls as fds (m,ty) -> ClsD ctx cls as fds m ty)
          <$  symbol "class"
          <*> pClassCts
-         <*  symbol "=>"
          <*> pClass
          <*> some (parens pTyVarWithKind)
          <*> pFundeps
          <*  symbol "where"
-         <*> braces (pTmVar <&> (symbol "::" *> pPolyTy))
+         <*> (pTmVar <&> (symbol "::" *> pPolyTy))
 
 -- | Parse an instance declaration
 pInstDecl :: PsM PsInsDecl
-pInstDecl  =  (\ctx cls ty (m,tm) -> InsD ctx cls ty m tm)
+pInstDecl  =  indent $ (\ctx cls ty (m,tm) -> InsD ctx cls ty m tm)
           <$  symbol "instance"
           <*> pClassCts
-          <*  symbol "=>"
           <*> pClass
           <*> pPrimTyPat
           <*  symbol "where"
-          <*> braces (pTmVar <&> (symbol "=" *> pTerm))
+          <*> (pTmVar <&> (symbol "=" *> pTerm))
 
 -- | Parse a datatype declaration
 pDataDecl :: PsM PsDataDecl
-pDataDecl  =  DataD
+pDataDecl  =  indent $ DataD
           <$  symbol "data"
           <*> pTyCon
           <*> many (parens pTyVarWithKind)
@@ -212,9 +220,8 @@ pTyPat = chainl1 pPrimTyPat (pure HsTyAppPat)
 
 -- | Parse a kind
 pKind :: PsM Kind
-pKind =
-  chainr1 (parens pKind <|> (KStar <$ symbol "*")) (KArr <$ symbol "->")
-  <?> "a kind"
+pKind = chainr1 (parens pKind <|> (KStar <$ symbol "*")) (KArr <$ symbol "->")
+     <?> "a kind"
 
 -- | Parse a class constraint
 pClassCtr :: PsM PsClsCt
@@ -222,7 +229,10 @@ pClassCtr = ClsCt <$> pClass <*> pPrimTy
 
 -- | Parse a class/instance context
 pClassCts :: PsM PsClsCs
-pClassCts = parens (commaSep pClassCtr)
+pClassCts = option [] . try
+   $  (parens (commaSep pClassCtr)
+  <|> (pure <$> pClassCtr))
+  <* symbol "=>"
 
 -- | Parse a kind-annotated type variable (without the parentheses!!)
 pTyVarWithKind :: PsM PsTyVarWithKind
@@ -251,14 +261,14 @@ pTerm  =  pAppTerm
           <*> pTerm
       <|> uncurry TmLet
           <$  symbol "let"
-          <*> braces (pTmVar <&> (symbol "=" *> pTerm))
+          <*> (pTmVar <&> (symbol "=" *> pTerm))
           <*  symbol "in"
           <*> pTerm
-      <|> TmCase
+      <|>  indent (TmCase
           <$  symbol "case"
           <*> pTerm
           <*  symbol "of"
-          <*> braces (semiSep pAlt)
+          <*> some (indent pAlt))
 
 -- | Parse a pattern
 pPat :: PsM PsPat
