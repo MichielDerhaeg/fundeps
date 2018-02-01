@@ -31,7 +31,7 @@ newtype SpaceConsumer = SC (PsM ())
 hsParse :: String -> FilePath -> Either CompileError PsProgram
 hsParse contents path =
   case parse (runReaderT parser (SC sc)) path contents of
-    Left err -> Left (CompileError HsParser (text (parseErrorPretty err)))
+    Left err -> Left (CompileError HsParser (text (parseErrorPretty' contents err)))
     Right p  -> Right p
   where
     parser = space *> pProgram <* eof
