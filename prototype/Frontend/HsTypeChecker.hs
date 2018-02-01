@@ -89,8 +89,6 @@ addTyConInfoTcM tc info = modify $ \s ->
 
 type TcM = UniqueSupplyT (ReaderT TcCtx (StateT TcEnv (Except CompileError)))
 
-type TcCtx = Ctx RnTmVar RnPolyTy RnTyVar Kind
-
 data TcEnv = TcEnv { tc_env_cls_info :: AssocList RnClass   ClassInfo
                    , tc_env_dc_info  :: AssocList RnDataCon HsDataConInfo
                    , tc_env_tc_info  :: AssocList RnTyCon   HsTyConInfo }
@@ -142,23 +140,6 @@ buildInitFcAssocs = do
     return (fc_dc, fc_dc_info)
 
   return (fc_tc_infos, fc_dc_infos)
-
--- * Ensure that some things are not bound in the local context
--- ------------------------------------------------------------------------------
-
--- | Ensure something is not already bound in the local context
-notInTcCtxM :: (PrettyPrint a, MonadReader ctx m, MonadError CompileError m) => (ctx -> a -> Maybe t) -> a -> m ()
-notInTcCtxM f x = ask >>= \ctx -> case f ctx x of
-  Just {} -> tcFail (text "notInTcCtxM" <+> colon <+> ppr x <+> text "is already bound")
-  Nothing -> return ()
-
--- | Ensure the type variable is not already bound
-tyVarNotInTcCtxM :: RnTyVar -> TcM ()
-tyVarNotInTcCtxM = notInTcCtxM lookupTyVarCtx
-
--- | Ensure the term variable is not already bound
-tmVarNotInTcCtxM :: RnTmVar -> TcM ()
-tmVarNotInTcCtxM = notInTcCtxM lookupTmVarCtx
 
 -- * Lookup data and type constructors for a class
 -- ------------------------------------------------------------------------------
@@ -238,7 +219,7 @@ wfElabMonoTy (TyApp ty1 ty2) = do
       | k1a == k2 -> return (k1b, FcTyApp fc_ty1 fc_ty2)
     _other_kind   -> tcFail (text "wfElabMonoTy" <+> colon <+> text "TyApp")
 wfElabMonoTy (TyVar v) = do
-  kind <- lookupTyVarM v
+  kind <- lookupCtxM v
   return (kind, rnTyVarToFcType v)
 
 -- | Elaborate a qualified type
@@ -269,8 +250,8 @@ wfElabClsCs = mapM wfElabClsCt
 wfElabPolyTy :: RnPolyTy -> TcM (Kind, FcType)
 wfElabPolyTy (PQual ty) = wfElabQualTy ty
 wfElabPolyTy (PPoly (a :| _) ty) = do
-  tyVarNotInTcCtxM a {- GEORGE: ensure is unbound -}
-  (kind, fc_ty) <- extendCtxTyM a (kindOf a) (wfElabPolyTy ty)
+  notInCtxM a {- GEORGE: ensure is unbound -}
+  (kind, fc_ty) <- extendCtxM a (kindOf a) (wfElabPolyTy ty)
   unless (kind == KStar) $
     tcFail (text "wfElabPolyTy" <+> colon <+> text "PPoly")
   return (KStar, FcTyAbs (rnTyVarToFcTyVar a) fc_ty)
@@ -352,7 +333,7 @@ storeAnnCts cs = modify (\(CS eqs ccs) -> CS eqs (mappend ccs cs))
 -- | Add many type variables to the typing context
 extendTcCtxTysM :: MonadReader TcCtx m => [RnTyVar] -> m a -> m a
 extendTcCtxTysM []     m = m
-extendTcCtxTysM ty_vars m = foldl (\m' a -> extendCtxTyM a (kindOf a) m') m ty_vars
+extendTcCtxTysM ty_vars m = foldl (\m' a -> extendCtxM a (kindOf a) m') m ty_vars
 
 -- | Set the typing environment
 setTcCtxTmM :: MonadReader TcCtx m => TcCtx -> m a -> m a
@@ -411,16 +392,16 @@ elabTmApp tm1 tm2 = do
 -- | Elaborate a lambda abstraction
 elabTmAbs :: RnTmVar -> RnTerm -> GenM (RnMonoTy, FcTerm)
 elabTmAbs x tm = do
-  liftGenM (tmVarNotInTcCtxM x) {- ensure not bound -}
+  liftGenM (notInCtxM x) {- ensure not bound -}
   tv <- freshRnTyVar KStar
-  (ty, fc_tm) <- extendCtxTmM x (monoTyToPolyTy (TyVar tv)) $ elabTerm tm
+  (ty, fc_tm) <- extendCtxM x (monoTyToPolyTy (TyVar tv)) $ elabTerm tm
   let result = FcTmAbs (rnTmVarToFcTmVar x) (rnTyVarToFcType tv) fc_tm
   return (mkRnArrowTy [TyVar tv] ty, result)
 
 -- | Elaborate a term variable
 elabTmVar :: RnTmVar -> GenM (RnMonoTy, FcTerm)
 elabTmVar x = do
-  poly_ty     <- liftGenM (lookupTmVarM x)
+  poly_ty     <- liftGenM (lookupCtxM x)
   (bs,cs,ty)  <- liftGenM (instPolyTy poly_ty)
   _           <- extendTcCtxTysM bs $ liftGenM (wfElabClsCs cs)
   (ds,ann_cs) <- liftGenM (annotateCts cs)
@@ -433,10 +414,10 @@ elabTmVar x = do
 -- | Elaborate a let binding (monomorphic, recursive)
 elabTmLet :: RnTmVar -> RnTerm -> RnTerm -> GenM (RnMonoTy, FcTerm)
 elabTmLet x tm1 tm2 = do
-  liftGenM (tmVarNotInTcCtxM x) {- ensure not bound -}
+  liftGenM (notInCtxM x) {- ensure not bound -}
   tv <- freshRnTyVar KStar
-  (ty1, fc_tm1) <- extendCtxTmM x (monoTyToPolyTy (TyVar tv)) $ elabTerm tm1
-  (ty2, fc_tm2) <- extendCtxTmM x (monoTyToPolyTy (TyVar tv)) $ elabTerm tm2 -- could have also passed ty1 but it is the same
+  (ty1, fc_tm1) <- extendCtxM x (monoTyToPolyTy (TyVar tv)) $ elabTerm tm1
+  (ty2, fc_tm2) <- extendCtxM x (monoTyToPolyTy (TyVar tv)) $ elabTerm tm2 -- could have also passed ty1 but it is the same
   storeEqCs [TyVar tv :~: ty1]
   let fc_tm = FcTmLet (rnTmVarToFcTmVar x) (rnTyVarToFcType tv) fc_tm1 fc_tm2
   return (ty2, fc_tm)
@@ -485,7 +466,7 @@ elabHsAlt scr_ty res_ty (HsAlt (HsPat dc xs) rhs) = do
 
   (bs, ty_subst) <- liftGenM (freshenRnTyVars as)               -- Generate fresh universal type variables for the universal tvs
   let arg_tys = map (substInPolyTy ty_subst) orig_arg_tys       -- Apply the renaming substitution to the argument types
-  (rhs_ty, fc_rhs) <- extendCtxTmsM xs arg_tys (elabTerm rhs)   -- Type check the right hand side
+  (rhs_ty, fc_rhs) <- extendCtxM xs arg_tys (elabTerm rhs)   -- Type check the right hand side
   storeEqCs [ scr_ty :~: foldl TyApp (TyCon tc) (map TyVar bs)  -- The scrutinee type must match the pattern type
             , res_ty :~: rhs_ty ]                               -- All right hand sides should be the same
 
@@ -640,10 +621,10 @@ elabClsDecl (ClsD rn_cs cls (a :| _) method method_ty) = do
   dc <- lookupClsDataCon cls
 
   -- Elaborate the superclass constraints (with full well-formedness checking also)
-  fc_sc_tys <- extendCtxTyM a (kindOf a) (mapM wfElabClsCt rn_cs)
+  fc_sc_tys <- extendCtxM a (kindOf a) (mapM wfElabClsCt rn_cs)
 
   -- Elaborate the method type (with full well-formedness checking also)
-  (_kind, fc_method_ty) <- extendCtxTyM a (kindOf a) (wfElabPolyTy method_ty)
+  (_kind, fc_method_ty) <- extendCtxM a (kindOf a) (wfElabPolyTy method_ty)
 
   -- Generate the datatype declaration
   let fc_data_decl = FcDataDecl tc [rnTyVarToFcTyVar a] [(dc, mempty, mempty, fc_sc_tys ++ [fc_method_ty])]
@@ -652,7 +633,7 @@ elabClsDecl (ClsD rn_cs cls (a :| _) method method_ty) = do
   (fc_val_bind, hs_method_ty) <- elabMethodSig method a cls method_ty
 
   -- Construct the extended typing environment
-  ty_ctx <- extendCtxTmM method hs_method_ty ask
+  ty_ctx <- extendCtxM method hs_method_ty ask
 
   (sc_schemes, sc_decls) <- fmap unzip $ forM (zip [0..] rn_cs) $ \(i,sc_ct) -> do
     d  <- freshDictVar -- For the declaration
@@ -760,8 +741,8 @@ elabDataDecl (DataD tc as dcs) = do
   return (FcDataDecl fc_tc fc_as fc_dcs)
 
 -- | Extend the typing environment with some kind annotated type variables
-extendCtxKindAnnotatedTysM :: (MonadReader (Ctx x x' a Kind) m, Kinded a, MonadError CompileError m) => [Ann a t] -> m b -> m b
-extendCtxKindAnnotatedTysM ann_as = extendCtxTysM as (map kindOf as)
+extendCtxKindAnnotatedTysM :: [RnTyVarWithKind] -> TcM a -> TcM a
+extendCtxKindAnnotatedTysM ann_as = extendCtxM as (map kindOf as)
   where
     as = map labelOf ann_as
 
@@ -806,7 +787,7 @@ elabInsDecl theory (InsD ins_cs cls typat method method_tm) = do
 
   -- Elaborate the method implementation
   fc_method_tm <- do
-    expected_method_ty <- instMethodTy (hsTyPatToMonoTy typat) <$> lookupTmVarM method
+    expected_method_ty <- instMethodTy (hsTyPatToMonoTy typat) <$> lookupCtxM method
     elabTermWithSig (labelOf bs) local_theory method_tm expected_method_ty
 
   -- Entail the superclass constraints

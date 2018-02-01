@@ -116,7 +116,7 @@ tcFcDataDecl (FcDataDecl _tc as dcs) = do
   forM_ as notInCtxM  -- GEORGE: Ensure is not already bound
   forM_ dcs $ \(_dc, bs, psis, tys) -> do
     let ty_vars = as <> bs
-    kinds <- extendCtxM' ty_vars (kindOf <$> ty_vars)
+    kinds <- extendCtxM ty_vars (kindOf <$> ty_vars)
                (mapM_ tcProp psis >> mapM tcType tys)
     unless (all (==KStar) (kinds) ) $
       fcFail $ text "tcFcDataDecl: Kind mismatch (FcDataDecl)"
@@ -128,11 +128,11 @@ tcFcValBind (FcValBind x ty tm) = do
   kind <- tcType ty
   unless (kind == KStar) $
     fcFail $ text "tcFcValBind: Kind mismatch (FcValBind)"
-  ty' <- extendCtxM' x ty (tcTerm tm)
+  ty' <- extendCtxM x ty (tcTerm tm)
   unless (ty `eqFcTypes` ty') $ fcFail (text "Global let type doesnt match:"
                                 $$ parens (text "given:" <+> ppr ty)
                                 $$ parens (text "inferred:" <+> ppr ty'))
-  extendCtxM' x ty ask -- GEORGE: Return the extended environment
+  extendCtxM x ty ask -- GEORGE: Return the extended environment
 
 tcFcAxiomDecl :: FcAxiomDecl -> FcM ()
 tcFcAxiomDecl (FcAxiomDecl g as fam us v) = do
@@ -142,7 +142,7 @@ tcFcAxiomDecl (FcAxiomDecl g as fam us v) = do
   unless (length us == length as') $
     fcFail $
     text "tcFcAxiomDecl" <+> colon <+> text "quantified variables length mismatch"
-  (k:ks) <- extendCtxM' as (kindOf <$> as) $ mapM tcType (v : us)
+  (k:ks) <- extendCtxM as (kindOf <$> as) $ mapM tcType (v : us)
   unless (kind == k) $
     fcFail $
     text "tcFcAxiomDecl" <+> colon <+> text "family return kind mismatch"
@@ -182,9 +182,9 @@ tcTerm (FcTmAbs x ty1 tm) = do
   kind <- tcType ty1 -- GEORGE: Should have kind star
   unless (kind == KStar) $
     fcFail $ text "tcTerm: Kind mismatch (FcTmAbs)"
-  ty2  <- extendCtxM' x ty1 (tcTerm tm)
+  ty2  <- extendCtxM x ty1 (tcTerm tm)
   return (mkFcArrowTy ty1 ty2)
-tcTerm (FcTmVar x) = lookupCtxM' x
+tcTerm (FcTmVar x) = lookupCtxM x
 tcTerm (FcTmApp tm1 tm2)  = do
   ty1 <- tcTerm tm1
   ty2 <- tcTerm tm2
@@ -198,7 +198,7 @@ tcTerm (FcTmApp tm1 tm2)  = do
 
 tcTerm (FcTmTyAbs a tm) = do
   notInCtxM a -- GEORGE: Ensure not already bound
-  ty <- extendCtxM' a (kindOf a) (tcTerm tm)
+  ty <- extendCtxM a (kindOf a) (tcTerm tm)
   return (FcTyAbs a ty)
 tcTerm (FcTmTyApp tm ty) = do
   kind <- tcType ty
@@ -213,16 +213,16 @@ tcTerm (FcTmLet x ty tm1 tm2) = do
   kind <- tcType ty
   unless (kind == KStar) $
     fcFail $ text "tcTerm: Kind mismatch (FcTmLet)"
-  ty1  <- extendCtxM' x ty (tcTerm tm1)
+  ty1  <- extendCtxM x ty (tcTerm tm1)
   unless (ty `eqFcTypes` ty1) $ fcFail $ text "Let type doesnt match"
-  extendCtxM' x ty (tcTerm tm2)
+  extendCtxM x ty (tcTerm tm2)
 tcTerm (FcTmCase scr alts) = do
   scr_ty <- tcTerm scr
   tcAlts scr_ty alts
 tcTerm (FcTmPropAbs c psi tm) = do
   notInCtxM c
   tcProp psi
-  FcTyQual psi <$> extendCtxM' c psi (tcTerm tm)
+  FcTyQual psi <$> extendCtxM c psi (tcTerm tm)
 tcTerm (FcTmCoApp tm co) = tcTerm tm >>= \case
   (FcTyQual psi2 ty) -> do
     psi1 <- tcCoercion co
@@ -237,10 +237,10 @@ tcTerm (FcTmCast tm co) = do
 
 -- | Kind check a type
 tcType :: FcType -> FcM Kind
-tcType (FcTyVar a) = lookupCtxM' a
+tcType (FcTyVar a) = lookupCtxM a
 tcType (FcTyAbs a ty) = do
   notInCtxM a            -- GEORGE: Ensure not already bound
-  k <- extendCtxM' a (kindOf a) (tcType ty)
+  k <- extendCtxM a (kindOf a) (tcType ty)
   case k of
     KStar  -> return KStar
     _other -> fcFail $ text "tcType: Kind mismatch (FcTyAbs)"
@@ -292,8 +292,8 @@ tcAlt scr_ty alt@(FcAlt (FcConPat dc bs cs xs) rhs) = case tyConAppMaybe scr_ty 
       patError "The types of the pattern arguments do not match"
     unless (and (zipWithExact eqFcProp real_psis (dropLabel cs))) $
       patError "The types of the coercions do not match"
-    extendCtxM' (labelOf xs) real_arg_tys $
-      extendCtxM' (labelOf cs) real_psis $ tcTerm rhs
+    extendCtxM (labelOf xs) real_arg_tys $
+      extendCtxM (labelOf cs) real_psis $ tcTerm rhs
   Nothing ->
     fcFail (text "destructScrTy" <+> colon <+> text "Not a tycon application")
   where
@@ -301,7 +301,7 @@ tcAlt scr_ty alt@(FcAlt (FcConPat dc bs cs xs) rhs) = case tyConAppMaybe scr_ty 
                           $$ ppr alt
 
 tcCoercion :: FcCoercion -> FcM FcProp
-tcCoercion (FcCoVar c) = lookupCtxM' c
+tcCoercion (FcCoVar c) = lookupCtxM c
 tcCoercion (FcCoAx g tys) = do
   axiom <- lookupAxiomInfoM g
   let universal_vars = fc_ax_uv axiom
@@ -354,7 +354,7 @@ tcCoercion (FcCoFam f crcs) = do
     propToTuple (FcProp ty1 ty2) = (ty1, ty2)
 tcCoercion (FcCoAbs a co) = do
   notInCtxM a
-  (ty1, ty2) <- extendCtxM' a (kindOf a) $ do
+  (ty1, ty2) <- extendCtxM a (kindOf a) $ do
     FcProp ty1 ty2 <- tcCoercion co
     k1 <- tcType ty1
     k2 <- tcType ty2
