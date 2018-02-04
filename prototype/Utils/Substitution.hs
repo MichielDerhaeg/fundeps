@@ -57,11 +57,18 @@ instance SubstVar RnTyVar RnMonoTy RnPolyTy where
       | a == b    -> error "substTyVarInPolyTy: Shadowing"
       | otherwise -> PPoly (b :| kind) (substVar a aty ty)
 
+instance SubstVar RnTyVar RnMonoTy EqCt where
+  substVar a aty (ty1 :~: ty2) = substVar a aty ty1 :~: substVar a aty ty2
+
 -- | TODO document me
 instance SubstVar RnTyVar RnMonoTy CtrScheme where
-  substVar a ty (CtrScheme as cs cls)
+  substVar a ty (CtrScheme as cs ct)
     | a `elem` fmap labelOf as = error "substTyVarInScheme: Shadowing"
-    | otherwise = CtrScheme as (substVar a ty cs) (substVar a ty cls)
+    | otherwise = CtrScheme as (substVar a ty cs) (substVar a ty ct)
+
+instance SubstVar RnTyVar RnMonoTy TypeCt where
+  substVar a ty (ClassCt ct)    = ClassCt $ substVar a ty ct
+  substVar a ty (EqualityCt ct) = EqualityCt $ substVar a ty ct
 
 -- * Target Language SubstVar Instances (Type Substitution)
 -- ------------------------------------------------------------------------------
@@ -100,7 +107,7 @@ instance SubstVar FcTyVar FcType FcTerm where
 -- | Substitute a type variable for a type in a case alternative
 instance SubstVar FcTyVar FcType FcAlt where
   substVar a ty (FcAlt (FcConPat k bs cs vs) tm)
-    | any (== a) bs = error "TODO shadowing"
+    | a `elem` bs = error "TODO shadowing"
     | otherwise =
       FcAlt
         (FcConPat
@@ -282,7 +289,7 @@ substInEqCs subst = map (substInEqCt subst)
 
 -- | Apply a type substitution to a class constraint
 substInClsCt :: HsTySubst -> RnClsCt -> RnClsCt
-substInClsCt subst (ClsCt cls ty) = ClsCt cls (substInMonoTy subst ty)
+substInClsCt = sub_rec
 
 -- | Apply a type substitution to a list of class constraints
 substInClsCs :: HsTySubst -> RnClsCs -> RnClsCs
@@ -303,6 +310,14 @@ substInTyVars subst = map (substInTyVar subst)
 -- | Apply a type substitution to a program theory
 substInProgramTheory :: HsTySubst -> ProgramTheory -> ProgramTheory
 substInProgramTheory subst = (fmap . fmap) (substInScheme subst)
+
+-- | Apply a type substitution to a type constraint
+substInTypeCt :: HsTySubst -> TypeCt -> TypeCt
+substInTypeCt = sub_rec
+
+-- | Apply a type substitution to type constraints
+substInTypeCs :: HsTySubst -> TypeCs -> TypeCs
+substInTypeCs subst = fmap (substInTypeCt subst)
 
 -- | TODO document
 substInScheme :: HsTySubst -> CtrScheme -> CtrScheme
@@ -437,8 +452,8 @@ instance FreshenLclBndrs FcTerm where
 instance FreshenLclBndrs FcAlt where
   freshenLclBndrs (FcAlt (FcConPat dc bs cs vs) tm) = do
     bs' <- mapM (freshFcTyVar . kindOf) bs
-    cs' <- mapM (\_ -> freshFcCoVar) (labelOf cs)
-    vs' <- mapM (\_ -> freshFcTmVar) (labelOf vs)
+    cs' <- mapM (const freshFcCoVar) (labelOf cs)
+    vs' <- mapM (const freshFcTmVar) (labelOf vs)
     let ty_subst = buildSubst . zip bs $ map FcTyVar bs'
     let co_subst = buildSubst . zip (labelOf cs) $ map FcCoVar cs'
     let tm_subst = buildSubst . zip (labelOf vs) $ map FcTmVar vs'
@@ -454,8 +469,8 @@ instance FreshenLclBndrs CtrScheme where
     return $
       CtrScheme
         (new_as |: fmap kindOf new_as)
-        (substInClsCs local_subst cs)
-        (substInClsCt local_subst ct)
+        (substInTypeCs local_subst cs)
+        (substInTypeCt local_subst ct)
 
 instance FreshenLclBndrs FcProp where
   freshenLclBndrs (FcProp ty1 ty2) =

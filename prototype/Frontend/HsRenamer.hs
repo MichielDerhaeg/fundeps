@@ -151,7 +151,7 @@ rnClsCt (ClsCt cls ty) = ClsCt <$> rnClass cls <*> rnMonoTy ty
 
 -- | Rename a functional dependency
 rnFundep :: PsFundep -> RnM RnFundep
-rnFundep (Fundep as bs) = Fundep <$> mapM lookupCtxM as <*> mapM lookupCtxM bs
+rnFundep (Fundep as b) = Fundep <$> mapM lookupCtxM as <*> lookupCtxM b
 
 -- | Rename a class name
 rnClass :: PsClass -> RnM RnClass

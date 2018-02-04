@@ -85,17 +85,9 @@ symbol s = ask >>= \(SC sc') -> L.symbol sc' s $> ()
 parens :: PsM a -> PsM a
 parens = between (symbol "(") (symbol ")")
 
--- | Parse something enclosed in brackets
-braces :: PsM a -> PsM a
-braces = between (symbol "{") (symbol "}")
-
 -- | Parse a dot
 dot :: PsM ()
 dot = symbol "."
-
--- | Parse a semicolon-separated list of things
-semiSep :: PsM a -> PsM [a]
-semiSep = (`sepBy` symbol ";")
 
 -- | Parse a comma-separated list of things
 commaSep :: PsM a -> PsM [a]
@@ -284,4 +276,4 @@ pFundeps = option [] $ symbol "|" *> commaSep1 pFundep
 
 -- | Parse a functional dependency
 pFundep :: PsM PsFundep
-pFundep = Fundep <$> some pTyVar <* symbol "->" <*> some pTyVar
+pFundep = Fundep <$> some pTyVar <* symbol "->" <*> pTyVar

@@ -14,6 +14,9 @@ zipWithExact _f []     []     = []
 zipWithExact  f (x:xs) (y:ys) = f x y : zipWithExact f xs ys
 zipWithExact _f _      _      = error "zipWithExact: length mismatch"
 
+zipWithExactM :: (Monad m) => (a -> b -> m c) -> [a] -> [b] -> m [c]
+zipWithExactM f l1 l2 = sequence $ zipWithExact f l1 l2
+
 distinct :: Eq a => [a] -> Bool
 distinct xs = nub xs == xs
 

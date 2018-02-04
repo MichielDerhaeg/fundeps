@@ -89,7 +89,7 @@ instance Named a => Named (Class a) where
 type PsClass = Class Sym
 type RnClass = Class Name
 
-data Fundep a = Fundep [HsTyVar a] [HsTyVar a]
+data Fundep a = Fundep [HsTyVar a] (HsTyVar a)
 
 type PsFundep = Fundep Sym
 type RnFundep = Fundep Name
@@ -299,8 +299,11 @@ type PsClsCs = ClsCs Sym
 type RnClsCt = ClsCt Name
 type RnClsCs = ClsCs Name
 
+data TyCt = TyClsCt RnClsCt | EqCt EqCt
+type TyCs = [TyCt]
+
 -- | Constraint scheme
-data CtrScheme = CtrScheme [HsTyVarWithKind Name] (ClsCs Name) (ClsCt Name)
+data CtrScheme = CtrScheme [RnTyVarWithKind] TypeCs TypeCt
 
 
 -- * Programs and Declarations
@@ -351,8 +354,9 @@ type RnDataDecl = DataDecl Name
 -- * Additional Syntax For Type Inference And Elaboration
 -- ------------------------------------------------------------------------------
 
--- | All constraints (equality and class)
-type Cs = (EqCs, RnClsCs)
+-- | Type constraint(s) (equality and class)
+data TypeCt = EqualityCt EqCt | ClassCt RnClsCt
+type TypeCs = [TypeCt]
 
 -- | Equality constraint(s)
 data EqCt = RnMonoTy :~: RnMonoTy
@@ -656,9 +660,15 @@ instance PrettyPrint EqCt where
 
 -- | Pretty print functional dependencies
 instance (Symable a, PrettyPrint a) => PrettyPrint (Fundep a) where
-  ppr (Fundep as bs) =
+  ppr (Fundep as b) =
     hsep (fmap ppr as) <+>
     colorDoc yellow (text "->") <+>
-    hsep (fmap ppr bs)
+    ppr b
 
   needsParens _ = False
+
+instance PrettyPrint TypeCt where
+  ppr (EqualityCt ct) = ppr ct
+  ppr (ClassCt ct)    = ppr ct
+
+  needsParens _ = True
