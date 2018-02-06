@@ -302,8 +302,8 @@ type RnClsCs = ClsCs Name
 data TyCt = TyClsCt RnClsCt | EqCt EqCt
 type TyCs = [TyCt]
 
--- | Constraint scheme
-data CtrScheme = CtrScheme [RnTyVarWithKind] TypeCs TypeCt
+-- | Class constraint scheme
+data CtrScheme = CtrScheme [RnTyVarWithKind] RnClsCs RnClsCt
 
 
 -- * Programs and Declarations
@@ -369,6 +369,8 @@ type AnnClsCs = [AnnClsCt]
 -- | Variable-annotated constraint schemes
 type AnnScheme = Ann DictVar CtrScheme
 type AnnSchemes = [AnnScheme]
+
+type AnnEqCt = Ann FcCoVar EqCt
 
 type EqAxioms = [FcAxiomInfo]
 

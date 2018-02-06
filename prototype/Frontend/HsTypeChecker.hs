@@ -248,7 +248,7 @@ wfElabQualTy (QQual ct ty) = do
     tcFail (text "wfElabQualTy" <+> colon <+> text "QQual")
   return (KStar, mkFcArrowTy fc_ty1 fc_ty2)
 
--- | Elaborate a constraint
+-- | Elaborate a class constraint
 wfElabClsCt :: RnClsCt -> TcM FcType
 wfElabClsCt (ClsCt cls ty) = do
   (ty_kind, fc_ty) <- wfElabMonoTy ty
@@ -258,9 +258,18 @@ wfElabClsCt (ClsCt cls ty) = do
       return (FcTyApp (FcTyCon fc_tc) fc_ty)
     _other_kind -> tcFail (text "wfElabClsCt")
 
--- | Elaborate a list of constraints
+-- | Elaborate a list of class constraints
 wfElabClsCs :: RnClsCs -> TcM [FcType]
 wfElabClsCs = mapM wfElabClsCt
+
+-- | Elaborate an equality constraint
+wfElabEqCt :: EqCt -> TcM FcProp
+wfElabEqCt (ty1 :~: ty2) = do
+  (k1, fc_ty1) <- wfElabMonoTy ty1
+  (k2, fc_ty2) <- wfElabMonoTy ty2
+  unless (k1 == k2) $
+    throwErrorM $ text "wfElabEqCt" <+> colon <+> text "kind mismatch"
+  return $ FcProp fc_ty1 fc_ty2
 
 -- | Elaborate a polytype
 wfElabPolyTy :: RnPolyTy -> TcM (Kind, FcType)
@@ -286,11 +295,15 @@ elabClsCt :: RnClsCt -> TcM FcType
 elabClsCt (ClsCt cls ty) =
   FcTyApp <$> (FcTyCon <$> lookupClsTyCon cls) <*> elabMonoTy ty
 
+-- | Elaborate an equality constraint
+elabEqCt :: EqCt -> TcM FcProp
+elabEqCt (ty1 :~: ty2) = FcProp <$> elabMonoTy ty1 <*> elabMonoTy ty2
+
 -- | Elaborate a class constaint scheme
 elabScheme :: CtrScheme -> TcM FcType
-elabScheme (CtrScheme as cs (ClassCt cls_ct)) = elabAbs as $ elabImpls cs $ elabClsCt cls_ct
+elabScheme (CtrScheme as cs cls_ct) = elabAbs as $ elabImpls cs $ elabClsCt cls_ct
   where
-    elabImpls (ClassCt ct1:cs') fc = mkFcArrowTy <$> elabClsCt ct1 <*> elabImpls cs' fc
+    elabImpls (ct1:cs') fc = mkFcArrowTy <$> elabClsCt ct1 <*> elabImpls cs' fc
     elabImpls [] fc = fc
     elabAbs ((a :| _):as') fc = FcTyAbs (rnTyVarToFcTyVar a) <$> elabAbs as' fc
     elabAbs [] fc = fc
@@ -554,7 +567,7 @@ overlapCheck theory cls_ct@(ClsCt cls1 ty1)
     msg:_ -> tcFail msg
     []    -> return ()
   where
-    overlaps (_ :| scheme@(CtrScheme _ _ (ClassCt (ClsCt cls2 ty2))))
+    overlaps (_ :| scheme@(CtrScheme _ _ (ClsCt cls2 ty2)))
       | cls1 == cls2
       , Right {} <- unify [] [ty1 :~: ty2] =
         Just (text "overlapCheck:" $$ ppr cls_ct $$ ppr scheme)
@@ -580,10 +593,10 @@ simplify as theory (ct:cs) =
 -- | done. May produce additional class constraints.
 entail :: [RnTyVar] -> ProgramTheory -> AnnClsCt -> TcM (Maybe (AnnClsCs, FcTmSubst))
 entail _untch [] _cls_ct = return Nothing
-entail as ((d' :| CtrScheme bs cls_cs (ClassCt (ClsCt cls2 ty2))):schemes) ct@(d :| ClsCt cls1 ty1)
+entail as ((d' :| CtrScheme bs cls_cs (ClsCt cls2 ty2)):schemes) ct@(d :| ClsCt cls1 ty1)
   | cls1 == cls2
   , Right ty_subst <- unify as [ty1 :~: ty2] = do
-    (d''s, ann_cls_cs) <- annotateCts $ substInClsCs ty_subst (filterClsCs cls_cs)
+    (d''s, ann_cls_cs) <- annotateCts $ substInClsCs ty_subst cls_cs
     fc_subbed_bs <- mapM elabMonoTy . substInTyVars ty_subst $ labelOf bs
     let ev_subst =
           d |->
@@ -603,7 +616,7 @@ entail as ((d' :| CtrScheme bs cls_cs (ClassCt (ClsCt cls2 ty2))):schemes) ct@(d
 closure :: [RnTyVar] -> ProgramTheory -> AnnClsCt -> TcM (AnnClsCs, FcTmSubst)
 closure untchs theory cls_ct = go theory cls_ct
   where
-    go ((d_top :| CtrScheme alphas [ClassCt (ClsCt cls2 ty2)] (ClassCt q)):schemes) ct@(d :| ClsCt cls1 ty1)
+    go ((d_top :| CtrScheme alphas [ClsCt cls2 ty2] q):schemes) ct@(d :| ClsCt cls1 ty1)
       | cls1 == cls2
       , Right ty_subst <- unify untchs [ty1 :~: ty2] = do
         d' <- freshDictVar
@@ -663,7 +676,7 @@ elabClsDecl (ClsD rn_cs cls [a :| _] _fundeps method method_ty) = do
     fc_cls_head <- elabClsCt cls_head   -- T_TC a
 
     -- forall a. TC a => SC
-    let scheme = CtrScheme [a :| kindOf a] [ClassCt cls_head] (ClassCt sc_ct)
+    let scheme = CtrScheme [a :| kindOf a] [cls_head] sc_ct
     -- forall a. T_TC a -> upsilon_SC
     fc_scheme <- elabScheme scheme
 
@@ -783,7 +796,7 @@ elabInsDecl theory (InsD ins_cs cls typat method method_tm) = do
 
   -- Create the instance constraint scheme
   ins_d <- freshDictVar
-  ins_scheme <- fmap (ins_d :|) $ freshenLclBndrs $ CtrScheme bs (ClassCt <$> ins_cs) (ClassCt head_ct)
+  ins_scheme <- fmap (ins_d :|) $ freshenLclBndrs $ CtrScheme bs ins_cs head_ct
 
   --  Generate fresh dictionary variables for the instance context
   ann_ins_cs <- snd <$> annotateCts ins_cs
@@ -791,7 +804,7 @@ elabInsDecl theory (InsD ins_cs cls typat method method_tm) = do
                                       (labelOf bs)
                                       (theory_super theory)
                                        ann_ins_cs
-  let ann_ins_schemes = (fmap . fmap) (CtrScheme [] [] . ClassCt) (closure_cs <> ann_ins_cs)
+  let ann_ins_schemes = (fmap . fmap) (CtrScheme [] []) (closure_cs <> ann_ins_cs)
 
   -- The extended program theory
   let ext_theory = theory `ftExtendInst` [ins_scheme]
@@ -867,7 +880,7 @@ elabTermWithSig untch theory tm poly_ty = do
   given_ccs <- snd <$> annotateCts cs
   dbinds <- annCtsToTmBinds given_ccs
   (super_cs, closure_ev_subst) <- closureAll untch (theory_super theory) given_ccs
-  let given_schemes = (fmap . fmap) (CtrScheme [] [] . ClassCt) (super_cs <> given_ccs)
+  let given_schemes = (fmap . fmap) (CtrScheme [] []) (super_cs <> given_ccs)
 
   -- Resolve all the wanted constraints
   let untouchables = nub (untch ++ map labelOf as)

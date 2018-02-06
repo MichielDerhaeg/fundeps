@@ -469,8 +469,8 @@ instance FreshenLclBndrs CtrScheme where
     return $
       CtrScheme
         (new_as |: fmap kindOf new_as)
-        (substInTypeCs local_subst cs)
-        (substInTypeCt local_subst ct)
+        (substInClsCs local_subst cs)
+        (substInClsCt local_subst ct)
 
 instance FreshenLclBndrs FcProp where
   freshenLclBndrs (FcProp ty1 ty2) =
