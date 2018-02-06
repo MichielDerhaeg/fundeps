@@ -122,6 +122,7 @@ pProgram :: PsM PsProgram
 pProgram  =  PgmCls  <$> pClsDecl  <*> pProgram
          <|> PgmInst <$> pInstDecl <*> pProgram
          <|> PgmData <$> pDataDecl <*> pProgram
+         <|> PgmVal  <$> pValBind  <*> pProgram
          <|> PgmExp  <$> pTerm
 
 -- | Parse a class declaration
@@ -154,6 +155,13 @@ pDataDecl  =  indent $ DataD
           <*  symbol "="
           <*> sepBy1 (pDataCon <&> many pPrimTy) (symbol "|")
 
+-- | Parse a top-level value binding
+pValBind :: PsM PsValBind
+pValBind  =  try $ indent $ ValBind
+         <$> pTmVar
+         <*> optional (symbol "::" *> pPolyTy)
+         <*  symbol "="
+         <*> pTerm
 
 -- * Parse all kinds of names
 -- ------------------------------------------------------------------------------

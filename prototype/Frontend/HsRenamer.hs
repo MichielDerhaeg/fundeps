@@ -1,5 +1,6 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE FlexibleContexts     #-}
 
 module Frontend.HsRenamer (RnEnv(..), hsRename) where
 
@@ -329,6 +330,17 @@ rnDataDecl (DataD tc as dcs) = do
 
   return (DataD rntc (rnas |: map kindOf rnas) rndcs)
 
+-- | Rename a top-level value binding
+rnValBind :: PsValBind -> RnM (RnValBind, RnCtx)
+rnValBind (ValBind a m_ty tm) = do
+  rn_a <- rnTmVar a
+  rn_m_ty <- case m_ty of
+    Nothing -> return Nothing
+    Just ty -> Just <$> extendCtxM a rn_a (rnPolyTy ty)
+  rn_tm <- extendCtxM a rn_a $ rnTerm tm
+  ctx <- ask
+  return (ValBind rn_a rn_m_ty rn_tm, extendCtx ctx a rn_a)
+
 -- | Rename a program
 rnProgram :: PsProgram -> RnM (RnProgram, RnCtx)
 rnProgram (PgmExp tm) = do
@@ -337,7 +349,7 @@ rnProgram (PgmExp tm) = do
   return (PgmExp rn_tm, rn_ctx)
 rnProgram (PgmCls cls_decl pgm) = do
   (rn_cls_decl, ext_ctx) <- rnClsDecl cls_decl
-  (rn_pgm, rn_ctx)       <- local (\_ -> ext_ctx) $ rnProgram pgm
+  (rn_pgm, rn_ctx)       <- local (const ext_ctx) $ rnProgram pgm
   return (PgmCls rn_cls_decl rn_pgm, rn_ctx)
 rnProgram (PgmInst ins_decl pgm) = do
   rn_ins_decl      <- rnInsDecl ins_decl
@@ -347,6 +359,10 @@ rnProgram (PgmData data_decl pgm) = do
   rn_data_decl <- rnDataDecl data_decl
   (rn_pgm, rn_ctx) <- rnProgram pgm
   return (PgmData rn_data_decl rn_pgm, rn_ctx)
+rnProgram (PgmVal val_bind pgm) = do
+  (rn_val_bind, ext_ctx) <- rnValBind val_bind
+  (rn_pgm, rn_ctx) <- setCtxM ext_ctx $ rnProgram pgm
+  return (PgmVal rn_val_bind rn_pgm, rn_ctx)
 
 -- * Invoke the complete renamer
 -- ------------------------------------------------------------------------------
@@ -357,6 +373,7 @@ hsRename us pgm = runExcept
                 $ flip runStateT  rn_init_gbl_env
                 $ flip runReaderT rn_init_ctx
                 $ flip runUniqueSupplyT us
+                $ markRnError
                 $ rnProgram pgm
   where
     rn_init_ctx     = mempty
@@ -367,3 +384,6 @@ hsRename us pgm = runExcept
 
 rnFail :: MonadFail m => Doc -> m a
 rnFail = failM . CompileError HsRenamer
+
+markRnError :: MonadError CompileError m => m a -> m a
+markRnError = markErrorPhase HsRenamer

@@ -314,6 +314,7 @@ data Program a = PgmExp  (Term a)                 -- ^ Expression
                | PgmCls  (ClsDecl  a) (Program a) -- ^ Class declaration
                | PgmInst (InsDecl  a) (Program a) -- ^ Instance declaration
                | PgmData (DataDecl a) (Program a) -- ^ Datatype declaration
+               | PgmVal  (ValBind  a) (Program a) -- ^ Value Binding
 
 -- | Class declaration
 data ClsDecl a = ClsD { csuper  :: ClsCs a             -- ^ Superclass constraints
@@ -335,6 +336,13 @@ data DataDecl a = DataD { dtycon    :: HsTyCon a                     -- ^ Type c
                         , dtyvars   :: [HsTyVarWithKind a]           -- ^ Universal type variables
                         , ddatacons :: [(HsDataCon a, [MonoTy a])] } -- ^ Data constructors
 
+-- | Top-level Value Binding
+data ValBind a = ValBind
+  { vname :: HsTmVar a        -- ^ Value name
+  , vtype :: Maybe (PolyTy a) -- ^ Optional value type
+  , vbind :: Term a           -- ^ Bound term
+  }
+
 -- | Parsed/renamed programs
 type PsProgram = Program Sym
 type RnProgram = Program Name
@@ -350,6 +358,10 @@ type RnInsDecl = InsDecl Name
 -- | Parsed/renamed datatype declarations
 type PsDataDecl = DataDecl Sym
 type RnDataDecl = DataDecl Name
+
+-- | Parsed/renamed value bindings
+type PsValBind = ValBind Sym
+type RnValBind = ValBind Name
 
 -- * Additional Syntax For Type Inference And Elaboration
 -- ------------------------------------------------------------------------------
@@ -370,9 +382,15 @@ type AnnClsCs = [AnnClsCt]
 type AnnScheme = Ann DictVar CtrScheme
 type AnnSchemes = [AnnScheme]
 
+-- | Variable-annotated equality constraints
 type AnnEqCt = Ann FcCoVar EqCt
+type AnnEqCs = [AnnEqCt]
 
 type EqAxioms = [FcAxiomInfo]
+
+-- | Variable-annotated equality constraints
+data AnnTypeCt = AnnEqCt AnnEqCt | AnnClsCt AnnClsCt
+type AnnTypeCs = [AnnTypeCt]
 
 -- | The program theory is just a list of name-annotated constrains
 type ProgramTheory = AnnSchemes

@@ -13,10 +13,13 @@ instance Eq Bool where
   eq = \a. \b.
     case a of
        True -> case b of
-                   True  -> True
-                   False -> False
+                 True  -> True
+                 False -> False
        False -> case b of
-                   True  -> False
-                   False -> True
+                  True  -> False
+                  False -> True
 
-\x. x
+id :: forall (a :: *). a -> a
+   =  \x. x
+
+id (eq True False)

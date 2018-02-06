@@ -606,10 +606,6 @@ entail as ((d' :| CtrScheme bs cls_cs (ClsCt cls2 ty2)):schemes) ct@(d :| ClsCt 
              (FcTmVar <$> d''s)
     return $ Just (ann_cls_cs, ev_subst)
   | otherwise = entail as schemes ct
-  where
-    filterClsCs (ClassCt ct:cs) = ct : filterClsCs cs
-    filterClsCs (ct:cs) = filterClsCs cs
-    filterClsCs [] = []
 
 -- | Returns the (transitive) super class constaints of the type class constraint
 -- | using the super class theory.
@@ -979,6 +975,21 @@ elabProgram theory (PgmData data_decl pgm) = do
   (fc_pgm, ty, final_theory) <- elabProgram theory pgm
   let fc_program = FcPgmDataDecl fc_data_decl fc_pgm
   return (fc_program, ty, final_theory)
+
+-- Elaborate a top-level value binding
+elabProgram theory (PgmVal val_bind pgm) = do
+  (fc_val_bind, ext_theory) <- elabValBind theory val_bind
+  (fc_pgm, ty, final_theory) <- elabProgram ext_theory pgm
+  let fc_program = FcPgmValDecl fc_val_bind fc_pgm
+  return (fc_program, ty, final_theory)
+  where
+    elabValBind theory (ValBind a m_ty tm) = do
+      (ty,fc_tm) <- case m_ty of
+        Nothing -> elabTermSimpl (ftDropSuper theory) tm
+        Just ty -> do
+          fc_tm <- elabTermWithSig [] theory tm ty
+          return (ty,fc_tm)
+      return undefined
 
 -- * Invoke the complete type checker
 -- ------------------------------------------------------------------------------
