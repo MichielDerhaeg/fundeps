@@ -625,6 +625,7 @@ instance (Symable a, PrettyPrint a) => PrettyPrint (Program a) where
   ppr (PgmCls  cdecl pgm) = ppr cdecl $$ ppr pgm
   ppr (PgmInst idecl pgm) = ppr idecl $$ ppr pgm
   ppr (PgmData ddecl pgm) = ppr ddecl $$ ppr pgm
+  ppr (PgmVal  vdecl pgm) = ppr vdecl $$ ppr pgm
 
   needsParens _ = False
 
@@ -671,6 +672,15 @@ instance (Symable a, PrettyPrint a) => PrettyPrint (DataDecl a) where
         []               -> []
         ((dc, tys):rest) -> hsep (colorDoc yellow (char '=') : ppr dc : map pprPar tys) : map ppr_dc rest
 
+  needsParens _ = False
+
+-- | Pretty print a top-level value binding
+instance (Symable a, PrettyPrint a) => PrettyPrint (ValBind a) where
+  ppr (ValBind a m_ty tm) = ppr a <+> pprTy <+> equals <+> ppr tm
+    where
+      pprTy = case m_ty of
+        Nothing -> empty
+        Just ty -> dcolon <+> ppr ty
   needsParens _ = False
 
 -- | Pretty print equality constraints

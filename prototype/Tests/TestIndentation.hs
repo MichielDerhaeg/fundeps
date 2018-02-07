@@ -22,4 +22,6 @@ instance Eq Bool where
 id :: forall (a :: *). a -> a
    =  \x. x
 
-id (eq True False)
+main = id (eq True False)
+
+main
