@@ -264,11 +264,11 @@ pTerm  =  pAppTerm
           <*> (pTmVar <&> (symbol "=" *> pTerm))
           <*  symbol "in"
           <*> pTerm
-      <|>  indent (TmCase
+      <|> TmCase
           <$  symbol "case"
           <*> pTerm
           <*  symbol "of"
-          <*> some (indent pAlt))
+          <*> some (indent pAlt)
 
 -- | Parse a pattern
 pPat :: PsM PsPat

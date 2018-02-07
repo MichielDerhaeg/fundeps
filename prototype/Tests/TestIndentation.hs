@@ -10,14 +10,13 @@ class Eq (a :: *) where
   eq :: a -> a -> Bool
 
 instance Eq Bool where
-  eq = \a. \b.
-    case a of
+  eq = \a. \b. case a of
        True -> case b of
-                 True  -> True
-                 False -> False
+         True  -> True
+         False -> False
        False -> case b of
-                  True  -> False
-                  False -> True
+         True  -> False
+         False -> True
 
 id :: forall (a :: *). a -> a
    =  \x. x
