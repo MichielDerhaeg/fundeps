@@ -61,7 +61,9 @@ notInCtxM ::
   => src
   -> m ()
 notInCtxM x = ask >>= \ctx -> case lookupCtx ctx x of
-  Just _ -> throwErrorM (text "notInCtxM" <+> colon <+> ppr x <+> text "is already bound")
+  Just _ -> throwErrorM $
+    text "notInCtxM" <> colon <+>
+      quotes (ppr x) <+> text "is already bound"
   Nothing -> return ()
 
 -- TODO move FcTc stuff to Fc typechecker?

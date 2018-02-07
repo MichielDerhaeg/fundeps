@@ -96,7 +96,7 @@ addTyConInfoRnM tc info = modify $ \s ->
 
 -- | Assign a unique to a plain symbol
 rnSym :: MonadUnique m => Sym -> m Name
-rnSym s = getUniqueM >>= return . mkName s
+rnSym s = mkName s <$> getUniqueM
 
 -- | Rename a method name. It has to be unbound
 rnMethodName :: PsTmVar -> RnM RnTmVar
@@ -333,6 +333,7 @@ rnDataDecl (DataD tc as dcs) = do
 -- | Rename a top-level value binding
 rnValBind :: PsValBind -> RnM (RnValBind, RnCtx)
 rnValBind (ValBind a m_ty tm) = do
+  notInCtxM a
   rn_a <- rnTmVar a
   rn_m_ty <- case m_ty of
     Nothing -> return Nothing
