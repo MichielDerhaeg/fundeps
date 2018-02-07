@@ -50,6 +50,7 @@ buildInitTcEnv pgm (RnEnv _rn_cls_infos dc_infos tc_infos) = do -- GEORGE: Assum
     buildStoreClsInfos (PgmExp {})   = return ()
     buildStoreClsInfos (PgmInst _ p) = buildStoreClsInfos p
     buildStoreClsInfos (PgmData _ p) = buildStoreClsInfos p
+    buildStoreClsInfos (PgmVal  _ p) = buildStoreClsInfos p -- TODO check if correct
     buildStoreClsInfos (PgmCls  c p) = case c of
       ClsD rn_cs rn_cls rn_as rn_fundeps rn_method method_ty -> do
         -- Generate And Store The TyCon Info
@@ -363,10 +364,6 @@ storeAnnCts cs = modify (\(CS eqs ccs) -> CS eqs (mappend ccs cs))
 extendTcCtxTysM :: MonadReader TcCtx m => [RnTyVar] -> m a -> m a
 extendTcCtxTysM []     m = m
 extendTcCtxTysM ty_vars m = foldl (\m' a -> extendCtxM a (kindOf a) m') m ty_vars
-
--- | Set the typing environment
-setTcCtxTmM :: MonadReader TcCtx m => TcCtx -> m a -> m a
-setTcCtxTmM ctx = local (\_ -> ctx)
 
 -- * Term Elaboration
 -- ------------------------------------------------------------------------------
@@ -694,6 +691,11 @@ elabClsDecl (ClsD rn_cs cls [a :| _] _fundeps method method_ty) = do
 
   return (fc_data_decl, fc_val_bind, sc_decls, sc_schemes, ty_ctx)
 
+elabClsDecl _ =
+  throwErrorM $
+  text "elabClsDecl" <+> colon <+>
+  text "multi-param type classes not yet supported"
+
 -- | Elaborate a method signature to
 --   a) a top-level binding
 --   b) the actual source type (with the proper class qualification)
@@ -721,7 +723,7 @@ elabMethodSig method a cls sigma = do
   xs <- replicateM (length super_cs +1) freshFcTmVar -- n superclass variables + 1 for the method
 
   -- Annotate the constraints with fresh dictionary variables
-  (ds, ann_cs) <- annotateCts $ cs'
+  (ds, ann_cs) <- annotateCts cs'
   -- elaborate the annotated dictionary variables to System F term binders
   dbinds <- annCtsToTmBinds ann_cs
 
@@ -729,7 +731,7 @@ elabMethodSig method a cls sigma = do
 
   -- Elaborate the dictionary types
   let cs_subst = rnTyVarToFcTyVar a |-> rnTyVarToFcType a'
-  fc_cs_tys <- (fmap (substFcTyInTy cs_subst)) <$> mapM elabClsCt super_cs
+  fc_cs_tys <- fmap (substFcTyInTy cs_subst) <$> mapM elabClsCt super_cs
 
   -- Elaborate the type of the dictionary contained method
   fc_dict_method_ty <- elabPolyTy $ substInPolyTy a_subst sigma
@@ -741,7 +743,7 @@ elabMethodSig method a cls sigma = do
           (FcTmVar (head ds))
           [ FcAlt
               (FcConPat dc mempty mempty (xs |: (fc_cs_tys ++ [fc_dict_method_ty])))
-              (fcDictApp (fcTmTyApp (FcTmVar (last xs)) (fc_bs)) (tail ds))
+              (fcDictApp (fcTmTyApp (FcTmVar (last xs)) fc_bs) (tail ds))
           ]
 
   let fc_val_bind = FcValBind (rnTmVarToFcTmVar method) fc_method_ty fc_method_rhs
@@ -857,7 +859,7 @@ instMethodTy :: RnMonoTy -> RnPolyTy -> RnPolyTy
 instMethodTy typat poly_ty = constructPolyTy (new_as, new_cs, new_ty)
   where
     ((a :| _kind):as,_c:cs,ty) = destructPolyTy poly_ty
-    subst      = (a |-> typat)
+    subst      = a |-> typat
     new_as     = as
     new_cs     = substInClsCs  subst cs
     new_ty     = substInMonoTy subst ty
@@ -915,7 +917,7 @@ elabTermSimpl theory tm = do
   ((mono_ty, fc_tm), wanted_eqs, wanted_ccs) <- runGenM $ elabTerm tm
 
   -- Simplify as much as you can
-  ty_subst <- unify mempty $ wanted_eqs -- Solve the needed equalities first
+  ty_subst <- unify mempty wanted_eqs -- Solve the needed equalities first
 
   let refined_wanted_ccs = substInAnnClsCs      ty_subst wanted_ccs             -- refine the wanted class constraints
   let refined_mono_ty    = substInMonoTy        ty_subst mono_ty                -- refine the monotype
@@ -928,19 +930,34 @@ elabTermSimpl theory tm = do
 
   -- Generalize the type
   let new_mono_ty = refined_mono_ty
-  let new_cs      = map dropLabel (residual_cs) -- refined_wanted_ccs) -- residual_cs)
+  let new_cs      = map dropLabel residual_cs
   let new_as      = untouchables
   let gen_ty      = constructPolyTy (map (\a -> a :| kindOf a) new_as, new_cs, new_mono_ty)
 
   -- Elaborate the term
   let fc_as = map rnTyVarToFcTyVar new_as
-  dbinds   <- annCtsToTmBinds residual_cs -- refined_wanted_ccs --residual_cs
+  dbinds   <- annCtsToTmBinds residual_cs
   let full_fc_tm = fcTmTyAbs fc_as $
                      fcTmAbs dbinds $
-                       substFcTmInTm ev_subst $
-                         refined_fc_tm
+                       substFcTmInTm ev_subst refined_fc_tm
 
   return (gen_ty, full_fc_tm)
+
+-- * Value Binding Elaboration
+-- ------------------------------------------------------------------------------
+
+-- | Elaborate a top-level value binding
+elabValBind :: FullTheory -> RnValBind -> TcM (FcValBind, TcCtx)
+elabValBind theory (ValBind a m_ty tm) = do
+  (ty,fc_tm) <- case m_ty of
+    Nothing -> elabTermSimpl (ftDropSuper theory) tm
+    Just ty -> do
+      fc_tm <- elabTermWithSig [] theory tm ty
+      return (ty,fc_tm)
+  ctx <- ask
+  fc_ty <- elabPolyTy ty
+  let fc_val_bind = FcValBind (rnTmVarToFcTmVar a) fc_ty fc_tm
+  return (fc_val_bind, extendCtx ctx a ty)
 
 -- * Program Elaboration
 -- ------------------------------------------------------------------------------
@@ -957,9 +974,16 @@ elabProgram theory (PgmExp tm) = do
 
 -- Elaborate a class declaration
 elabProgram theory (PgmCls cls_decl pgm) = do
-  (fc_data_decl, fc_val_bind, fc_sc_proj, ext_theory, ext_ty_env)  <- elabClsDecl cls_decl
-  (fc_pgm, ty, final_theory) <- setTcCtxTmM ext_ty_env (elabProgram (theory `ftExtendSuper` ext_theory) pgm)
-  let fc_program = FcPgmDataDecl fc_data_decl (FcPgmValDecl fc_val_bind (foldl (flip FcPgmValDecl) fc_pgm fc_sc_proj))
+  (fc_data_decl, fc_val_bind, fc_sc_proj, ext_theory, ext_ty_env) <-
+    elabClsDecl cls_decl
+  (fc_pgm, ty, final_theory) <-
+    setCtxM ext_ty_env (elabProgram (theory `ftExtendSuper` ext_theory) pgm)
+  let fc_program =
+        FcPgmDataDecl
+          fc_data_decl
+          (FcPgmValDecl
+             fc_val_bind
+             (foldl (flip FcPgmValDecl) fc_pgm fc_sc_proj))
   return (fc_program, ty, final_theory)
 
 -- | Elaborate a class instance
@@ -978,18 +1002,10 @@ elabProgram theory (PgmData data_decl pgm) = do
 
 -- Elaborate a top-level value binding
 elabProgram theory (PgmVal val_bind pgm) = do
-  (fc_val_bind, ext_theory) <- elabValBind theory val_bind
-  (fc_pgm, ty, final_theory) <- elabProgram ext_theory pgm
+  (fc_val_bind, ext_ctx) <- elabValBind theory val_bind
+  (fc_pgm, ty, final_theory) <- setCtxM ext_ctx $ elabProgram theory pgm
   let fc_program = FcPgmValDecl fc_val_bind fc_pgm
   return (fc_program, ty, final_theory)
-  where
-    elabValBind theory (ValBind a m_ty tm) = do
-      (ty,fc_tm) <- case m_ty of
-        Nothing -> elabTermSimpl (ftDropSuper theory) tm
-        Just ty -> do
-          fc_tm <- elabTermWithSig [] theory tm ty
-          return (ty,fc_tm)
-      return undefined
 
 -- * Invoke the complete type checker
 -- ------------------------------------------------------------------------------
