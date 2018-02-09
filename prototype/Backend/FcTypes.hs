@@ -281,13 +281,16 @@ type FcAlts = [FcAlt]
 
 -- TODO find better location
 data MatchCtx
-  = MCtxHole
-  | MCtxCase FcTmVar FcPat MatchCtx
+  = MCtxHole                                -- ^ Match context hole
+  | MCtxCase FcTmVar FcPat MatchCtx         -- ^ case d of p -> E
+  | MCtxLet  FcTmVar FcType FcTerm MatchCtx -- ^ let d : TC = e in E
 
 matchCtxApply :: MatchCtx -> FcTerm -> FcTerm
 matchCtxApply MCtxHole t = t
 matchCtxApply (MCtxCase d p e) t =
-  FcTmCase (FcTmVar d) [(FcAlt p (matchCtxApply e t))]
+  FcTmCase (FcTmVar d) [FcAlt p (matchCtxApply e t)]
+matchCtxApply (MCtxLet d ty e ctx) t =
+  FcTmLet d ty e (matchCtxApply ctx t)
 
 -- * Some smart constructors (uncurried variants)
 -- ----------------------------------------------------------------------------
