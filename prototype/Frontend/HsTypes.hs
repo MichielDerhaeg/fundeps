@@ -326,11 +326,12 @@ data ClsDecl a = ClsD { cabs    :: [HsTyVarWithKind a] -- ^ TODO
                       , cmety   :: PolyTy a }          -- ^ Method type
 
 -- | Instance declaration
-data InsDecl a = InsD { icons :: ClsCs a        -- ^ Constraints
-                      , iname :: Class a        -- ^ Class name
-                      , ivar  :: HsTyPat a      -- ^ Instance type
-                      , imena :: HsTmVar a      -- ^ Method name
-                      , imetm :: Term a }       -- ^ Method term
+data InsDecl a = InsD { iabs  :: [HsTyVarWithKind a] -- ^ TODO
+                      , icons :: ClsCs a             -- ^ Constraints
+                      , iname :: Class a             -- ^ Class name
+                      , ivars :: [MonoTy a]          -- ^ Instance type
+                      , imena :: HsTmVar a           -- ^ Method name
+                      , imetm :: Term a }            -- ^ Method term
 
 -- | Datatype Declaration
 data DataDecl a = DataD { dtycon    :: HsTyCon a                     -- ^ Type constructor
@@ -660,7 +661,7 @@ instance (Symable a, PrettyPrint a) => PrettyPrint (ClsDecl a) where
 
 -- | Pretty print class instances
 instance (Symable a, PrettyPrint a) => PrettyPrint (InsDecl a) where
-  ppr (InsD cs cName cTy mName mExp)
+  ppr (InsD _ cs cName cTy mName mExp)
     = hang (colorDoc green (text "instance") <+> pprCs cs <+> darrow <+> ppr cName <+> pprPar cTy <+> colorDoc green (text "where"))
            2
            (ppr mName <+> equals <+> ppr mExp)

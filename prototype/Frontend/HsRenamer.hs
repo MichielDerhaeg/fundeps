@@ -270,22 +270,20 @@ rnClsDecl (ClsD bs cs cls as fundeps method method_ty) = do
 
 -- | Rename an instance declaration
 rnInsDecl :: PsInsDecl -> RnM RnInsDecl
-rnInsDecl (InsD cs cls_name ty_pat method_name method_tm) = do
-  rn_cls_name     <- rnClass cls_name                        -- rename the class name
-
-  tyvars <- mapM rnTyVar (ftyvsOf ty_pat) -- collect and rename all bound variables
-
-  (rn_ty_pat, bv) <- extendKindedVarsCtxM tyvars (rnTyPat ty_pat) -- rename the type pattern
-  rn_cs           <- extendKindedVarsCtxM bv (mapM rnClsCt cs)  -- rename the instance context
-  rn_method_name  <- lookupMethodName method_name             -- rename the method name
+rnInsDecl (InsD as cs cls_name tys method_name method_tm) = do
+  rn_cls_name     <- rnClass cls_name
+  rn_as           <- mapM rnTyVar as
+  rn_tys          <- extendCtxM (labelOf as) rn_as (mapM rnMonoTy tys)
+  rn_cs           <- extendCtxM (labelOf as) rn_as (mapM rnClsCt cs)
+  rn_method_name  <- lookupMethodName method_name
 
   -- Ensure the method name is for the class we are checking
   expected_method_name <- lookupClassMethodName cls_name
   unless (rn_method_name == expected_method_name) $
     rnFail (ppr method_name <+> text "does not belong to class" <+> ppr cls_name)
 
-  rn_method_tm    <- rnTerm method_tm                        -- rename the method implementation
-  return (InsD rn_cs rn_cls_name rn_ty_pat rn_method_name rn_method_tm)
+  rn_method_tm    <- rnTerm method_tm
+  return (InsD (rn_as |: (kindOf <$> rn_as)) rn_cs rn_cls_name rn_tys rn_method_name rn_method_tm)
 
 extendKindedVarsCtxM :: [RnTyVar] -> RnM a -> RnM a
 extendKindedVarsCtxM []     m = m

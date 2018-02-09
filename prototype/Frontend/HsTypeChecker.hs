@@ -784,10 +784,10 @@ extendCtxKindAnnotatedTysM ann_as = extendCtxM as (map kindOf as)
 --   a) The dictionary transformer implementation
 --   b) The extended program theory
 elabInsDecl :: FullTheory -> RnInsDecl -> TcM (FcValBind, FullTheory)
-elabInsDecl theory (InsD ins_cs cls typat method method_tm) = do
-  let bs      = ftyvsOf typat
+elabInsDecl theory (InsD as ins_cs cls [ty] method method_tm) = do
+  let bs      = as
   let fc_bs   = map (rnTyVarToFcTyVar . labelOf) bs
-  let head_ct = ClsCt cls [hsTyPatToMonoTy typat]
+  let head_ct = ClsCt cls [ty]
 
   -- Ensure the instance does not overlap
   overlapCheck theory head_ct
@@ -818,13 +818,13 @@ elabInsDecl theory (InsD ins_cs cls typat method method_tm) = do
 
   -- Elaborate the method implementation
   fc_method_tm <- do
-    expected_method_ty <- instMethodTy (hsTyPatToMonoTy typat) <$> lookupCtxM method
+    expected_method_ty <- instMethodTy ty <$> lookupCtxM method
     elabTermWithSig (labelOf bs) local_theory method_tm expected_method_ty
 
   -- Entail the superclass constraints
   fc_super_tms <- do
     a <- lookupClsParam cls
-    (ds, super_cs) <- substVar a (hsTyPatToMonoTy typat) <$>
+    (ds, super_cs) <- substVar a ty <$>
                         lookupClsSuper cls >>= annotateCts
 
     (residual_cs, ev_subst) <- simplify
@@ -843,11 +843,11 @@ elabInsDecl theory (InsD ins_cs cls typat method method_tm) = do
   fc_dict_transformer <- do
     binds <- annCtsToTmBinds ann_ins_cs
     dc    <- lookupClsDataCon cls
-    pat_ty <- elabMonoTy (hsTyPatToMonoTy typat)
+    fc_ty <- elabMonoTy ty
     return $ substFcTmInTm closure_ev_subst $
       fcTmTyAbs fc_bs $
         fcTmAbs binds $
-           fcDataConApp dc pat_ty (fc_super_tms ++ [fc_method_tm])
+           fcDataConApp dc fc_ty (fc_super_tms ++ [fc_method_tm])
 
   -- Resulting dictionary transformer
   let fc_val_bind = FcValBind ins_d dtrans_ty fc_dict_transformer

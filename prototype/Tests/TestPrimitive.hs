@@ -46,7 +46,7 @@ instance Ord Nat where
                                 Zero  -> False
                                 Succ b' -> lessOrEqualThan a' b'
 
-instance Eq a => Eq (List (a :: *)) where
+instance forall (a :: *). Eq a => Eq (List a) where
   eq =
     \a. \b. case a of
               Nil -> case b of

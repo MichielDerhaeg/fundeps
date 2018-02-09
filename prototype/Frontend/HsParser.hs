@@ -129,9 +129,7 @@ pProgram  =  PgmCls  <$> pClsDecl  <*> pProgram
 pClsDecl :: PsM PsClsDecl
 pClsDecl  =  indent $ (\bs ctx cls as fds (m,ty) -> ClsD bs ctx cls as fds m ty)
          <$  symbol "class"
-         <*  symbol "forall"
-         <*> some (parens pTyVarWithKind)
-         <*  symbol "."
+         <*> pClassAbs
          <*> pClassCts
          <*> pClass
          <*> some pTyVar
@@ -141,11 +139,12 @@ pClsDecl  =  indent $ (\bs ctx cls as fds (m,ty) -> ClsD bs ctx cls as fds m ty)
 
 -- | Parse an instance declaration
 pInstDecl :: PsM PsInsDecl
-pInstDecl  =  indent $ (\ctx cls ty (m,tm) -> InsD ctx cls ty m tm)
+pInstDecl  =  indent $ (\as ctx cls ty (m,tm) -> InsD as ctx cls ty m tm)
           <$  symbol "instance"
+          <*> pClassAbs
           <*> pClassCts
           <*> pClass
-          <*> pPrimTyPat
+          <*> some pPrimTy
           <*  symbol "where"
           <*> (pTmVar <&> (symbol "=" *> pTerm))
 
@@ -240,6 +239,13 @@ pClassCts  =  option [] . try
 -- | Parse a kind-annotated type variable (without the parentheses!!)
 pTyVarWithKind :: PsM PsTyVarWithKind
 pTyVarWithKind = liftA2 (:|) pTyVar (symbol "::" *> pKind)
+
+-- | Parse a type abstraction the context of a class/instance declaration
+pClassAbs :: PsM [PsTyVarWithKind]
+pClassAbs  =  option []
+           $  symbol "forall"
+           *> some (parens pTyVarWithKind)
+          <*  symbol "."
 
 -- * Parse terms
 -- ------------------------------------------------------------------------------
