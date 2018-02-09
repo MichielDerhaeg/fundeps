@@ -127,11 +127,14 @@ pProgram  =  PgmCls  <$> pClsDecl  <*> pProgram
 
 -- | Parse a class declaration
 pClsDecl :: PsM PsClsDecl
-pClsDecl  =  indent $ (\ctx cls as fds (m,ty) -> ClsD ctx cls as fds m ty)
+pClsDecl  =  indent $ (\bs ctx cls as fds (m,ty) -> ClsD bs ctx cls as fds m ty)
          <$  symbol "class"
+         <*  symbol "forall"
+         <*> some (parens pTyVarWithKind)
+         <*  symbol "."
          <*> pClassCts
          <*> pClass
-         <*> some (parens pTyVarWithKind)
+         <*> some pTyVar
          <*> pFundeps
          <*  symbol "where"
          <*> (pTmVar <&> (symbol "::" *> pPolyTy))
@@ -225,14 +228,14 @@ pKind = chainr1 (parens pKind <|> (KStar <$ symbol "*")) (KArr <$ symbol "->")
 
 -- | Parse a class constraint
 pClassCtr :: PsM PsClsCt
-pClassCtr = ClsCt <$> pClass <*> pPrimTy
+pClassCtr = ClsCt <$> pClass <*> some pPrimTy
 
 -- | Parse a class/instance context
 pClassCts :: PsM PsClsCs
-pClassCts = option [] . try
-   $  (parens (commaSep pClassCtr)
-  <|> (pure <$> pClassCtr))
-  <* symbol "=>"
+pClassCts  =  option [] . try
+           $  (parens (commaSep pClassCtr)
+          <|> (pure <$> pClassCtr))
+          <*  symbol "=>"
 
 -- | Parse a kind-annotated type variable (without the parentheses!!)
 pTyVarWithKind :: PsM PsTyVarWithKind

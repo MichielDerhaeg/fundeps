@@ -148,7 +148,7 @@ rnQualTy (QQual ct ty) = QQual <$> rnClsCt ct <*> rnQualTy ty
 
 -- | Rename a class constraint
 rnClsCt :: PsClsCt -> RnM RnClsCt
-rnClsCt (ClsCt cls ty) = ClsCt <$> rnClass cls <*> rnMonoTy ty
+rnClsCt (ClsCt cls tys) = ClsCt <$> rnClass cls <*> mapM rnMonoTy tys
 
 -- | Rename a functional dependency
 rnFundep :: PsFundep -> RnM RnFundep
@@ -224,9 +224,8 @@ extendTyVars binds m = extendCtxM as as' m
 -- ------------------------------------------------------------------------------
 
 -- | Rename a class declaration
--- GEORGE: It does not return the environment extension, rather the extended environment.
 rnClsDecl :: PsClsDecl -> RnM (RnClsDecl, RnCtx)
-rnClsDecl (ClsD cs cls as fundeps method method_ty) = do
+rnClsDecl (ClsD bs cs cls as fundeps method method_ty) = do
   -- Rename the class name
   rn_cls <- do
     cls_infos <- getClsInfoRnM
@@ -240,26 +239,30 @@ rnClsDecl (ClsD cs cls as fundeps method method_ty) = do
   -- Store the class info in the global environment
   addClsInfoRnM cls (RnClsInfo rn_cls rn_method)
 
-  -- Rename the type arguments
-  rn_as <- mapM rnTyVar as
+  -- Rename the type abstractions
+  rn_bs <- mapM rnTyVar bs
 
-  -- Rename the superclass constraints
-  rn_cs <- extendCtxM (labelOf as) rn_as (mapM rnClsCt cs)
+  -- Rename the class context
+  rn_cs <- extendCtxM (labelOf bs) rn_bs (mapM rnClsCt cs)
+
+  -- Rename the type variables
+  rn_as <- extendCtxM (labelOf bs) rn_bs $ mapM lookupCtxM as
 
   -- Rename the functional dependencies
-  rn_fundeps <- extendCtxM (labelOf as) rn_as (mapM rnFundep fundeps)
+  rn_fundeps <- extendCtxM as rn_as (mapM rnFundep fundeps)
 
   -- Rename the method type
-  rn_method_ty <- extendCtxM (labelOf as) rn_as (rnPolyTy method_ty)
+  rn_method_ty <- extendCtxM as rn_as (rnPolyTy method_ty)
 
   -- Get the current typing environment (so that we can extend it with the method binding)
   rn_ctx <- ask
 
   return
     ( ClsD
+        (rn_bs |: (kindOf <$> rn_bs))
         rn_cs
         rn_cls
-        (rn_as |: (kindOf <$> rn_as))
+        rn_as
         rn_fundeps
         rn_method
         rn_method_ty

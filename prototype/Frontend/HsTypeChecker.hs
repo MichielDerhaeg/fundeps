@@ -52,10 +52,10 @@ buildInitTcEnv pgm (RnEnv _rn_cls_infos dc_infos tc_infos) = do -- GEORGE: Assum
     buildStoreClsInfos (PgmData _ p) = buildStoreClsInfos p
     buildStoreClsInfos (PgmVal  _ p) = buildStoreClsInfos p -- TODO check if correct
     buildStoreClsInfos (PgmCls  c p) = case c of
-      ClsD rn_cs rn_cls rn_as rn_fundeps rn_method method_ty -> do
+      ClsD _rn_abs rn_cs rn_cls rn_as rn_fundeps rn_method method_ty -> do
         -- Generate And Store The TyCon Info
         rn_tc <- HsTC . mkName (mkSym ("T" ++ (show $ symOf rn_cls))) <$> getUniqueM
-        let tc_info = HsTCInfo rn_tc (labelOf rn_as) (FcTC (nameOf rn_tc))
+        let tc_info = HsTCInfo rn_tc rn_as (FcTC (nameOf rn_tc))
         addTyConInfoTcM rn_tc tc_info
 
         -- Generate And Store The DataCon Info
@@ -63,7 +63,7 @@ buildInitTcEnv pgm (RnEnv _rn_cls_infos dc_infos tc_infos) = do -- GEORGE: Assum
         let dc_info =
               HsDCClsInfo
                 rn_dc
-                (labelOf rn_as)
+                rn_as
                 rn_tc
                 rn_cs
                 [method_ty]
@@ -75,7 +75,7 @@ buildInitTcEnv pgm (RnEnv _rn_cls_infos dc_infos tc_infos) = do -- GEORGE: Assum
               ClassInfo
                 rn_cs
                 rn_cls
-                (labelOf rn_as)
+                rn_as
                 rn_fundeps
                 rn_method
                 method_ty
@@ -251,7 +251,7 @@ wfElabQualTy (QQual ct ty) = do
 
 -- | Elaborate a class constraint
 wfElabClsCt :: RnClsCt -> TcM FcType
-wfElabClsCt (ClsCt cls ty) = do
+wfElabClsCt (ClsCt cls [ty]) = do
   (ty_kind, fc_ty) <- wfElabMonoTy ty
   clsArgKinds cls >>= \case
     [k] | k == ty_kind -> do
@@ -293,7 +293,7 @@ elabMonoTy (TyVar v)       = return (rnTyVarToFcType v)
 
 -- | Elaborate a class constaint
 elabClsCt :: RnClsCt -> TcM FcType
-elabClsCt (ClsCt cls ty) =
+elabClsCt (ClsCt cls [ty]) =
   FcTyApp <$> (FcTyCon <$> lookupClsTyCon cls) <*> elabMonoTy ty
 
 -- | Elaborate an equality constraint
@@ -557,14 +557,14 @@ occursCheck a (TyVar b)       = a /= b
 -- ------------------------------------------------------------------------------
 
 overlapCheck :: MonadError CompileError m => FullTheory -> RnClsCt -> m ()
-overlapCheck theory cls_ct@(ClsCt cls1 ty1)
+overlapCheck theory cls_ct@(ClsCt cls1 [ty1])
   -- We only care about the instance theory
  =
   case catMaybes (fmap overlaps (theory_inst theory)) of
     msg:_ -> tcFail msg
     []    -> return ()
   where
-    overlaps (_ :| scheme@(CtrScheme _ _ (ClsCt cls2 ty2)))
+    overlaps (_ :| scheme@(CtrScheme _ _ (ClsCt cls2 [ty2])))
       | cls1 == cls2
       , Right {} <- unify [] [ty1 :~: ty2] =
         Just (text "overlapCheck:" $$ ppr cls_ct $$ ppr scheme)
@@ -590,7 +590,7 @@ simplify as theory (ct:cs) =
 -- | done. May produce additional class constraints.
 entail :: [RnTyVar] -> ProgramTheory -> AnnClsCt -> TcM (Maybe (AnnClsCs, FcTmSubst))
 entail _untch [] _cls_ct = return Nothing
-entail as ((d' :| CtrScheme bs cls_cs (ClsCt cls2 ty2)):schemes) ct@(d :| ClsCt cls1 ty1)
+entail as ((d' :| CtrScheme bs cls_cs (ClsCt cls2 [ty2])):schemes) ct@(d :| ClsCt cls1 [ty1])
   | cls1 == cls2
   , Right ty_subst <- unify as [ty1 :~: ty2] = do
     (d''s, ann_cls_cs) <- annotateCts $ substInClsCs ty_subst cls_cs
@@ -609,7 +609,7 @@ entail as ((d' :| CtrScheme bs cls_cs (ClsCt cls2 ty2)):schemes) ct@(d :| ClsCt 
 closure :: [RnTyVar] -> ProgramTheory -> AnnClsCt -> TcM (AnnClsCs, FcTmSubst)
 closure untchs theory cls_ct = go theory cls_ct
   where
-    go ((d_top :| CtrScheme alphas [ClsCt cls2 ty2] q):schemes) ct@(d :| ClsCt cls1 ty1)
+    go ((d_top :| CtrScheme alphas [ClsCt cls2 [ty2]] q):schemes) ct@(d :| ClsCt cls1 [ty1])
       | cls1 == cls2
       , Right ty_subst <- unify untchs [ty1 :~: ty2] = do
         d' <- freshDictVar
@@ -640,7 +640,7 @@ closureAll as theory cs =
 --   b) The method implementation
 --   c) The extended typing environment
 elabClsDecl :: RnClsDecl -> TcM (FcDataDecl, FcValBind, [FcValBind], ProgramTheory, TcCtx)
-elabClsDecl (ClsD rn_cs cls [a :| _] _fundeps method method_ty) = do
+elabClsDecl (ClsD _ rn_cs cls [a] _fundeps method method_ty) = do
   -- Generate a fresh type and data constructor for the class
   -- GEORGE: They should already be generated during renaming.
   tc <- lookupClsTyCon   cls
@@ -665,8 +665,8 @@ elabClsDecl (ClsD rn_cs cls [a :| _] _fundeps method method_ty) = do
     d  <- freshDictVar -- For the declaration
     da <- freshDictVar -- For the input dictionary
 
-    let cls_head  = ClsCt cls (TyVar a) -- TC a
-    fc_cls_head <- elabClsCt cls_head   -- T_TC a
+    let cls_head  = ClsCt cls [TyVar a] -- TC a
+    fc_cls_head  <- elabClsCt cls_head  -- T_TC a
 
     -- forall a. TC a => SC
     let scheme = CtrScheme [a :| kindOf a] [cls_head] sc_ct
@@ -707,7 +707,7 @@ elabMethodSig method a cls sigma = do
   (bs',bs_subst) <- freshenRnTyVars (labelOf bs)
   let new_as = a':bs'
   let subst = a_subst <> bs_subst
-  let cs' = substInClsCs subst (ClsCt cls (TyVar a):cs)
+  let cs' = substInClsCs subst (ClsCt cls [TyVar a]:cs)
   let ty' = substInMonoTy subst ty
 
   -- Source and target method types
@@ -787,7 +787,7 @@ elabInsDecl :: FullTheory -> RnInsDecl -> TcM (FcValBind, FullTheory)
 elabInsDecl theory (InsD ins_cs cls typat method method_tm) = do
   let bs      = ftyvsOf typat
   let fc_bs   = map (rnTyVarToFcTyVar . labelOf) bs
-  let head_ct = ClsCt cls (hsTyPatToMonoTy typat)
+  let head_ct = ClsCt cls [hsTyPatToMonoTy typat]
 
   -- Ensure the instance does not overlap
   overlapCheck theory head_ct

@@ -288,7 +288,7 @@ constructQualTy (cs, ty) = foldr QQual (QMono ty) cs
 -- ------------------------------------------------------------------------------
 
 -- | Class constraint(s)
-data ClsCt a = ClsCt (Class a) (MonoTy a)
+data ClsCt a = ClsCt (Class a) [MonoTy a]
 type ClsCs a = [ClsCt a]
 
 -- | Parsed class constraints(s)
@@ -317,9 +317,10 @@ data Program a = PgmExp  (Term a)                 -- ^ Expression
                | PgmVal  (ValBind  a) (Program a) -- ^ Value Binding
 
 -- | Class declaration
-data ClsDecl a = ClsD { csuper  :: ClsCs a             -- ^ Superclass constraints
+data ClsDecl a = ClsD { cabs    :: [HsTyVarWithKind a] -- ^ TODO
+                      , csuper  :: ClsCs a             -- ^ Superclass constraints
                       , cname   :: Class a             -- ^ Class name
-                      , cvars   :: [HsTyVarWithKind a] -- ^ Type variables
+                      , cvars   :: [HsTyVar a]         -- ^ Type variables
                       , cfds    :: [Fundep a]          -- ^ Functional dependencies
                       , cmena   :: HsTmVar a           -- ^ Method name
                       , cmety   :: PolyTy a }          -- ^ Method type
@@ -597,7 +598,7 @@ instance (Symable a, PrettyPrint a) => PrettyPrint (QualTy a) where
 -- | Pretty print polytypes
 instance (Symable a, PrettyPrint a) => PrettyPrint (PolyTy a) where
   ppr (PQual   ty) = ppr ty
-  ppr (PPoly a ty) = text "forall" <+> ppr a <> dot <+> ppr ty
+  ppr (PPoly a ty) = forall <> ppr a <> dot <+> ppr ty
 
   needsParens (PQual ty) = needsParens ty
   needsParens (PPoly {}) = True
@@ -606,7 +607,7 @@ instance (Symable a, PrettyPrint a) => PrettyPrint (PolyTy a) where
 instance PrettyPrint CtrScheme where
   ppr (CtrScheme as cs cls) =
     (foldr
-       (\a b -> text "forall" <+> ppr a <> dot <+> b)
+       (\a b -> forall <> ppr a <> dot <+> b)
        (pprCs cs <+> ppr cls)
        as)
     where
@@ -616,7 +617,7 @@ instance PrettyPrint CtrScheme where
 
 -- | Pretty print class constraints
 instance (Symable a, PrettyPrint a) => PrettyPrint (ClsCt a) where
-  ppr (ClsCt cls ty) = ppr cls <+> pprPar ty
+  ppr (ClsCt cls tys) = ppr cls <+> hsep (pprPar <$> tys)
   needsParens _      = True
 
 -- | Pretty print programs
@@ -631,18 +632,24 @@ instance (Symable a, PrettyPrint a) => PrettyPrint (Program a) where
 
 -- | Pretty print class declarations
 instance (Symable a, PrettyPrint a) => PrettyPrint (ClsDecl a) where
-  ppr (ClsD cs cName cVars cFds mName mTy) =
+  ppr (ClsD cAbs cs cName cVars cFds mName mTy) =
     hang
       (colorDoc green (text "class") <+>
-       pprCs cs <+>
-       darrow <+> ppr cName <+> hsep (fmap ppr cVars)
+       forall <>
+       hsep (ppr <$> cAbs) <>
+       dot <+>
+       pprCs <+>
+       ppr cName <+> hsep (fmap ppr cVars)
        <+> pprFds
        <+> colorDoc green (text "where")
       )
       2
       (ppr (symOf mName) <+> dcolon <+> ppr mTy)
     where
-      pprCs = parens . sep . punctuate comma . map ppr
+      pprCs =
+        if null cs
+          then empty
+          else (parens . sep $ punctuate comma (ppr <$> cs)) <+> darrow
       pprFds =
         if null cFds
           then empty

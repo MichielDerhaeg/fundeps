@@ -5,7 +5,7 @@ module Utils.PrettyPrint
 , hcat, hsep, vcat, sep, cat, fsep, fcat
 , parens, brackets, braces, quotes, doubleQuotes
 , maybeParens, maybeBrackets, maybeBraces, maybeQuotes, maybeDoubleQuotes
-, nest, hang, punctuate
+, nest, hang, punctuate, forall
 , text, int, integer, rational, double, float, char
 , empty, blankLine, semi, comma, colon, space, equals
 , lparen, rparen, lbrack, rbrack, lbrace, rbrace
@@ -167,6 +167,9 @@ arrow      = colorDoc yellow $ liftDoc (P.text "->")
 darrow     = colorDoc yellow $ liftDoc (P.text "=>")
 dot        = colorDoc yellow $ liftDoc (P.char '.')
 backslash  = colorDoc yellow $ liftDoc (P.char '\\')
+
+forall :: Doc
+forall = colorDoc yellow . liftDoc $ P.char '\8704'
 
 -- | Rendering Docs
 -- ----------------------------------------------------------------------------

@@ -6,15 +6,15 @@ data Nat = Succ Nat | Zero
 
 data Maybe (a:: *) = Just a | Nothing
 
-class Eq (a :: *) where
+class forall (a :: *). Eq a where
   eq :: a -> a -> Bool
 
 
-class Eq a => Ord (a :: *) where
+class forall (a :: *). Eq a => Ord a where
   lessOrEqualThan :: a -> a -> Bool
 
 
-class Functor (f :: * -> *) where
+class forall (f :: * -> *). Functor f where
   fmap :: forall (a :: *). forall (b :: *). (a -> b) -> f a -> f b
 
 
@@ -64,5 +64,5 @@ instance Functor List where
               Nil -> Nil
               Cons x xs -> Cons (f x) (fmap f xs)
 
-let {id = \x. x } in
-\a. \b . eq (fmap id a) b
+let id = \x. x in
+  \a. \b . eq (fmap id a) b
