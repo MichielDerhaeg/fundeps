@@ -1,6 +1,8 @@
 ====
 TODO
 ====
+  * remove typat stuff if ok
+
   * generate projection functions
   * determinacy relation
   * contraint generation
