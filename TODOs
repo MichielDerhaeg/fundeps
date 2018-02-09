@@ -1,11 +1,15 @@
-
-- Fundeps parser
-- System F -> System Fc
-    * Evaluator
+====
+TODO
+====
+  * generate projection functions
+  * determinacy relation
+  * contraint generation
+  * type unification
 
 ------
 Extras
 ------
-+ Type Families
-+ GADTs
-+ don't translate environments to fc, just use the program info
+  + Type Families
+  + GADTs
+  + don't translate environments to fc, just use the program info
+  + SystemFc to GHC Haskell
