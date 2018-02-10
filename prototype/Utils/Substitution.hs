@@ -38,6 +38,7 @@ instance SubstVar RnTyVar RnMonoTy RnMonoTy where
       | otherwise -> TyVar b
     TyCon tc      -> TyCon tc
     TyApp ty1 ty2 -> TyApp (substVar a ty ty1) (substVar a ty ty2)
+    TyFam f tys   -> TyFam f (map (substVar a ty) tys)
 
 -- | Substitute a type variable for a type in a class constraint
 instance SubstVar RnTyVar RnMonoTy RnClsCt where

@@ -146,7 +146,7 @@ instance PrettyPrint FcDataConInfo where
       ]
   needsParens _ = False
 
--- TODO doc
+-- TODO doc TODO rename to FcFam or something like that
 newtype FcFamVar = FcFV { unFcFV :: Name }
   deriving (Eq, Ord, Symable, Named, Uniquable)
 
@@ -374,7 +374,7 @@ instance PrettyPrint FcType where
          = d1 <+> arrow <+> d2
 
   ppr (FcTyVar a)       = ppr a
-  ppr (FcTyAbs a ty)    = text "forall" <+> ppr a <> dot <+> ppr ty
+  ppr (FcTyAbs a ty)    = forall <> ppr a <> dot <+> ppr ty
   ppr (FcTyApp ty1 ty2)
     | FcTyApp {} <- ty1 = ppr ty1    <+> pprPar ty2
     | otherwise         = pprPar ty1 <+> pprPar ty2
@@ -507,7 +507,7 @@ instance PrettyPrint FcCoercion where
   ppr (FcCoLeft co) = text "left" <+> ppr co
   ppr (FcCoRight co) = text "right" <+> ppr co
   ppr (FcCoFam f crcs) = ppr f <> parens (sep (punctuate comma (map ppr crcs)))
-  ppr (FcCoAbs a co) = text "forall" <+> ppr a <> dot <+> ppr co
+  ppr (FcCoAbs a co) = forall <> ppr a <> dot <+> ppr co
   ppr (FcCoInst co1 co2) = ppr co1 <+> brackets (ppr co2)
   ppr (FcCoQual psi co) = ppr psi <+> darrow <+> ppr co
   ppr (FcCoQInst co1 co2) = ppr co1 <+> text "@" <+> ppr co2

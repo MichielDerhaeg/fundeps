@@ -1,5 +1,6 @@
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
 
 module Frontend.HsTypes where
 
@@ -148,7 +149,7 @@ instance (Symable a, PrettyPrint a) => PrettyPrint (HsPat a) where
 -- | Type Pattern
 data HsTyPat a = HsTyConPat (HsTyCon a)             -- ^ Type Constructor pattern
                | HsTyAppPat (HsTyPat a) (HsTyPat a) -- ^ Type Application pattern
-               | HsTyVarPat (HsTyVarWithKind a)     -- ^ Type Variable pattern
+               | HsTyVarPat (HsTyVar a)             -- ^ Type Variable pattern
 
 -- | Parsed/renamed monotype
 type PsTyPat = HsTyPat Sym
@@ -163,15 +164,33 @@ type RnTyVarWithKind = HsTyVarWithKind Name
 hsTyPatToMonoTy :: HsTyPat a -> MonoTy a
 hsTyPatToMonoTy (HsTyConPat tc)           = TyCon tc
 hsTyPatToMonoTy (HsTyAppPat pat1 pat2)    = TyApp (hsTyPatToMonoTy pat1) (hsTyPatToMonoTy pat2)
-hsTyPatToMonoTy (HsTyVarPat (a :| _kind)) = TyVar a
+hsTyPatToMonoTy (HsTyVarPat a)            = TyVar a
+
+-- * Type Families
+-- ------------------------------------------------------------------------------
+
+-- | Type Family
+newtype HsTyFam a = HsTF { unHsTF :: a }
+  deriving (Eq, Ord, Uniquable, Symable, Named, PrettyPrint)
+
+-- | Parsed/renamed type family
+type PsTyFam = HsTyFam Sym
+type RnTyFam = HsTyFam Name
+
+data HsTyFamInfo = HsTFInfo
+  { hs_tf_fam       :: RnTyFam   -- ^ The Type Family name
+  , hs_tf_type_args :: [RnTyVar] -- ^ Universal types
+  , hs_tf_fc_fam    :: FcFamVar  -- ^ Elaborated Type Family
+  }
 
 -- * Types and Constraints
 -- ------------------------------------------------------------------------------
 
 -- | Monotype
-data MonoTy a = TyCon (HsTyCon a)           -- ^ Type Constructor
-              | TyApp (MonoTy a) (MonoTy a) -- ^ Type Application
-              | TyVar (HsTyVar a)           -- ^ Type variable
+data MonoTy a = TyCon (HsTyCon a)             -- ^ Type Constructor
+              | TyApp (MonoTy a) (MonoTy a)   -- ^ Type Application
+              | TyVar (HsTyVar a)             -- ^ Type variable
+              | TyFam (HsTyFam a) [MonoTy a] -- ^ Type Family application
 
 -- | Parsed/renamed monotype
 type PsMonoTy = MonoTy Sym
@@ -299,6 +318,7 @@ type PsClsCs = ClsCs Sym
 type RnClsCt = ClsCt Name
 type RnClsCs = ClsCs Name
 
+-- | TODO
 data TyCt = TyClsCt RnClsCt | EqCt EqCt
 type TyCs = [TyCt]
 
@@ -329,7 +349,7 @@ data ClsDecl a = ClsD { cabs    :: [HsTyVarWithKind a] -- ^ TODO
 data InsDecl a = InsD { iabs  :: [HsTyVarWithKind a] -- ^ TODO
                       , icons :: ClsCs a             -- ^ Constraints
                       , iname :: Class a             -- ^ Class name
-                      , ivars :: [MonoTy a]          -- ^ Instance type
+                      , ivars :: [HsTyPat a]         -- ^ Instance type
                       , imena :: HsTmVar a           -- ^ Method name
                       , imetm :: Term a }            -- ^ Method term
 
@@ -432,14 +452,8 @@ instance ContainsFreeTyVars (Ann DictVar RnClsCt) RnTyVar where
 
 -- GEORGE: Careful. This does not check that the kinds are the same for every
 -- occurence of a type variable.
-instance Eq a => ContainsFreeTyVars (HsTyPat a) (HsTyVarWithKind a) where
-  ftyvsOf = nub . ftyvsOfTyPat
-    where
-      -- | Free variables of a type pattern (with multiplicities)
-      ftyvsOfTyPat :: HsTyPat a -> [HsTyVarWithKind a]
-      ftyvsOfTyPat (HsTyConPat {})      = []
-      ftyvsOfTyPat (HsTyAppPat ty1 ty2) = ftyvsOfTyPat ty1 ++ ftyvsOfTyPat ty2
-      ftyvsOfTyPat (HsTyVarPat v)       = [v]
+instance Eq a => ContainsFreeTyVars (HsTyPat a) (HsTyVar a) where
+  ftyvsOf = ftyvsOf . hsTyPatToMonoTy
 
 instance Eq a => ContainsFreeTyVars (MonoTy a) (HsTyVar a) where
   ftyvsOf = nub . ftyvsOfMonoTy
@@ -449,6 +463,7 @@ instance Eq a => ContainsFreeTyVars (MonoTy a) (HsTyVar a) where
       ftyvsOfMonoTy (TyCon {})      = []
       ftyvsOfMonoTy (TyApp ty1 ty2) = ftyvsOfMonoTy ty1 ++ ftyvsOfMonoTy ty2
       ftyvsOfMonoTy (TyVar v)       = [v]
+      ftyvsOfMonoTy (TyFam _f tys)  = concatMap ftyvsOfMonoTy tys
 
 instance Eq a => ContainsFreeTyVars (ClsCt a) (HsTyVar a) where
   ftyvsOf (ClsCt _ ty) = ftyvsOf ty
@@ -508,6 +523,16 @@ instance PrettyPrint HsDataConInfo where
 -- | Pretty print class names
 instance Symable a => PrettyPrint (Class a) where
   ppr           = ppr . symOf
+  needsParens _ = False
+
+-- | Pretty print type family info
+instance PrettyPrint HsTyFamInfo where
+  ppr (HsTFInfo fam type_args fc_fam)
+    = braces $ vcat $ punctuate comma
+    $ [ text "hs_tf_fam"       <+> colon <+> ppr fam
+      , text "hs_tf_type_args" <+> colon <+> ppr type_args
+      , text "hs_tf_fc_fam"    <+> colon <+> ppr fc_fam
+      ]
   needsParens _ = False
 
 -- | Pretty print type class info
@@ -581,10 +606,12 @@ instance (Symable a, PrettyPrint a) => PrettyPrint (MonoTy a) where
     | TyApp {} <- ty1 = ppr ty1    <+> pprPar ty2
     | otherwise       = pprPar ty1 <+> pprPar ty2
   ppr (TyVar var)     = ppr var
+  ppr (TyFam f tys)   = ppr f <> (parens . sep . punctuate comma $ map ppr tys)
 
   needsParens (TyCon {}) = False
   needsParens (TyApp {}) = True
   needsParens (TyVar {}) = False
+  needsParens (TyFam {}) = False
 
 -- | Pretty print qualified types
 instance (Symable a, PrettyPrint a) => PrettyPrint (QualTy a) where
@@ -705,6 +732,7 @@ instance (Symable a, PrettyPrint a) => PrettyPrint (Fundep a) where
 
   needsParens _ = False
 
+-- | Pretty print type constraints
 instance PrettyPrint TypeCt where
   ppr (EqualityCt ct) = ppr ct
   ppr (ClassCt ct)    = ppr ct

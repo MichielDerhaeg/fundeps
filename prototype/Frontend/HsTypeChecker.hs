@@ -106,16 +106,20 @@ addTyConInfoTcM tc info = modify $ \s ->
 
 type TcM = UniqueSupplyT (ReaderT TcCtx (StateT TcEnv (Except CompileError)))
 
-data TcEnv = TcEnv { tc_env_cls_info :: AssocList RnClass   ClassInfo
-                   , tc_env_dc_info  :: AssocList RnDataCon HsDataConInfo
-                   , tc_env_tc_info  :: AssocList RnTyCon   HsTyConInfo }
+data TcEnv = TcEnv
+  { tc_env_cls_info :: AssocList RnClass   ClassInfo
+  , tc_env_dc_info  :: AssocList RnDataCon HsDataConInfo
+  , tc_env_tc_info  :: AssocList RnTyCon   HsTyConInfo
+  , tc_env_tf_info  :: AssocList RnTyFam   HsTyFamInfo
+  }
 
 instance PrettyPrint TcEnv where
-  ppr (TcEnv cls_infos dc_infos tc_infos)
+  ppr (TcEnv cls_infos dc_infos tc_infos tf_infos)
     = braces $ vcat $ punctuate comma
     [ text "tc_env_cls_info" <+> colon <+> ppr cls_infos
     , text "tc_env_dc_info"  <+> colon <+> ppr dc_infos
     , text "tc_env_tc_info"  <+> colon <+> ppr tc_infos
+    , text "tc_env_tf_info"  <+> colon <+> ppr tf_infos
     ]
   needsParens _ = False
 
@@ -218,6 +222,14 @@ lookupClsParam cls = do
   case cls_type_args info of
     [a] -> return a
     _   -> tcFail (text "lookupClsParam")
+
+-- | TODO replace old one
+lookupClsParams :: RnClass -> TcM [RnTyVar]
+lookupClsParams cls = cls_type_args <$> lookupTcEnvM tc_env_cls_info cls
+
+-- | Get the functional dependencies of the class
+lookupClsFundeps :: RnClass -> TcM [RnFundep]
+lookupClsFundeps cls = cls_fundeps <$> lookupTcEnvM tc_env_cls_info cls
 
 -- * Type and Constraint Elaboration (With Well-formedness (well-scopedness) Check)
 -- ------------------------------------------------------------------------------
@@ -635,6 +647,16 @@ closureAll :: [RnTyVar] -> ProgramTheory -> AnnClsCs -> TcM (AnnClsCs, FcTmSubst
 closureAll as theory cs =
   ((\(a, b) -> (mconcat a, mconcat b)) . unzip) <$> mapM (closure as theory) cs
 
+-- | Determinacy relation
+--determinacy :: [RnTyVar] -> RnClsCs -> TcM HsTySubst
+--determinacy as cs = go as cs mempty
+--  where
+--    go as [] ty_subst = return ty_subst
+--    go as (ClsCt cls tys:cs) ty_subst = do
+--      as' <- lookupClsParam cls
+--      fds <- lookupClsFundeps cls
+--      undefined
+
 -- | Elaborate a class declaration. Return
 --   a) The data declaration for the class
 --   b) The method implementation
@@ -784,7 +806,8 @@ extendCtxKindAnnotatedTysM ann_as = extendCtxM as (map kindOf as)
 --   a) The dictionary transformer implementation
 --   b) The extended program theory
 elabInsDecl :: FullTheory -> RnInsDecl -> TcM (FcValBind, FullTheory)
-elabInsDecl theory (InsD as ins_cs cls [ty] method method_tm) = do
+elabInsDecl theory (InsD as ins_cs cls [typat] method method_tm) = do
+  let ty = hsTyPatToMonoTy typat
   let bs      = as
   let fc_bs   = map (rnTyVarToFcTyVar . labelOf) bs
   let head_ct = ClsCt cls [ty]
@@ -1031,7 +1054,7 @@ hsElaborate rn_gbl_env us pgm = runExcept
   where
     tc_init_theory  = FT mempty mempty mempty mempty
     tc_init_ctx     = mempty
-    tc_init_gbl_env = TcEnv mempty mempty mempty
+    tc_init_gbl_env = TcEnv mempty mempty mempty mempty
 
 tcFail :: MonadError CompileError m => Doc -> m a
 tcFail = throwError . CompileError HsTypeChecker
