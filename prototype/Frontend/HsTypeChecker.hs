@@ -55,11 +55,15 @@ buildInitTcEnv pgm (RnEnv _rn_cls_infos dc_infos tc_infos) = do -- GEORGE: Assum
       ClsD _rn_abs rn_cs rn_cls rn_as rn_fundeps rn_method method_ty -> do
         -- Generate And Store The TyCon Info
         rn_tc <- HsTC . mkName (mkSym ("T" ++ (show $ symOf rn_cls))) <$> getUniqueM
-        let tc_info = HsTCInfo rn_tc rn_as (FcTC (nameOf rn_tc))
+        let tc_info = HsTCInfo rn_tc rn_as (FcTC (nameOf rn_tc)) [] -- TODO?
         addTyConInfoTcM rn_tc tc_info
 
         -- Generate And Store The DataCon Info
         rn_dc  <- HsDC . mkName (mkSym ("K" ++ (show $ symOf rn_cls))) <$> getUniqueM
+
+        fd_fams <- forM [0..(length rn_fundeps)] $ \i ->
+          HsTF . mkName (mkSym ("F" ++ show (symOf rn_cls) ++ show i)) <$> getUniqueM
+
         let dc_info =
               HsDCClsInfo
                 rn_dc
@@ -77,6 +81,7 @@ buildInitTcEnv pgm (RnEnv _rn_cls_infos dc_infos tc_infos) = do -- GEORGE: Assum
                 rn_cls
                 rn_as
                 rn_fundeps
+                fd_fams
                 rn_method
                 method_ty
                 rn_tc
@@ -125,7 +130,7 @@ instance PrettyPrint TcEnv where
 
 -- | Transform info for a type constructor to the System F variant
 elabHsTyConInfo :: HsTyConInfo -> FcTyConInfo
-elabHsTyConInfo (HsTCInfo _tc as fc_tc) = FcTCInfo fc_tc (map rnTyVarToFcTyVar as)
+elabHsTyConInfo (HsTCInfo _tc as fc_tc _) = FcTCInfo fc_tc (map rnTyVarToFcTyVar as)
 
 elabHsDataConInfo :: HsDataConInfo -> TcM FcDataConInfo
 elabHsDataConInfo (HsDCInfo _dc as tc tys fc_dc) = do
@@ -230,6 +235,13 @@ lookupClsParams cls = cls_type_args <$> lookupTcEnvM tc_env_cls_info cls
 -- | Get the functional dependencies of the class
 lookupClsFundeps :: RnClass -> TcM [RnFundep]
 lookupClsFundeps cls = cls_fundeps <$> lookupTcEnvM tc_env_cls_info cls
+
+-- | TODO
+lookupTyConProj :: RnTyCon -> TcM [RnTyFam]
+lookupTyConProj tc = hs_tc_projs <$> lookupTcEnvM tc_env_tc_info tc
+
+-- | TODO
+lookupClsFDFams cls = cls_fd_fams <$> lookupTcEnvM tc_env_cls_info cls
 
 -- * Type and Constraint Elaboration (With Well-formedness (well-scopedness) Check)
 -- ------------------------------------------------------------------------------
@@ -648,14 +660,41 @@ closureAll as theory cs =
   ((\(a, b) -> (mconcat a, mconcat b)) . unzip) <$> mapM (closure as theory) cs
 
 -- | Determinacy relation
---determinacy :: [RnTyVar] -> RnClsCs -> TcM HsTySubst
---determinacy as cs = go as cs mempty
---  where
---    go as [] ty_subst = return ty_subst
---    go as (ClsCt cls tys:cs) ty_subst = do
---      as' <- lookupClsParam cls
---      fds <- lookupClsFundeps cls
---      undefined
+determinacy :: [RnTyVar] -> RnClsCs -> TcM HsTySubst
+determinacy as cs = go as cs mempty
+  where
+    go as [] ty_subst = return ty_subst
+    go as (ClsCt cls tys:cs) ty_subst = do
+      as' <- lookupClsParams cls
+      fds <- lookupClsFundeps cls
+      fd_fams <- lookupClsFDFams cls
+      let subst = buildSubst $ zip as' tys
+      fmap mconcat $ forM (zip fds fd_fams) $ \(Fundep bs b0, fam) -> do
+        let (t0:ts) = substInMonoTy subst . TyVar <$> (b0:bs)
+        mconcat . map (\(fv, proj) -> fv |-> proj (TyFam fam ts)) <$> projection t0
+
+-- | Gather type variables and compute their corresponding projection function
+projection :: RnMonoTy -> TcM [(RnTyVar, RnMonoTy -> RnMonoTy)]
+projection = go id
+  where
+    go :: (RnMonoTy -> RnMonoTy) -> RnMonoTy -> TcM [(RnTyVar, RnMonoTy -> RnMonoTy)]
+    go f ty = case ty of
+      app@(TyApp _ _) -> do
+        (tc,tys) <- destructTyApp app
+        ty_fams <- lookupTyConProj tc
+        concat <$> mapM (\(ty_fam,ty) -> go (\x -> f (TyFam ty_fam [x])) ty) (zip ty_fams tys)
+      TyFam _ _ -> tf_error
+      TyVar a   -> return [(a,f)]
+    destructTyApp (TyApp ty1 ty2) = do
+      (tc, tys) <- destructTyApp ty1
+      return (tc, tys ++ [ty2])
+    destructTyApp (TyCon tc) = return (tc,[])
+    destructTyApp TyFam {} = tf_error
+    destructTyApp (TyVar a) = throwErrorM $ text "TODO"
+    tf_error = throwErrorM $
+        text "projection" <+>
+        colon <+>
+        text "encountered type family"
 
 -- | Elaborate a class declaration. Return
 --   a) The data declaration for the class

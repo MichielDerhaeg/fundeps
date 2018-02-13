@@ -37,7 +37,9 @@ type RnTyCon = HsTyCon Name
 data HsTyConInfo
   = HsTCInfo { hs_tc_ty_con    :: RnTyCon     -- ^ The type constructor name
              , hs_tc_type_args :: [RnTyVar]   -- ^ Universal types
-             , hs_tc_fc_ty_con :: FcTyCon }   -- ^ Elaborated Type Constructor
+             , hs_tc_fc_ty_con :: FcTyCon     -- ^ Elaborated Type Constructor
+             , hs_tc_projs     :: [RnTyFam]   -- ^ Projection functions
+             }
 
 -- * Data Constructors
 -- ------------------------------------------------------------------------------
@@ -100,6 +102,7 @@ data ClassInfo
               , cls_class     :: RnClass    -- ^ The class name
               , cls_type_args :: [RnTyVar]  -- ^ Type arguments
               , cls_fundeps   :: [RnFundep] -- ^ Functional dependencies
+              , cls_fd_fams   :: [RnTyFam]  -- ^ Functional dependency type families
               , cls_method    :: RnTmVar    -- ^ Method name
               , cls_method_ty :: RnPolyTy   -- ^ Method type
               , cls_tycon     :: RnTyCon    -- ^ Elaborated Type Constructor
@@ -232,6 +235,7 @@ arrowTyConInfo = HsTCInfo rnArrowTyCon
                           [ mkRnTyVar (mkName (mkSym "a") arrowTyVar1Unique) KStar
                           , mkRnTyVar (mkName (mkSym "b") arrowTyVar2Unique) KStar ]
                           fcArrowTyCon
+                          [] -- TODO
 
 -- GEORGE: Needed for pretty printing
 isArrowTyCon :: Symable a => HsTyCon a -> Bool
@@ -489,10 +493,11 @@ instance Symable a => PrettyPrint (HsTyCon a) where
 
 -- | Pretty print type constructor info
 instance PrettyPrint HsTyConInfo where
-  ppr (HsTCInfo _tc type_args _fc_ty_con)
+  ppr (HsTCInfo _tc type_args _fc_ty_con proj_funcs)
     = braces $ vcat $ punctuate comma
     $ [
-        text "univ" <+> colon <+> ppr (map (\ty -> ty :| kindOf ty) type_args)
+        text "univ"       <+> colon <+> ppr (map (\ty -> ty :| kindOf ty) type_args)
+      , text "proj_funcs" <+> colon <+> ppr proj_funcs
       ]
   needsParens _ = False
 
@@ -537,12 +542,13 @@ instance PrettyPrint HsTyFamInfo where
 
 -- | Pretty print type class info
 instance PrettyPrint ClassInfo where
-  ppr (ClassInfo cs cls type_args fundeps method method_ty tycon datacon)
+  ppr (ClassInfo cs cls type_args fundeps fd_fams method method_ty tycon datacon)
     = braces $ vcat $ punctuate comma
     $ [ text "cls_super"     <+> colon <+> ppr cs
       , text "cls_class"     <+> colon <+> ppr cls
       , text "cls_type_args" <+> colon <+> ppr type_args
       , text "cls_fundeps"   <+> colon <+> ppr fundeps
+      , text "cls_fd_fams"   <+> colon <+> ppr fd_fams
       , text "cls_method"    <+> colon <+> ppr method
       , text "cls_method_ty" <+> colon <+> ppr method_ty
       , text "cls_tycon"     <+> colon <+> ppr tycon
