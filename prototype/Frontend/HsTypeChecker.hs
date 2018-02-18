@@ -27,6 +27,7 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Except
 import Control.Arrow (second)
+import Data.Either (partitionEithers)
 import Data.List (nub)
 import Data.Maybe (catMaybes)
 
@@ -663,15 +664,27 @@ closureAll as theory cs =
 determinacy :: [RnTyVar] -> RnClsCs -> TcM HsTySubst
 determinacy as cs = go as cs mempty
   where
-    go as [] ty_subst = return ty_subst
-    go as (ClsCt cls tys:cs) ty_subst = do
+    go as cs ty_subst = do
+      (residual_cs, new_substs) <-
+        partitionEithers <$> mapM (det_step as ty_subst) cs
+      if (null new_substs) then return ty_subst else
+        go as residual_cs (ty_subst <> mconcat new_substs)
+    det_step as ty_subst ct@(ClsCt cls tys) = do
       as' <- lookupClsParams cls
       fds <- lookupClsFundeps cls
       fd_fams <- lookupClsFDFams cls
       let subst = buildSubst $ zip as' tys
-      fmap mconcat $ forM (zip fds fd_fams) $ \(Fundep bs b0, fam) -> do
-        let (t0:ts) = substInMonoTy subst . TyVar <$> (b0:bs)
-        mconcat . map (\(fv, proj) -> fv |-> proj (TyFam fam ts)) <$> projection t0
+      new_subst <- fmap mconcat $
+        forM (zip fds fd_fams) $ \(Fundep bs b0, fam) -> do
+          let (t0:ts) = substInMonoTy subst . TyVar <$> (b0 : bs)
+          let refined_ts = substInMonoTy ty_subst <$> ts
+          let qsdf = as <> substDom ty_subst
+          if (any (`elem` qsdf) $ ftyvsOf t0) ||
+             (not $ all (`elem` qsdf) $ ftyvsOf ts)
+            then return mempty
+            else mconcat . map (\(fv, proj) -> fv |-> proj (TyFam fam refined_ts)) <$>
+                 projection t0
+      return $ if (nullSubst new_subst) then (Left ct) else (Right new_subst)
 
 -- | Gather type variables and compute their corresponding projection function
 projection :: RnMonoTy -> TcM [(RnTyVar, RnMonoTy -> RnMonoTy)]
@@ -690,7 +703,10 @@ projection = go id
       return (tc, tys ++ [ty2])
     destructTyApp (TyCon tc) = return (tc,[])
     destructTyApp TyFam {} = tf_error
-    destructTyApp (TyVar a) = throwErrorM $ text "TODO"
+    destructTyApp (TyVar a) = throwErrorM $
+      text "projection" <+>
+      colon <+>
+      text "Type variable applications are not yet supported"
     tf_error = throwErrorM $
         text "projection" <+>
         colon <+>

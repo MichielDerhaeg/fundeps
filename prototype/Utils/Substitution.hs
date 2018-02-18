@@ -255,6 +255,16 @@ sub_rec (SCons s x y) t = sub_rec s (substVar x y t)
 buildSubst :: [(x,y)] -> Sub x y
 buildSubst = foldl (\s (x,y) -> SCons s x y) SNil
 
+-- | Compute the domain of the substitution
+substDom :: Sub x y -> [x]
+substDom SNil             = []
+substDom (SCons sub x _y) = x : substDom sub
+
+-- | Return true if the substitution is empty
+nullSubst :: Sub x y -> Bool
+nullSubst SNil = True
+nullSubst _    = False
+
 -- * The ApplySubst Class
 -- ------------------------------------------------------------------------------
 
