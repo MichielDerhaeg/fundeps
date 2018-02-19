@@ -8,6 +8,8 @@ module Utils.Ctx
   ( FcTcCtx
   , extendCtxM
   , lookupCtxM
+  , notInCtx
+  , unboundElemsOf
   , notInCtxM
   , setCtxM
   , RnCtx
@@ -20,6 +22,7 @@ import           Backend.FcTypes
 import           Frontend.HsTypes
 
 import           Utils.Errors
+import           Utils.FreeVars
 import           Utils.Kind
 import           Utils.PrettyPrint
 import           Utils.SnocList
@@ -51,6 +54,18 @@ extendCtxM s t = local (\ctx -> extendCtx ctx s t)
 
 setCtxM :: MonadReader ctx m => ctx -> m a -> m a
 setCtxM ctx = local $ const ctx
+
+notInCtx :: Context ctx src trg => ctx -> src -> Bool
+notInCtx ctx src = case lookupCtx ctx src of
+  Just _  -> False
+  Nothing -> True
+
+unboundElemsOf ::
+     (Context ctx src trg, MonadReader ctx m, ContainsFreeTyVars t src)
+  => t
+  -> m [src]
+unboundElemsOf t = ask >>= \ctx ->
+   return $ filter (notInCtx ctx) (ftyvsOf t)
 
 notInCtxM ::
      ( PrettyPrint src

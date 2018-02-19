@@ -28,7 +28,7 @@ import Control.Monad.State
 import Control.Monad.Except
 import Control.Arrow (second)
 import Data.Either (partitionEithers)
-import Data.List (nub)
+import Data.List (nub, (\\), intersect)
 import Data.Maybe (catMaybes)
 
 -- * Create the typechecking environment from the renaming one
@@ -263,6 +263,8 @@ wfElabMonoTy (TyApp ty1 ty2) = do
 wfElabMonoTy (TyVar v) = do
   kind <- lookupCtxM v
   return (kind, rnTyVarToFcType v)
+wfElabMonoTy (TyFam f tys) = throwErrorM $
+  text "WfElabMonoTy" <+> colon <+> text "TODO family kind checking"
 
 -- | Elaborate a qualified type
 wfElabQualTy :: RnQualTy -> TcM (Kind, FcType)
@@ -315,6 +317,7 @@ elabMonoTy :: RnMonoTy -> TcM FcType
 elabMonoTy (TyCon tc)      = FcTyCon <$> lookupTyCon tc
 elabMonoTy (TyApp ty1 ty2) = FcTyApp <$> elabMonoTy ty1 <*> elabMonoTy ty2
 elabMonoTy (TyVar v)       = return (rnTyVarToFcType v)
+elabMonoTy (TyFam f tys)   = FcTyFam (rnTyFamToFcFam f) <$> mapM elabMonoTy tys
 
 -- | Elaborate a class constaint
 elabClsCt :: RnClsCt -> TcM FcType
@@ -350,7 +353,7 @@ elabQualTy (QMono ty) = elabMonoTy ty
 -- ------------------------------------------------------------------------------
 
 -- | ConstraintStore containing both the equality constraints and named class constraints
-data ConstraintStore = CS EqCs AnnClsCs
+data ConstraintStore = CS AnnEqCs AnnClsCs
 
 instance Monoid ConstraintStore where
   mempty = CS mempty mempty
@@ -368,7 +371,7 @@ instance MonadUnique GenM where
   getUniqueSupplyM = liftGenM getUniqueSupplyM
 
 -- | Get out of the constraint generation monad
-runGenM :: GenM a -> TcM (a, EqCs, AnnClsCs)
+runGenM :: GenM a -> TcM (a, AnnEqCs, AnnClsCs)
 runGenM (GenM m) = do
     (v , (CS eqs ccs)) <- runStateT m mempty
     return (v, eqs, ccs)
@@ -378,12 +381,12 @@ liftGenM :: TcM a -> GenM a
 liftGenM m = GenM (StateT (\cs -> m >>= \x -> return (x, cs)))
 
 -- | Add some equality constraints in the constraint store
-storeEqCs :: EqCs -> GenM ()
+storeEqCs :: AnnEqCs -> GenM ()
 storeEqCs cs = modify (\(CS eqs ccs) -> CS (cs ++ eqs) ccs)
 
 -- | Add some (variable-annotated) class constraints in the constraint store
-storeAnnCts :: AnnClsCs -> GenM ()
-storeAnnCts cs = modify (\(CS eqs ccs) -> CS eqs (mappend ccs cs))
+storeClsCs :: AnnClsCs -> GenM ()
+storeClsCs cs = modify (\(CS eqs ccs) -> CS eqs (mappend ccs cs))
 
 -- | Add many type variables to the typing context
 extendTcCtxTysM :: MonadReader TcCtx m => [RnTyVar] -> m a -> m a
@@ -417,10 +420,18 @@ genFreshDictVars :: MonadUnique m => Int -> m [DictVar]
 genFreshDictVars n = replicateM n freshDictVar
 
 -- | Annotate a list of constraints with a fresh dictionary variables
-annotateCts :: RnClsCs -> TcM ([DictVar], AnnClsCs)
-annotateCts cs = do
+annotateClsCs :: RnClsCs -> TcM ([DictVar], AnnClsCs)
+annotateClsCs cs = do
   ds <- genFreshDictVars (length cs)
   return (ds, (ds) |: (cs))
+
+genFreshCoVars :: MonadUnique m => Int -> m [FcCoVar]
+genFreshCoVars n = replicateM n freshFcCoVar
+
+annotateEqCs :: EqCs -> TcM ([FcCoVar], AnnEqCs)
+annotateEqCs eq_cs = do
+  cs <- genFreshCoVars (length eq_cs)
+  return (cs, cs |: eq_cs)
 
 -- | Elaborate a term
 elabTerm :: RnTerm -> GenM (RnMonoTy, FcTerm)
@@ -437,7 +448,10 @@ elabTmApp tm1 tm2 = do
   (ty1, fc_tm1) <- elabTerm tm1
   (ty2, fc_tm2) <- elabTerm tm2
   a <- TyVar <$> freshRnTyVar KStar
-  storeEqCs [mkRnArrowTy [ty2] a :~: ty1]
+  c <- freshFcCoVar
+  storeEqCs [c :| (mkRnArrowTy [ty2] a :~: ty1)]
+  -- TODO plug in
+  let fc_tm = FcTmApp (FcTmCast fc_tm1 (FcCoVar c)) fc_tm2
   return (a, FcTmApp fc_tm1 fc_tm2)
 
 -- | Elaborate a lambda abstraction
@@ -454,12 +468,20 @@ elabTmVar :: RnTmVar -> GenM (RnMonoTy, FcTerm)
 elabTmVar x = do
   poly_ty     <- liftGenM (lookupCtxM x)
   (bs,cs,ty)  <- liftGenM (instPolyTy poly_ty)
+  as          <- intersect bs <$> unboundElemsOf ty -- TODO check if subset of bs?
+  let bs'     =  bs \\ as
+  subst       <- liftGenM (determinacy as cs)
   _           <- extendTcCtxTysM bs $ liftGenM (wfElabClsCs cs)
-  (ds,ann_cs) <- liftGenM (annotateCts cs)
-  storeAnnCts ann_cs -- store the constraints
-  let fc_ds = map FcTmVar ds         -- System F representation
-  let fc_bs = map rnTyVarToFcType bs -- System F representation
-  let fc_tm = fcTmApp (fcTmTyApp (rnTmVarToFcTerm x) fc_bs) fc_ds
+  (ds,ann_cs) <- liftGenM (annotateClsCs (substInClsCs subst cs))
+
+  -- store the constraints
+  storeClsCs ann_cs
+
+  -- System F representation
+  let fc_ds = map FcTmVar ds
+  let fc_as = rnTyVarToFcType <$> as
+  fc_bs    <- liftGenM $ mapM (elabMonoTy . substInTyVar subst) bs'
+  let fc_tm = fcTmApp (fcTmTyApp (rnTmVarToFcTerm x) (fc_as <> fc_bs)) fc_ds
   return (ty, fc_tm)
 
 -- | Elaborate a let binding (monomorphic, recursive)
@@ -467,9 +489,10 @@ elabTmLet :: RnTmVar -> RnTerm -> RnTerm -> GenM (RnMonoTy, FcTerm)
 elabTmLet x tm1 tm2 = do
   liftGenM (notInCtxM x) {- ensure not bound -}
   tv <- freshRnTyVar KStar
+  c  <- freshFcCoVar
   (ty1, fc_tm1) <- extendCtxM x (monoTyToPolyTy (TyVar tv)) $ elabTerm tm1
   (ty2, fc_tm2) <- extendCtxM x (monoTyToPolyTy (TyVar tv)) $ elabTerm tm2 -- could have also passed ty1 but it is the same
-  storeEqCs [TyVar tv :~: ty1]
+  storeEqCs [c :| (TyVar tv :~: ty1)]
   let fc_tm = FcTmLet (rnTmVarToFcTmVar x) (rnTyVarToFcType tv) fc_tm1 fc_tm2
   return (ty2, fc_tm)
 
@@ -512,14 +535,23 @@ elabHsAlt :: RnMonoTy {- Type of the scrutinee -}
           -> RnAlt    {- Case alternative      -}
           -> GenM FcAlt
 elabHsAlt scr_ty res_ty (HsAlt (HsPat dc xs) rhs) = do
-  (as, orig_arg_tys, tc) <- liftGenM (dataConSig dc) -- Get the constructor's signature
-  fc_dc <- liftGenM (lookupDataCon dc)               -- Get the constructor's System F representation
+  -- Get the constructor's signature
+  (as, orig_arg_tys, tc) <- liftGenM (dataConSig dc)
+  -- Get the constructor's System F representation
+  fc_dc <- liftGenM (lookupDataCon dc)
 
-  (bs, ty_subst) <- liftGenM (freshenRnTyVars as)               -- Generate fresh universal type variables for the universal tvs
-  let arg_tys = map (substInPolyTy ty_subst) orig_arg_tys       -- Apply the renaming substitution to the argument types
-  (rhs_ty, fc_rhs) <- extendCtxM xs arg_tys (elabTerm rhs)   -- Type check the right hand side
-  storeEqCs [ scr_ty :~: foldl TyApp (TyCon tc) (map TyVar bs)  -- The scrutinee type must match the pattern type
-            , res_ty :~: rhs_ty ]                               -- All right hand sides should be the same
+  -- Generate fresh universal type variables for the universal tvs
+  (bs, ty_subst) <- liftGenM (freshenRnTyVars as)
+  -- Apply the renaming substitution to the argument types
+  let arg_tys = map (substInPolyTy ty_subst) orig_arg_tys
+  -- Type check the right hand side
+  (rhs_ty, fc_rhs) <- extendCtxM xs arg_tys (elabTerm rhs)
+  -- The scrutinee type must match the pattern type
+  (_cs, ann_cs) <- liftGenM $ annotateEqCs -- TODO what to do with case?
+    [ scr_ty :~: foldl TyApp (TyCon tc) (map TyVar bs)
+  -- All right hand sides should be the same
+    , res_ty :~: rhs_ty ]
+  storeEqCs ann_cs
 
   fc_tys <- liftGenM $ mapM elabPolyTy arg_tys
   return (FcAlt (FcConPat fc_dc [] [] ((rnTmVarToFcTmVar <$> xs) |: fc_tys)) fc_rhs)
@@ -535,6 +567,10 @@ rnTyVarsToFcTypes = map rnTyVarToFcType
 -- | Covert a renamed term variable to a System F term
 rnTmVarToFcTerm :: RnTmVar -> FcTerm
 rnTmVarToFcTerm = FcTmVar . rnTmVarToFcTmVar
+
+-- | TODO better place?
+rnTyFamToFcFam :: RnTyFam -> FcFamVar
+rnTyFamToFcFam (HsTF name) = FcFV name
 
 -- * Type Unification
 -- ------------------------------------------------------------------------------
@@ -619,7 +655,7 @@ entail _untch [] _cls_ct = return Nothing
 entail as ((d' :| CtrScheme bs cls_cs (ClsCt cls2 [ty2])):schemes) ct@(d :| ClsCt cls1 [ty1])
   | cls1 == cls2
   , Right ty_subst <- unify as [ty1 :~: ty2] = do
-    (d''s, ann_cls_cs) <- annotateCts $ substInClsCs ty_subst cls_cs
+    (d''s, ann_cls_cs) <- annotateClsCs $ substInClsCs ty_subst cls_cs
     fc_subbed_bs <- mapM elabMonoTy . substInTyVars ty_subst $ labelOf bs
     let ev_subst =
           d |->
@@ -668,7 +704,7 @@ determinacy as cls_cs = go cls_cs mempty
     go cs ty_subst = do
       (residual_cs, new_substs) <-
         partitionEithers <$> mapM (det_step ty_subst) cs
-      if (null new_substs) then return ty_subst else
+      if null new_substs then return ty_subst else
         go residual_cs (ty_subst <> mconcat new_substs)
 
     det_step ty_subst ct@(ClsCt cls tys) = do
@@ -681,12 +717,12 @@ determinacy as cls_cs = go cls_cs mempty
           let (t0:ts) = substInMonoTy cls_var_subst . TyVar <$> (b0 : bs)
           let refined_ts = substInMonoTy ty_subst <$> ts
           let as_dom = as <> substDom ty_subst
-          if (any (`elem` as_dom) $ ftyvsOf t0) ||
-             (not $ all (`elem` as_dom) $ ftyvsOf ts)
+          if any (`elem` as_dom) (ftyvsOf t0) ||
+             not (all (`elem` as_dom) $ ftyvsOf ts)
             then return mempty
             else mconcat . map (\(fv, proj) -> fv |-> proj (TyFam fam refined_ts)) <$>
                  projection t0
-      return $ if (nullSubst new_subst) then (Left ct) else (Right new_subst)
+      return $ if nullSubst new_subst then Left ct else Right new_subst
 
 -- | Gather type variables and compute their corresponding projection function
 projection :: RnMonoTy -> TcM [(RnTyVar, RnMonoTy -> RnMonoTy)]
@@ -807,7 +843,7 @@ elabMethodSig method a cls sigma = do
   xs <- replicateM (length super_cs +1) freshFcTmVar -- n superclass variables + 1 for the method
 
   -- Annotate the constraints with fresh dictionary variables
-  (ds, ann_cs) <- annotateCts cs'
+  (ds, ann_cs) <- annotateClsCs cs'
   -- elaborate the annotated dictionary variables to System F term binders
   dbinds <- annCtsToTmBinds ann_cs
 
@@ -882,7 +918,7 @@ elabInsDecl theory (InsD as ins_cs cls [typat] method method_tm) = do
   ins_scheme <- fmap (ins_d :|) $ freshenLclBndrs $ CtrScheme bs ins_cs head_ct
 
   --  Generate fresh dictionary variables for the instance context
-  ann_ins_cs <- snd <$> annotateCts ins_cs
+  ann_ins_cs <- snd <$> annotateClsCs ins_cs
   (closure_cs, closure_ev_subst) <- closureAll
                                       (labelOf bs)
                                       (theory_super theory)
@@ -910,7 +946,7 @@ elabInsDecl theory (InsD as ins_cs cls [typat] method method_tm) = do
   fc_super_tms <- do
     a <- lookupClsParam cls
     (ds, super_cs) <- substVar a ty <$>
-                        lookupClsSuper cls >>= annotateCts
+                        lookupClsSuper cls >>= annotateClsCs
 
     (residual_cs, ev_subst) <- simplify
                                  (labelOf bs)
@@ -960,14 +996,14 @@ elabTermWithSig untch theory tm poly_ty = do
   ((mono_ty, fc_tm), wanted_eqs, wanted_ccs) <- runGenM $ elabTerm tm
 
   -- Generate fresh dictionary variables for the given constraints
-  given_ccs <- snd <$> annotateCts cs
+  given_ccs <- snd <$> annotateClsCs cs
   dbinds <- annCtsToTmBinds given_ccs
   (super_cs, closure_ev_subst) <- closureAll untch (theory_super theory) given_ccs
   let given_schemes = (fmap . fmap) (CtrScheme [] []) (super_cs <> given_ccs)
 
   -- Resolve all the wanted constraints
   let untouchables = nub (untch ++ map labelOf as)
-  ty_subst <- unify untouchables $ wanted_eqs ++ [mono_ty :~: ty]
+  ty_subst <- unify untouchables $ (dropLabel wanted_eqs) ++ [mono_ty :~: ty]
   let local_theory = ftDropSuper theory <> given_schemes
   let wanted = substInAnnClsCs ty_subst wanted_ccs
 
@@ -1002,7 +1038,8 @@ elabTermSimpl theory tm = do
   ((mono_ty, fc_tm), wanted_eqs, wanted_ccs) <- runGenM $ elabTerm tm
 
   -- Simplify as much as you can
-  ty_subst <- unify mempty wanted_eqs -- Solve the needed equalities first
+  -- Solve the needed equalities first
+  ty_subst <- unify mempty (dropLabel wanted_eqs)
 
   let refined_wanted_ccs = substInAnnClsCs      ty_subst wanted_ccs             -- refine the wanted class constraints
   let refined_mono_ty    = substInMonoTy        ty_subst mono_ty                -- refine the monotype
