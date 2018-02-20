@@ -6,6 +6,8 @@ data Nat = Succ Nat | Zero
 
 data Maybe (a:: *) = Just a | Nothing
 
+data Either (a :: *) (b :: *) = Left a | Right b
+
 class forall (a :: *). Eq a where
   eq :: a -> a -> Bool
 

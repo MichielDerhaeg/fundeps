@@ -247,7 +247,11 @@ lookupTyConProj :: RnTyCon -> TcM [RnTyFam]
 lookupTyConProj tc = hs_tc_projs <$> lookupTcEnvM tc_env_tc_info tc
 
 -- | TODO
+lookupClsFDFams :: RnClass -> TcM [RnTyFam]
 lookupClsFDFams cls = cls_fd_fams <$> lookupTcEnvM tc_env_cls_info cls
+
+lookupTyFamInfo :: RnTyFam -> TcM HsTyFamInfo
+lookupTyFamInfo f = lookupTcEnvM tc_env_tf_info f
 
 -- * Type and Constraint Elaboration (With Well-formedness (well-scopedness) Check)
 -- ------------------------------------------------------------------------------
@@ -268,8 +272,12 @@ wfElabMonoTy (TyApp ty1 ty2) = do
 wfElabMonoTy (TyVar v) = do
   kind <- lookupCtxM v
   return (kind, rnTyVarToFcType v)
-wfElabMonoTy (TyFam f tys) = throwErrorM $
-  text "WfElabMonoTy" <+> colon <+> text "TODO family kind checking"
+wfElabMonoTy (TyFam f tys) = do
+  HsTFInfo _f as k <- lookupTyFamInfo f
+  (ks, fc_tys) <- unzip <$> mapM wfElabMonoTy tys
+  unless ((kindOf <$> as) == ks) $
+    tcFail (text "wfElabMonoTy: kind mismatch (TyFam)")
+  return (k, FcTyFam (rnTyFamToFcFam f) fc_tys)
 
 -- | Elaborate a qualified type
 wfElabQualTy :: RnQualTy -> TcM (Kind, FcType)
