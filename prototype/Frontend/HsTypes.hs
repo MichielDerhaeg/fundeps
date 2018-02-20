@@ -183,7 +183,7 @@ type RnTyFam = HsTyFam Name
 data HsTyFamInfo = HsTFInfo
   { hs_tf_fam       :: RnTyFam   -- ^ The Type Family name
   , hs_tf_type_args :: [RnTyVar] -- ^ Universal types
-  , hs_tf_fc_fam    :: FcFamVar  -- ^ Elaborated Type Family
+  , hs_tf_kind      :: Kind      -- ^ Return kind
   }
 
 -- * Types and Constraints
@@ -532,11 +532,11 @@ instance Symable a => PrettyPrint (Class a) where
 
 -- | Pretty print type family info
 instance PrettyPrint HsTyFamInfo where
-  ppr (HsTFInfo fam type_args fc_fam)
+  ppr (HsTFInfo fam type_args kind)
     = braces $ vcat $ punctuate comma
     $ [ text "hs_tf_fam"       <+> colon <+> ppr fam
       , text "hs_tf_type_args" <+> colon <+> ppr type_args
-      , text "hs_tf_fc_fam"    <+> colon <+> ppr fc_fam
+      , text "hs_tf_kind"      <+> colon <+> ppr kind
       ]
   needsParens _ = False
 

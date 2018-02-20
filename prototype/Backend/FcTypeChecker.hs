@@ -29,7 +29,7 @@ type FcM = UniqueSupplyT (ReaderT FcTcCtx (StateT FcGblEnv (Except CompileError)
 
 data FcGblEnv = FcGblEnv { fc_env_tc_info :: AssocList FcTyCon   FcTyConInfo
                          , fc_env_dc_info :: AssocList FcDataCon FcDataConInfo
-                         , fc_env_tf_info :: AssocList FcFamVar  FcFamInfo
+                         , fc_env_tf_info :: AssocList FcTyFam   FcFamInfo
                          , fc_env_ax_info :: AssocList FcAxVar   FcAxiomInfo
                          }
 
@@ -69,7 +69,7 @@ lookupDataConTyM dc = lookupDataConInfoM dc >>= \info ->
   return (fc_dc_univ info, fc_dc_exis info, fc_dc_prop info, fc_dc_arg_tys info, fc_dc_parent info)
 
 -- TODO document us
-lookupFamInfoM :: FcFamVar -> FcM FcFamInfo
+lookupFamInfoM :: FcTyFam -> FcM FcFamInfo
 lookupFamInfoM = lookupFcGblEnvM fc_env_tf_info
 
 lookupAxiomInfoM :: FcAxVar -> FcM FcAxiomInfo
@@ -138,18 +138,24 @@ tcFcAxiomDecl :: FcAxiomDecl -> FcM ()
 tcFcAxiomDecl (FcAxiomDecl g as fam us v) = do
   notInFcGblEnvM fc_env_ax_info g
   mapM_ notInCtxM as
-  FcFamInfo _ as' <- lookupFamInfoM fam
+  FcFamInfo _ as' kind <- lookupFamInfoM fam
   unless (length us == length as') $
     fcFail $
-    text "FcAxiomDecl" <+> colon <+> text "quantified variables length mismatch"
-  extendCtxM as (kindOf <$> as) $ mapM_ tcType (v : us)
+    text "tcFcAxiomDecl" <+> colon <+> text "quantified variables length mismatch"
+  (k:ks) <- extendCtxM as (kindOf <$> as) $ mapM tcType (v : us)
+  unless (kind == k) $
+    fcFail $
+    text "tcFcAxiomDecl" <+> colon <+> text "family return kind mismatch"
+  unless (ks == (kindOf <$> as')) $
+    fcFail $
+    text "tcFcAxiomDecl" <+> colon <+> text "parameter kind mismatch"
   addAxiomInfoM (FcAxiomInfo g as fam us v)
 
 tcFcFamDecl :: FcFamDecl -> FcM ()
-tcFcFamDecl (FcFamDecl f as) = do
+tcFcFamDecl (FcFamDecl f as k) = do
   notInFcGblEnvM fc_env_tf_info f
   mapM_ notInCtxM as
-  addFamInfoM (FcFamInfo f as)
+  addFamInfoM (FcFamInfo f as k)
 
 -- | Type check a program
 tcFcProgram :: FcProgram -> FcM FcType
@@ -247,9 +253,13 @@ tcType (FcTyApp ty1 ty2) = do
 tcType (FcTyCon tc) = lookupTyConKindM tc
 tcType (FcTyQual psi ty) = tcProp psi >> tcType ty
 tcType (FcTyFam f tys) = do
-  when (null tys) $ fcFail (text "TODO")
-  _ <- lookupFamInfoM f
-  head <$> mapM tcType tys -- TODO kinds? just doing something here
+  FcFamInfo _f as k <- lookupFamInfoM f
+  unless (length as == length tys) $
+    fcFail $ text "tcType: mismatch in amount of parameters (FcTyFam)"
+  ks <- mapM tcType tys
+  unless ((kindOf <$> as) == ks) $
+    fcFail $ text "tcType : Kind mismatch (FcTyFam)"
+  return k
 
 -- | Type check a list of case alternatives
 tcAlts :: FcType -> [FcAlt] -> FcM FcType

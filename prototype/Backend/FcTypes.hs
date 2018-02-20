@@ -40,7 +40,7 @@ data FcType = FcTyVar FcTyVar        -- ^ Type variable
             | FcTyApp FcType  FcType -- ^ Type application
             | FcTyCon FcTyCon        -- ^ Type constructor
             | FcTyQual FcProp FcType -- ^ psi => v
-            | FcTyFam FcFamVar [FcType] -- ^ F(vs)
+            | FcTyFam FcTyFam [FcType] -- ^ F(vs)
 
 data FcProp = FcProp FcType FcType -- ^ Type equality proposition -- v_1 ~ v_2
 
@@ -52,7 +52,7 @@ data FcCoercion = FcCoVar FcCoVar -- ^ c
                 | FcCoApp FcCoercion FcCoercion -- ^ gamma_1 gamma_2
                 | FcCoLeft FcCoercion -- ^ left gamma
                 | FcCoRight FcCoercion -- ^ right gamma
-                | FcCoFam FcFamVar [FcCoercion] -- ^ F(gammas)
+                | FcCoFam FcTyFam [FcCoercion] -- ^ F(gammas)
                 | FcCoAbs FcTyVar FcCoercion -- ^ forall a. gamma
                 | FcCoInst FcCoercion FcCoercion -- ^ gamma_1 [gamma_2]
                 | FcCoQual FcProp FcCoercion -- ^ psi => gamma
@@ -146,17 +146,18 @@ instance PrettyPrint FcDataConInfo where
       ]
   needsParens _ = False
 
--- TODO doc TODO rename to FcFam or something like that
-newtype FcFamVar = FcFV { unFcFV :: Name }
+-- TODO doc
+newtype FcTyFam = FcFV { unFcFV :: Name }
   deriving (Eq, Ord, Symable, Named, Uniquable)
 
 data FcFamInfo = FcFamInfo
-  { fc_fam_var  :: FcFamVar
+  { fc_fam_var  :: FcTyFam
   , fc_fam_univ :: [FcTyVar]
+  , fc_fam_kind :: Kind
   }
 
 instance PrettyPrint FcFamInfo where
-  ppr (FcFamInfo f as) =
+  ppr (FcFamInfo f as _k) =
     braces $ vcat $ punctuate comma $
       [ text "fc_fam_var"  <+> colon <+> ppr f
       , text "fc_fam_univ" <+> colon <+> ppr as
@@ -177,10 +178,13 @@ data FcCoInfo = FcCoInfo
 newtype FcAxVar = FcAV { unFcAV :: Name }
   deriving (Eq, Ord, Symable, Named, Uniquable)
 
+freshFcAxVar :: MonadUnique m => m FcAxVar
+freshFcAxVar = FcAV . mkName (mkSym "g") <$> getUniqueM
+
 data FcAxiomInfo = FcAxiomInfo
   { fc_ax_var  :: FcAxVar   -- ^ g
   , fc_ax_uv  :: [FcTyVar] -- ^ Universal Type variables -- as
-  , fc_ax_fv  :: FcFamVar  -- ^ Type Family variable -- F
+  , fc_ax_fv  :: FcTyFam  -- ^ Type Family -- F
   , fc_ax_fvs :: [FcType] -- ^ Type Family type arguments -- us
   , fc_ax_ty  :: FcType    -- ^ Equal Type -- v
   }
@@ -334,12 +338,12 @@ data FcValBind = FcValBind { fval_bind_var :: FcTmVar   -- ^ Variable Name
                            , fval_bind_tm  :: FcTerm    -- ^ Variable Value
                            }
 
-data FcFamDecl = FcFamDecl FcFamVar [FcTyVar] -- type F(as)
+data FcFamDecl = FcFamDecl FcTyFam [FcTyVar] Kind -- type F(as)
 
 data FcAxiomDecl = FcAxiomDecl -- g as : F(us) ~ v
   { fax_decl_vr  :: FcAxVar   -- ^ Axiom variable -- g
   , fax_decl_tv  :: [FcTyVar] -- ^ Universal Type variables -- as
-  , fax_decl_fv  :: FcFamVar  -- ^ Type Family variable -- F
+  , fax_decl_fv  :: FcTyFam  -- ^ Type Family -- F
   , fax_decl_fvs :: [FcType] -- ^ Type Family type arguments -- us
   , fax_decl_ty  :: FcType    -- ^ Equal Type -- v
   }
@@ -484,16 +488,16 @@ instance PrettyPrint FcProp where
   ppr (FcProp ty1 ty2) = ppr ty1 <+> text "~" <+> ppr ty2
   needsParens _        = True
 
-instance PrettyPrint FcFamVar where
+instance PrettyPrint FcTyFam where
   ppr           = ppr . symOf
   needsParens _ = False
 
 instance PrettyPrint FcCoVar where
-  ppr           = ppr . symOf
+  ppr           = ppr . unFcCV
   needsParens _ = False
 
 instance PrettyPrint FcAxVar where
-  ppr           = ppr . symOf
+  ppr           = ppr . unFcAV
   needsParens _ = False
 
 -- | Pretty print coercions
@@ -528,13 +532,15 @@ instance PrettyPrint FcCoercion where
 
 -- | Pretty print family declarations
 instance PrettyPrint FcFamDecl where
-  ppr (FcFamDecl f as) =
+  ppr (FcFamDecl f as _k) =
+    colorDoc green (text "type") <+>
     ppr f <> parens (sep (punctuate comma (map ppr as)))
   needsParens _ = False
 
 -- | Pretty print axiom declarations
 instance PrettyPrint FcAxiomDecl where
   ppr (FcAxiomDecl g as f us v) =
+    colorDoc green (text "axiom") <+>
     ppr g <+>
       parens (sep (punctuate comma (map ppr as))) <+>
       colon <+>

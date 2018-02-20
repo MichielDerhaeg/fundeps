@@ -107,6 +107,11 @@ addTyConInfoTcM :: RnTyCon -> HsTyConInfo -> TcM ()
 addTyConInfoTcM tc info = modify $ \s ->
   s { tc_env_tc_info = extendAssocList tc info (tc_env_tc_info s) }
 
+-- | Add a renamed tyfam name to the state
+addTyFamInfoTcM :: RnTyFam -> HsTyFamInfo -> TcM ()
+addTyFamInfoTcM tf info = modify $ \s ->
+  s { tc_env_tf_info = extendAssocList tf info (tc_env_tf_info s)}
+
 -- * Type Checking Monad
 -- ------------------------------------------------------------------------------
 
@@ -569,7 +574,7 @@ rnTmVarToFcTerm :: RnTmVar -> FcTerm
 rnTmVarToFcTerm = FcTmVar . rnTmVarToFcTmVar
 
 -- | TODO better place?
-rnTyFamToFcFam :: RnTyFam -> FcFamVar
+rnTyFamToFcFam :: RnTyFam -> FcTyFam
 rnTyFamToFcFam (HsTF name) = FcFV name
 
 -- * Type Unification
@@ -878,18 +883,47 @@ annCtsToTmBinds = mapM (\(d :| ct) -> (,) d <$> elabClsCt ct)
 -- ------------------------------------------------------------------------------
 
 -- | Elaborate a datatype declaration
-elabDataDecl :: RnDataDecl -> TcM FcDataDecl
+elabDataDecl :: RnDataDecl -> TcM (FcDataDecl, [FcFamDecl], [FcAxiomDecl])
 elabDataDecl (DataD tc as dcs) = do
-  fc_tc <- hs_tc_fc_ty_con <$> lookupTcEnvM tc_env_tc_info tc  -- Elaborate the type constructor
-  let fc_as = map (rnTyVarToFcTyVar . labelOf) as              -- Elaborate the universal type variables
+  -- Elaborate the type constructor
+  fc_tc <- hs_tc_fc_ty_con <$> lookupTcEnvM tc_env_tc_info tc
+  -- Elaborate the universal type variables
+  let fc_as = map (rnTyVarToFcTyVar . labelOf) as
+
+  (fc_fams, fc_axioms) <- elabProjections tc as
 
   fc_dcs <- forM dcs $ \(dc, tys) -> do
-    fc_dc <- hs_dc_fc_data_con <$> lookupTcEnvM tc_env_dc_info dc         -- Elaborate the data constructor
-    (kinds, fc_tys) <- unzip <$> extendCtxKindAnnotatedTysM as (mapM wfElabMonoTy tys) -- Elaborate the argument types
+    -- Elaborate the data constructor
+    fc_dc <- hs_dc_fc_data_con <$> lookupTcEnvM tc_env_dc_info dc
+    -- Elaborate the argument types
+    (kinds, fc_tys) <- unzip <$> extendCtxKindAnnotatedTysM as (mapM wfElabMonoTy tys)
     unless (all (==KStar) kinds) $
       tcFail (text "elabDataDecl" <+> colon <+> text "not all datacon args have kind star")
     return (fc_dc, mempty, mempty, fc_tys)
-  return (FcDataDecl fc_tc fc_as fc_dcs)
+  return (FcDataDecl fc_tc fc_as fc_dcs, fc_fams, fc_axioms)
+
+-- | Elaborate the projection type functions of the type constructor
+elabProjections :: RnTyCon -> [RnTyVarWithKind] -> TcM ([FcFamDecl], [FcAxiomDecl])
+elabProjections tc as = do
+  proj_fams <- hs_tc_projs <$> lookupTcEnvM tc_env_tc_info tc
+  fmap unzip $ forM (zip proj_fams as) $ \(proj_fam, a) -> do
+    addTyFamInfoTcM proj_fam (HsTFInfo proj_fam (labelOf as) (dropLabel a))
+    g <- freshFcAxVar
+    let fc_as = rnTyVarToFcTyVar <$> (labelOf as)
+    let fc_a = rnTyVarToFcTyVar (labelOf a)
+    let fc_fam = rnTyFamToFcFam proj_fam
+    return
+      ( FcFamDecl
+         fc_fam
+         fc_as
+         (dropLabel a)
+      , FcAxiomDecl
+         g
+         fc_as
+         fc_fam
+         (FcTyVar <$> fc_as)
+         (FcTyVar fc_a)
+      )
 
 -- | Extend the typing environment with some kind annotated type variables
 extendCtxKindAnnotatedTysM :: [RnTyVarWithKind] -> TcM a -> TcM a
@@ -1117,9 +1151,16 @@ elabProgram theory (PgmInst ins_decl pgm) = do
 
 -- Elaborate a datatype declaration
 elabProgram theory (PgmData data_decl pgm) = do
-  fc_data_decl <- elabDataDecl data_decl
+  (fc_data_decl, fc_fam_decls, fc_ax_decls)  <- elabDataDecl data_decl
   (fc_pgm, ty, final_theory) <- elabProgram theory pgm
-  let fc_program = FcPgmDataDecl fc_data_decl fc_pgm
+  let fc_program =
+        FcPgmDataDecl
+          fc_data_decl
+          (foldr
+            FcPgmFamDecl
+              (foldr FcPgmAxiomDecl fc_pgm fc_ax_decls)
+              fc_fam_decls
+          )
   return (fc_program, ty, final_theory)
 
 -- Elaborate a top-level value binding
