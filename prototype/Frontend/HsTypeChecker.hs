@@ -515,8 +515,10 @@ elabTmCon dc = do
   (bs, arg_tys, tc) <- freshenDataConSig dc
   fc_dc <- lookupDataCon dc
 
-  let mono_ty = mkRnArrowTy arg_tys (mkTyConApp tc (map TyVar bs))                 -- Haskell monotype
-  let fc_tm = fcTmTyApp (FcTmDataCon fc_dc) (rnTyVarsToFcTypes bs) -- System F term
+  -- Haskell monotype
+  let mono_ty = mkRnArrowTy arg_tys (mkTyConApp tc (map TyVar bs))
+  -- System F term
+  let fc_tm = fcTmTyApp (FcTmDataCon fc_dc) (rnTyVarsToFcTypes bs)
 
   return (mono_ty, fc_tm)
 
@@ -912,24 +914,27 @@ elabDataDecl (DataD tc as dcs) = do
 
 -- | Elaborate the projection type functions of the type constructor
 elabProjections :: RnTyCon -> [RnTyVarWithKind] -> TcM ([FcFamDecl], [FcAxiomDecl])
-elabProjections tc as = do
-  proj_fams <- hs_tc_projs <$> lookupTcEnvM tc_env_tc_info tc
+elabProjections tc as = do -- TODO rename as for every axiom
+  tc_info       <- lookupTcEnvM tc_env_tc_info tc
+  let proj_fams =  hs_tc_projs     tc_info
+  let fc_tc     =  hs_tc_fc_ty_con tc_info
   fmap unzip $ forM (zip proj_fams as) $ \(proj_fam, a) -> do
     addTyFamInfoTcM proj_fam (HsTFInfo proj_fam (labelOf as) (dropLabel a))
     g <- freshFcAxVar
+    a' <- freshFcTyVar KStar
     let fc_as = rnTyVarToFcTyVar <$> (labelOf as)
     let fc_a = rnTyVarToFcTyVar (labelOf a)
     let fc_fam = rnTyFamToFcFam proj_fam
     return
       ( FcFamDecl
          fc_fam
-         fc_as
+         [a']
          (dropLabel a)
       , FcAxiomDecl
          g
          fc_as
          fc_fam
-         (FcTyVar <$> fc_as)
+         [fcTyConApp fc_tc (FcTyVar <$> fc_as)]
          (FcTyVar fc_a)
       )
 
