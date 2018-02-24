@@ -234,7 +234,8 @@ lookupClsParam cls = do
     [a] -> return a
     _   -> tcFail (text "lookupClsParam")
 
--- | TODO replace old one
+-- | Get the type parameters of the class
+--   TODO replace old one
 lookupClsParams :: RnClass -> TcM [RnTyVar]
 lookupClsParams cls = cls_type_args <$> lookupTcEnvM tc_env_cls_info cls
 
@@ -242,16 +243,25 @@ lookupClsParams cls = cls_type_args <$> lookupTcEnvM tc_env_cls_info cls
 lookupClsFundeps :: RnClass -> TcM [RnFundep]
 lookupClsFundeps cls = cls_fundeps <$> lookupTcEnvM tc_env_cls_info cls
 
--- | TODO
+-- | Get the projection type families of the type constructor
 lookupTyConProj :: RnTyCon -> TcM [RnTyFam]
 lookupTyConProj tc = hs_tc_projs <$> lookupTcEnvM tc_env_tc_info tc
 
--- | TODO
+-- | Get the type families of the functional dependencies of the type class
 lookupClsFDFams :: RnClass -> TcM [RnTyFam]
 lookupClsFDFams cls = cls_fd_fams <$> lookupTcEnvM tc_env_cls_info cls
 
+-- | Get the type family information
 lookupTyFamInfo :: RnTyFam -> TcM HsTyFamInfo
 lookupTyFamInfo f = lookupTcEnvM tc_env_tf_info f
+
+-- | Get the type arguments of the type constructor
+lookupTyConArgs :: RnTyCon -> TcM [RnTyVar]
+lookupTyConArgs tc = hs_tc_type_args <$> lookupTcEnvM tc_env_tc_info tc
+
+-- | Get the parent type constructor of the data constructor
+lookupDataConTyCon :: RnDataCon -> TcM RnTyCon
+lookupDataConTyCon dc = hs_dc_parent <$> lookupTcEnvM tc_env_dc_info dc
 
 -- * Type and Constraint Elaboration (With Well-formedness (well-scopedness) Check)
 -- ------------------------------------------------------------------------------
@@ -562,7 +572,7 @@ elabHsAlt scr_ty res_ty (HsAlt (HsPat dc xs) rhs) = do
   -- Type check the right hand side
   (rhs_ty, fc_rhs) <- extendCtxM xs arg_tys (elabTerm rhs)
   -- The scrutinee type must match the pattern type
-  (_cs, ann_cs) <- liftGenM $ annotateEqCs -- TODO what to do with case?
+  (_cs, ann_cs) <- liftGenM $ annotateEqCs
     [ scr_ty :~: foldl TyApp (TyCon tc) (map TyVar bs)
   -- All right hand sides should be the same
     , res_ty :~: rhs_ty ]
@@ -570,6 +580,40 @@ elabHsAlt scr_ty res_ty (HsAlt (HsPat dc xs) rhs) = do
 
   fc_tys <- liftGenM $ mapM elabPolyTy arg_tys
   return (FcAlt (FcConPat fc_dc [] [] ((rnTmVarToFcTmVar <$> xs) |: fc_tys)) fc_rhs)
+
+-- | Elaborate a case expression TODO replace with old elabTmCase
+elabTmCase' :: RnTerm -> [RnAlt] -> GenM (RnMonoTy, FcTerm)
+elabTmCase' scr alts = do
+  (scr_ty, fc_scr) <- elabTerm scr
+  result_ty <- TyVar <$> freshRnTyVar KStar
+  c <- freshFcCoVar
+  (tycon_ty, as') <- liftGenM $ inferTyConTy alts
+  fc_alts <-
+    forM alts $ \(HsAlt (HsPat dc xs) rhs) -> do
+      mapM_ notInCtxM xs
+      (as, tys, _tc) <- liftGenM $ dataConSig dc
+      let arg_tys' = substInPolyTy (buildSubst (zip as (TyVar <$> as'))) <$> tys
+      fc_dc <- liftGenM (lookupDataCon dc)
+      fc_tys <- liftGenM $ mapM elabPolyTy arg_tys'
+      (rhs_ty, fc_rhs) <- extendCtxM xs arg_tys' $ elabTerm rhs
+      c' <- freshFcCoVar
+      storeEqCs [c' :| (rhs_ty :~: result_ty)]
+      return
+        (FcAlt
+           (FcConPat fc_dc [] [] ((rnTmVarToFcTmVar <$> xs) |: fc_tys))
+           (FcTmCast fc_rhs (FcCoVar c')))
+  storeEqCs [c :| (scr_ty :~: tycon_ty)]
+  return (result_ty, FcTmCase (FcTmCast fc_scr (FcCoVar c)) fc_alts)
+
+-- | Manually type check data constructors, not very clean but allows us to use
+--   a single coercion to cast the scrutinee
+inferTyConTy :: [RnAlt] -> TcM (RnMonoTy, [RnTyVar])
+inferTyConTy alts = do
+  (tc:tcs) <- forM alts $ \(HsAlt (HsPat dc _) _) -> lookupDataConTyCon dc
+  unless (all (== tc) tcs) $ tcFail (text "TODO")
+  as <- lookupTyConArgs tc
+  bs <- mapM (freshRnTyVar . kindOf) as
+  return (mkTyConApp tc (TyVar <$> bs), bs)
 
 -- | Covert a renamed type variable to a System F type
 rnTyVarToFcType :: RnTyVar -> FcType
@@ -1205,7 +1249,7 @@ hsElaborate rn_gbl_env us pgm = runExcept
                                    ; assocs <- buildInitFcAssocs
                                    ; return (result, assocs) }
   where
-    tc_init_theory  = FT mempty mempty mempty mempty
+    tc_init_theory  = FT mempty mempty mempty
     tc_init_ctx     = mempty
     tc_init_gbl_env = TcEnv mempty mempty mempty mempty
 

@@ -273,9 +273,9 @@ data FcTerm = FcTmAbs FcTmVar FcType FcTerm         -- ^ Term abstraction: lambd
 -- need stuff like this is for optimizations).
 
 -- | Patterns
-data FcPat = -- TODO fix occurences
-  FcConPat FcDataCon -- K
-           [FcTyVar] -- ^ bs TODO annotate with kind?
+data FcPat =
+  FcConPat FcDataCon            -- ^ K
+           [FcTyVar]            -- ^ bs
            [Ann FcCoVar FcProp] -- ^ (c : psi)s
            [Ann FcTmVar FcType] -- ^ (d : tau)s (f : v  )s
 

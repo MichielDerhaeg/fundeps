@@ -379,6 +379,54 @@ substFcTmInAlt = sub_rec
 substFcTyInProp :: FcTySubst -> FcProp -> FcProp
 substFcTyInProp = sub_rec
 
+-- * System Fc Coercion Substitution
+-- ------------------------------------------------------------------------------
+
+type FcCoSubst = Sub FcCoVar FcCoercion
+
+-- | Apply a coercion substitution to a coercion
+substFcCoInCo :: FcCoSubst -> FcCoercion -> FcCoercion
+substFcCoInCo = sub_rec
+
+-- | Apply a coercion substitution to a term
+substFcCoInTm :: FcCoSubst -> FcTerm -> FcTerm
+substFcCoInTm = sub_rec
+
+
+-- * Evidence Substitution
+-- ------------------------------------------------------------------------------
+
+data EvSubst = EvSubst FcTmSubst FcCoSubst
+
+instance ApplySubst EvSubst FcTerm where
+  applySubst (EvSubst tm_subst co_subst) =
+    applySubst co_subst . applySubst tm_subst
+
+instance ApplySubst EvSubst FcCoercion where
+  applySubst (EvSubst _tm_subst co_subst) =
+    applySubst co_subst
+
+instance Monoid EvSubst where
+  mempty = EvSubst mempty mempty
+  mappend (EvSubst tm1 co1) (EvSubst tm2 co2) =
+    EvSubst (mappend tm1 tm2) (mappend co1 co2)
+  mconcat = foldl mappend mempty -- TODO correct?
+
+-- | Apply a evidence substitution to a term
+substEvInTm :: EvSubst -> FcTerm -> FcTerm
+substEvInTm = applySubst
+
+-- | Apply a evidence substitution to a coercion
+substEvInCo :: EvSubst -> FcCoercion -> FcCoercion
+substEvInCo = applySubst
+
+-- | Convert a coercion substitution to a evidence substitution
+coToEvSubst :: FcCoSubst -> EvSubst
+coToEvSubst co_subst = EvSubst mempty co_subst
+
+-- | Convert a term substitution to a evidence substitution
+tmToEvSubst :: FcTmSubst -> EvSubst
+tmToEvSubst tm_subst = EvSubst tm_subst mempty
 
 -- * The Subst class
 -- ------------------------------------------------------------------------------

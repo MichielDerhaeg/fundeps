@@ -412,8 +412,6 @@ type AnnSchemes = [AnnScheme]
 type AnnEqCt = Ann FcCoVar EqCt
 type AnnEqCs = [AnnEqCt]
 
-type EqAxioms = [FcAxiomInfo]
-
 -- | Variable-annotated equality constraints
 data AnnTypeCt = AnnEqCt AnnEqCt | AnnClsCt AnnClsCt
 type AnnTypeCs = [AnnTypeCt]
@@ -424,8 +422,25 @@ type ProgramTheory = AnnSchemes
 data FullTheory = FT { theory_super :: ProgramTheory
                      , theory_inst  :: ProgramTheory
                      , theory_local :: ProgramTheory
-                     , theory_axiom :: EqAxioms
                      }
+-- | TODO doc
+data Axiom = Axiom
+  { ax_fc_var :: FcAxVar
+  , ax_uv     :: [RnTyVar]
+  , ax_ty_fam :: RnTyFam
+  , ax_params :: [RnMonoTy]
+  , ax_ty     :: RnMonoTy
+  }
+
+type Axioms = [Axiom]
+
+data Theory = Theory
+  { p_super_schemes :: AnnSchemes
+  , p_inst_schemes  :: AnnSchemes
+  , p_local_schemes :: AnnSchemes -- TODO just AnnClsCs?
+  , p_eq_cs         :: AnnEqCs
+  , p_eq_axioms     :: Axioms
+  }
 
 -- | Extend the superclass component of the theory
 ftExtendSuper :: FullTheory -> ProgramTheory -> FullTheory
@@ -441,11 +456,11 @@ ftExtendLocal theory local_cs = theory { theory_local = theory_local theory `map
 
 -- | Collapse the full program theory to a program theory (just concatenate)
 ftToProgramTheory :: FullTheory -> ProgramTheory
-ftToProgramTheory (FT super inst local _axiom) = mconcat [super,inst,local]
+ftToProgramTheory (FT super inst local) = mconcat [super,inst,local]
 
 -- | Drop the superclass component of the full theory and turn it into a program theory (concatenate)
 ftDropSuper :: FullTheory -> ProgramTheory
-ftDropSuper (FT _super inst local _axiom) = local `mappend` inst
+ftDropSuper (FT _super inst local) = local `mappend` inst
 
 -- * Collecting Free Variables Out Of Objects
 -- ------------------------------------------------------------------------------
@@ -557,7 +572,7 @@ instance PrettyPrint ClassInfo where
   needsParens _ = False
 
 instance PrettyPrint FullTheory where
-  ppr (FT super inst local _axiom)
+  ppr (FT super inst local)
     = braces $ vcat $ punctuate comma
     $ [ text "theory_super" <+> colon <+> ppr super
       , text "theory_inst"  <+> colon <+> ppr inst
@@ -744,3 +759,26 @@ instance PrettyPrint TypeCt where
   ppr (ClassCt ct)    = ppr ct
 
   needsParens _ = True
+
+-- | Pretty print axioms
+instance PrettyPrint Axiom where
+  ppr (Axiom g as f tys ty) =
+    ppr g <+>
+      parens (sep (punctuate comma (map ppr as))) <+>
+      colon <+>
+      ppr f <> parens (sep (punctuate comma (map ppr tys))) <+>
+      text "~" <+>
+      ppr ty
+  needsParens _ = True
+
+-- | Pretty print the theory
+instance PrettyPrint Theory where
+  ppr (Theory super inst local eq_cs eq_ax)
+    = braces $ vcat $ punctuate comma
+    $ [ text "p_super_schemes" <+> colon <+> ppr super
+      , text "p_inst_schemes"  <+> colon <+> ppr inst
+      , text "p_local_schemes" <+> colon <+> ppr local
+      , text "p_eq_cs"         <+> colon <+> ppr eq_cs
+      , text "p_eq_axioms"     <+> colon <+> ppr eq_ax
+      ]
+  needsParens _ = False
