@@ -14,6 +14,20 @@ Notes
 
   * Are local cls cs just AnnClsCs instead of AnnSchemes (Theory type)
 
+  * Why lookup fc variant of tycon and datacon names when their name is the
+    same? This requires their elaboration to be monadic without good reason.
+
+  * To do type reduction, I would need something very similar to unification to
+    match the axioms and produce the substitution. I could use the old
+    unification, modified to not reduce type families, use the actual
+    unification and this would make the ``ArgR`` rule redundant I presume, or
+    use something custom but very similar to unification for this specific
+    case. The latter would mean traversing two types, they would always have to
+    match exactly the same except for TyVar's, in this case a substitution
+    would be created from this tyvar to the other type. We would need to check
+    if this substitution has already been created. I might be missing something
+    else.
+
 Substitution type class map
 ---------------------------
 

@@ -29,7 +29,7 @@ import Control.Monad.Except
 import Control.Arrow (second)
 import Data.Either (partitionEithers)
 import Data.List (nub, (\\), intersect)
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, isJust)
 
 -- * Create the typechecking environment from the renaming one
 -- ------------------------------------------------------------------------------
@@ -673,6 +673,48 @@ occursCheck _ (TyCon {})      = True
 occursCheck a (TyApp ty1 ty2) = occursCheck a ty1 && occursCheck a ty2
 occursCheck a (TyVar b)       = a /= b
 occursCheck a (TyFam _ tys)   = occursCheck a `any` tys
+
+-- | Type reduction
+reduce :: Axioms -> RnMonoTy -> Maybe (RnMonoTy, FcCoercion)
+reduce axioms = go
+  where
+    go = \case
+      TyApp ty1 ty2 ->
+        case (repeatedReduce ty1, repeatedReduce ty2) of
+          (Nothing, Nothing) -> Nothing
+          (l, r) ->
+            let (ty1', co1) = reduceOrReflect ty1 l
+            in let (ty2', co2) = reduceOrReflect ty2 r
+               in Just (TyApp ty1' ty2', FcCoApp co1 co2)
+      TyCon _tc -> Nothing
+      TyVar _x  -> Nothing
+      TyFam f tys ->
+        let m_reds = repeatedReduce <$> tys
+        in if any isJust m_reds
+             then let (tys', cos') = unzip (uncurry reduceOrReflect <$> zip tys m_reds)
+                  in Just
+                       ( TyFam f tys'
+                       , FcCoFam (rnTyFamToFcFam f) cos')
+             else Nothing
+
+    matchAxiom :: Axiom -> RnTyFam -> [RnMonoTy] -> Maybe HsTySubst
+    matchAxiom (Axiom g as f1 us ty) f2 tys -- TODO some other unify?
+      | f1 == f2, Right subst <- unify as (zipWith (:~:) us tys) = Just subst
+      | otherwise = Nothing
+
+    repeatedReduce :: RnMonoTy -> Maybe (RnMonoTy, FcCoercion)
+    repeatedReduce arg =
+      case go arg of
+        Nothing -> Nothing
+        Just (new_arg, co) ->
+          case repeatedReduce new_arg of
+            Nothing               -> Just (new_arg, co)
+            Just (newer_arg, co') -> Just (newer_arg, FcCoTrans co co')
+
+    reduceOrReflect ::
+         RnMonoTy -> Maybe (RnMonoTy, FcCoercion) -> (RnMonoTy, FcCoercion)
+    reduceOrReflect _ty (Just (new_ty, co)) = (new_ty,co)
+    reduceOrReflect ty Nothing = (ty, FcCoRefl (undefined ty))
 
 -- * Overlap Checking
 -- ------------------------------------------------------------------------------
