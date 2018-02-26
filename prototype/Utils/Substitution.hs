@@ -298,6 +298,10 @@ substInEqCt subst (ty1 :~: ty2) = substInMonoTy subst ty1 :~: substInMonoTy subs
 substInEqCs :: HsTySubst -> EqCs -> EqCs
 substInEqCs subst = map (substInEqCt subst)
 
+-- | Apply a type substitution to a a list of annotated type equalities
+substInAnnEqCs :: HsTySubst -> AnnEqCs -> AnnEqCs
+substInAnnEqCs subst = (fmap . fmap) (substInEqCt subst)
+
 -- | Apply a type substitution to a class constraint
 substInClsCt :: HsTySubst -> RnClsCt -> RnClsCt
 substInClsCt = sub_rec

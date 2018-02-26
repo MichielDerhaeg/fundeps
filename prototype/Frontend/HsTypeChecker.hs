@@ -649,9 +649,9 @@ unify  untchs eqs
     one_step _us (TyVar v1 :~: TyVar v2)
       | v1 == v2 = Just (mempty, [])
     one_step us (TyVar v :~: ty)
-      | v `notElem` us, occursCheck v ty = Just (v |-> ty, [])
+      | v `notElem` us, v `doesNotOccurIn` ty = Just (v |-> ty, [])
     one_step us (ty :~: TyVar v)
-      | v `notElem` us, occursCheck v ty = Just (v |-> ty, [])
+      | v `notElem` us, v `doesNotOccurIn` ty = Just (v |-> ty, [])
     one_step _us (_ :~: TyVar _) = Nothing
     one_step _us (TyVar _ :~: _) = Nothing
     one_step _us (TyCon tc1 :~: TyCon tc2)
@@ -667,16 +667,64 @@ unify  untchs eqs
     go  p (x:xs) | Just y <- p x = Just (y, xs)
                  | otherwise     = second (x:) <$> go p xs
 
--- | Occurs Check
-occursCheck :: RnTyVar -> RnMonoTy -> Bool
-occursCheck _ (TyCon {})      = True
-occursCheck a (TyApp ty1 ty2) = occursCheck a ty1 && occursCheck a ty2
-occursCheck a (TyVar b)       = a /= b
-occursCheck a (TyFam _ tys)   = occursCheck a `any` tys
+-- | Occurs check.
+--   Returns `True` if the given variable does not occur in the given type.
+doesNotOccurIn :: RnTyVar -> RnMonoTy -> Bool
+doesNotOccurIn _ TyCon {}        = True
+doesNotOccurIn a (TyApp ty1 ty2) = a `doesNotOccurIn` ty1 && a `doesNotOccurIn` ty2
+doesNotOccurIn a (TyVar b)       = a /= b
+doesNotOccurIn a (TyFam _ tys)   = (a `doesNotOccurIn`) `all` tys
+
+-- | TODO new unification algorithm
+unify' :: [RnTyVar] -> Axioms -> AnnEqCs -> TcM (AnnEqCs, HsTySubst, FcCoSubst)
+unify' _untchs _p []                   = return (mempty,mempty,mempty)
+unify'  untchs  p ((c :| eq_ct):eq_cs) = go eq_ct
+  where
+    rec = unify' untchs p
+
+    go (TyVar a :~: TyVar b)
+      | a == b = rec eq_cs
+    go (TyCon tc1 :~: TyCon tc2)
+      | tc1 == tc2 = rec eq_cs
+      | otherwise = tcFail $ text "TODO"
+    go (TyVar a :~: ty)
+      | a `notElem` untchs, a `doesNotOccurIn` ty = unify_var a ty
+    go (ty :~: TyVar a)
+      | a `notElem` untchs, a `doesNotOccurIn` ty = unify_var a ty
+    go (TyVar _ :~: _) = undefined -- TODO what to do with these?
+    go (_ :~: TyVar _) = undefined
+    go (ty_fam@TyFam {} :~: ty) = unify_red ty_fam ty
+    go (ty :~: ty_fam@TyFam {}) = unify_red ty_fam ty
+    go (TyApp ty1 ty2 :~: TyApp ty1' ty2') = do
+      [c1, c2] <- replicateM 2 freshFcCoVar
+      (eq_cs', ty_subst', ev_subst') <-
+        rec (eq_cs ++ [c1 :| (ty1 :~: ty1'), c2 :| (ty2 :~: ty2')])
+      return
+        ( eq_cs'
+        , ty_subst'
+        , ev_subst' <> (c |-> FcCoApp (FcCoVar c1) (FcCoVar c2)))
+    go (TyCon {} :~: TyApp {}) = tcFail $ text "TODO"
+    go (TyApp {} :~: TyCon {}) = tcFail $ text "TODO"
+
+    unify_var a ty = do
+      let subst = a |-> ty
+      (eq_cs', ty_subst', ev_subst') <- rec (substInAnnEqCs subst eq_cs)
+      fc_ty <- elabMonoTy ty
+      return
+        ( eq_cs'
+        , ty_subst' <> (a |-> ty)
+        , ev_subst' <> (c |-> FcCoRefl fc_ty))
+
+    unify_red ty_fam ty = do
+      c' <- freshFcCoVar
+      let (new_ty, co) = reduce p ty_fam
+      (eq_cs', ty_subst', ev_subst') <-
+        rec (eq_cs ++ [c' :| (new_ty :~: ty)])
+      return (eq_cs', ty_subst', ev_subst' <> (c |-> FcCoTrans co (FcCoVar c')))
 
 -- | Type reduction
-reduce :: Axioms -> RnMonoTy -> Maybe (RnMonoTy, FcCoercion)
-reduce axioms = go
+reduce :: Axioms -> RnMonoTy -> (RnMonoTy, FcCoercion)
+reduce axioms ty = reduceOrReflect ty (go ty)
   where
     go = \case
       TyApp ty1 ty2 ->
