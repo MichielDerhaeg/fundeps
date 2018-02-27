@@ -28,7 +28,7 @@ import Control.Monad.State
 import Control.Monad.Except
 import Control.Arrow (second)
 import Data.Either (partitionEithers)
-import Data.List (nub, (\\), intersect)
+import Data.List (nub, (\\), intersect, find)
 import Data.Maybe (catMaybes, isJust)
 
 -- * Create the typechecking environment from the renaming one
@@ -342,6 +342,13 @@ elabMonoTy (TyApp ty1 ty2) = FcTyApp <$> elabMonoTy ty1 <*> elabMonoTy ty2
 elabMonoTy (TyVar v)       = return (rnTyVarToFcType v)
 elabMonoTy (TyFam f tys)   = FcTyFam (rnTyFamToFcFam f) <$> mapM elabMonoTy tys
 
+-- | TODO replace old elabMonoTy
+elabMonoTy' :: RnMonoTy -> FcType
+elabMonoTy' (TyCon tc)      = FcTyCon $ rnTyConToFcTyCon tc
+elabMonoTy' (TyApp ty1 ty2) = FcTyApp (elabMonoTy' ty1) (elabMonoTy' ty2)
+elabMonoTy' (TyVar v)       = rnTyVarToFcType v
+elabMonoTy' (TyFam f tys)   = FcTyFam (rnTyFamToFcFam f) (elabMonoTy' <$> tys)
+
 -- | Elaborate a class constaint
 elabClsCt :: RnClsCt -> TcM FcType
 elabClsCt (ClsCt cls [ty]) =
@@ -631,6 +638,9 @@ rnTmVarToFcTerm = FcTmVar . rnTmVarToFcTmVar
 rnTyFamToFcFam :: RnTyFam -> FcTyFam
 rnTyFamToFcFam (HsTF name) = FcFV name
 
+rnTyConToFcTyCon :: RnTyCon -> FcTyCon
+rnTyConToFcTyCon (HsTC name) = FcTC name
+
 -- * Type Unification
 -- ------------------------------------------------------------------------------
 
@@ -724,30 +734,33 @@ unify'  untchs  p ((c :| eq_ct):eq_cs) = go eq_ct
 
 -- | Type reduction
 reduce :: Axioms -> RnMonoTy -> (RnMonoTy, FcCoercion)
-reduce axioms ty = reduceOrReflect ty (go ty)
+reduce axioms ty' = reduceOrReflect ty' (repeatedReduce ty')
   where
     go = \case
       TyApp ty1 ty2 ->
         case (repeatedReduce ty1, repeatedReduce ty2) of
           (Nothing, Nothing) -> Nothing
           (l, r) ->
-            let (ty1', co1) = reduceOrReflect ty1 l
-            in let (ty2', co2) = reduceOrReflect ty2 r
-               in Just (TyApp ty1' ty2', FcCoApp co1 co2)
+            let (ty1', co1) = reduceOrReflect ty1 l in
+            let (ty2', co2) = reduceOrReflect ty2 r in
+               Just (TyApp ty1' ty2', FcCoApp co1 co2)
       TyCon _tc -> Nothing
       TyVar _x  -> Nothing
       TyFam f tys ->
         let m_reds = repeatedReduce <$> tys
         in if any isJust m_reds
-             then let (tys', cos') = unzip (uncurry reduceOrReflect <$> zip tys m_reds)
-                  in Just
-                       ( TyFam f tys'
-                       , FcCoFam (rnTyFamToFcFam f) cos')
-             else Nothing
+             then let (tys', cos') =
+                        unzip (uncurry reduceOrReflect <$> zip tys m_reds)
+                  in Just (TyFam f tys', FcCoFam (rnTyFamToFcFam f) cos')
+             else findJust (matchAxiom f tys <$> axioms)
 
-    matchAxiom :: Axiom -> RnTyFam -> [RnMonoTy] -> Maybe HsTySubst
-    matchAxiom (Axiom g as f1 us ty) f2 tys -- TODO some other unify?
-      | f1 == f2, Right subst <- unify as (zipWith (:~:) us tys) = Just subst
+    matchAxiom :: RnTyFam -> [RnMonoTy] -> Axiom -> Maybe (RnMonoTy, FcCoercion)
+    matchAxiom f1 tys (Axiom g as f2 us ty)
+      | f1 == f2
+      , Just subst <- matchTypes us tys =
+        Just
+          ( applySubst subst ty
+          , FcCoAx g (elabMonoTy' . substInMonoTy subst . TyVar <$> as))
       | otherwise = Nothing
 
     repeatedReduce :: RnMonoTy -> Maybe (RnMonoTy, FcCoercion)
@@ -762,7 +775,28 @@ reduce axioms ty = reduceOrReflect ty (go ty)
     reduceOrReflect ::
          RnMonoTy -> Maybe (RnMonoTy, FcCoercion) -> (RnMonoTy, FcCoercion)
     reduceOrReflect _ty (Just (new_ty, co)) = (new_ty,co)
-    reduceOrReflect ty Nothing = (ty, FcCoRefl (undefined ty))
+    reduceOrReflect ty Nothing = (ty, FcCoRefl (elabMonoTy' ty))
+
+-- | Match the left types with the right, returns a substitution if they match
+matchTypes :: [RnMonoTy] -> [RnMonoTy] -> Maybe HsTySubst
+matchTypes tys tys' = buildSubst <$> matchList mempty tys tys'
+  where
+    go  subst (TyApp ty1 ty2) (TyApp ty1' ty2') = do
+      subst'  <- go subst ty1 ty1'
+      go subst' ty2 ty2'
+    go  subst (TyFam f1 tys1) (TyFam f2 tys2)
+      | f1 == f2 = matchList subst tys1 tys2
+    go  subst (TyVar a) ty
+      | a `notElem` (fst <$> subst) = return $ (a,ty):subst
+    go _subst (TyCon tc1) (TyCon tc2)
+      | tc1 == tc2 = return mempty
+    go _subst _ty1 _ty2 = Nothing
+
+    matchList  subst (ty1:tys1) (ty2:tys2) = do
+      subst' <- go subst ty1 ty2
+      matchList subst' tys1 tys2
+    matchList  subst [] [] = return subst
+    matchList _subst _  _  = Nothing
 
 -- * Overlap Checking
 -- ------------------------------------------------------------------------------

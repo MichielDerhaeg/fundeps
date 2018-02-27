@@ -14,6 +14,7 @@ zipWithExact _f []     []     = []
 zipWithExact  f (x:xs) (y:ys) = f x y : zipWithExact f xs ys
 zipWithExact _f _      _      = error "zipWithExact: length mismatch"
 
+-- TODO doc all
 zipWithExactM :: (Monad m) => (a -> b -> m c) -> [a] -> [b] -> m [c]
 zipWithExactM f l1 l2 = sequence $ zipWithExact f l1 l2
 
@@ -25,3 +26,8 @@ unlessM condition f = condition >>= (`unless` f)
 
 whenM :: Monad m => m Bool -> m () -> m ()
 whenM condition f = condition >>= (`when` f)
+
+findJust :: [Maybe a] -> Maybe a
+findJust (Just x:_) = Just x
+findJust (Nothing:xs) = findJust xs
+findJust [] = Nothing
