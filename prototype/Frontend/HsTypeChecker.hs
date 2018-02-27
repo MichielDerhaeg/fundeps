@@ -28,7 +28,7 @@ import Control.Monad.State
 import Control.Monad.Except
 import Control.Arrow (second)
 import Data.Either (partitionEithers)
-import Data.List (nub, (\\), intersect, find)
+import Data.List (nub, (\\), intersect)
 import Data.Maybe (catMaybes, isJust)
 
 -- * Create the typechecking environment from the renaming one
@@ -648,29 +648,31 @@ rnTyConToFcTyCon (HsTC name) = FcTC name
 unify :: MonadError CompileError m => [RnTyVar] -> EqCs -> m HsTySubst
 unify _untchs [] = return mempty
 unify  untchs eqs
-  | Just ((subst1, eqs'), eqs'') <- go (one_step untchs) eqs
+  | Just ((subst1, eqs'), eqs'') <- go one_step eqs
   = do subst2 <- unify untchs (substInEqCs subst1 (eqs' ++ eqs''))
        return (subst2 <> subst1)
   | otherwise = tcFail $ vcat [ text "Unification failed."
-                                   , text "Residual constraints" <+> colon <+> ppr eqs
-                                   , text "Untouchables"         <+> colon <+> ppr untchs ]
+                              , text "Residual constraints" <+> colon <+> ppr eqs
+                              , text "Untouchables"         <+> colon <+> ppr untchs ]
   where
-    one_step :: [RnTyVar] -> EqCt -> Maybe (HsTySubst, EqCs)
-    one_step _us (TyVar v1 :~: TyVar v2)
+    one_step :: EqCt -> Maybe (HsTySubst, EqCs)
+    one_step (TyVar v1 :~: TyVar v2)
       | v1 == v2 = Just (mempty, [])
-    one_step us (TyVar v :~: ty)
-      | v `notElem` us, v `doesNotOccurIn` ty = Just (v |-> ty, [])
-    one_step us (ty :~: TyVar v)
-      | v `notElem` us, v `doesNotOccurIn` ty = Just (v |-> ty, [])
-    one_step _us (_ :~: TyVar _) = Nothing
-    one_step _us (TyVar _ :~: _) = Nothing
-    one_step _us (TyCon tc1 :~: TyCon tc2)
+    one_step (TyVar v :~: ty)
+      | v `notElem` untchs, v `doesNotOccurIn` ty = Just (v |-> ty, [])
+    one_step (ty :~: TyVar v)
+      | v `notElem` untchs, v `doesNotOccurIn` ty = Just (v |-> ty, [])
+    one_step (_ :~: TyVar _) = Nothing
+    one_step (TyVar _ :~: _) = Nothing
+    one_step (TyCon tc1 :~: TyCon tc2)
       | tc1 == tc2 = Just (mempty, [])
       | otherwise  = Nothing
-    one_step _us (TyApp ty1 ty2 :~: TyApp ty3 ty4)
+    one_step (TyApp ty1 ty2 :~: TyApp ty3 ty4)
       = Just (mempty, [ty1 :~: ty3, ty2 :~: ty4])
-    one_step _us (TyCon {} :~: TyApp {}) = Nothing
-    one_step _us (TyApp {} :~: TyCon {}) = Nothing
+    one_step (TyCon {} :~: TyApp {}) = Nothing
+    one_step (TyApp {} :~: TyCon {}) = Nothing
+    one_step (TyFam {} :~: _) = Nothing
+    one_step (_ :~: TyFam {}) = Nothing
 
     go :: (a -> Maybe b) -> [a] -> Maybe (b, [a])
     go _p []     = Nothing
@@ -685,52 +687,61 @@ doesNotOccurIn a (TyApp ty1 ty2) = a `doesNotOccurIn` ty1 && a `doesNotOccurIn` 
 doesNotOccurIn a (TyVar b)       = a /= b
 doesNotOccurIn a (TyFam _ tys)   = (a `doesNotOccurIn`) `all` tys
 
--- | TODO new unification algorithm
+-- | Type Unification.
 unify' :: [RnTyVar] -> Axioms -> AnnEqCs -> TcM (AnnEqCs, HsTySubst, FcCoSubst)
-unify' _untchs _p []                   = return (mempty,mempty,mempty)
-unify'  untchs  p ((c :| eq_ct):eq_cs) = go eq_ct
+unify' _untchs _p []    = return (mempty,mempty,mempty)
+unify'  untchs  p eq_cs =
+  go step eq_cs >>= \case
+    Nothing -> return (eq_cs, mempty, mempty)
+    Just ((new_cs, ty_subst, ev_subst), eq_cs') -> do
+      (eq_cs'', ty_subst', ev_subst') <-
+        unify' untchs p (substInAnnEqCs ty_subst (new_cs <> eq_cs'))
+      return (eq_cs'', ty_subst <> ty_subst', ev_subst <> ev_subst')
   where
-    rec = unify' untchs p
+    go :: Monad m => (a -> m (Maybe b)) -> [a] -> m (Maybe (b, [a]))
+    go _f []     = return Nothing
+    go  f (x:xs) = f x >>= \case
+      Just y  -> return $ Just (y,xs)
+      Nothing -> (fmap . fmap) (second (x:)) (go f xs)
 
-    go (TyVar a :~: TyVar b)
-      | a == b = rec eq_cs
-    go (TyCon tc1 :~: TyCon tc2)
-      | tc1 == tc2 = rec eq_cs
-      | otherwise = tcFail $ text "TODO"
-    go (TyVar a :~: ty)
-      | a `notElem` untchs, a `doesNotOccurIn` ty = unify_var a ty
-    go (ty :~: TyVar a)
-      | a `notElem` untchs, a `doesNotOccurIn` ty = unify_var a ty
-    go (TyVar _ :~: _) = undefined -- TODO what to do with these?
-    go (_ :~: TyVar _) = undefined
-    go (ty_fam@TyFam {} :~: ty) = unify_red ty_fam ty
-    go (ty :~: ty_fam@TyFam {}) = unify_red ty_fam ty
-    go (TyApp ty1 ty2 :~: TyApp ty1' ty2') = do
+    step (_ :| (TyVar a :~: TyVar b))
+      | a == b = return $ Just (mempty,mempty,mempty)
+    step (_ :| (TyCon tc1 :~: TyCon tc2))
+      | tc1 == tc2 = return $ Just (mempty,mempty,mempty)
+      | otherwise = unify_fail
+    step (c :| (TyVar a :~: ty))
+      | a `notElem` untchs, a `doesNotOccurIn` ty = unify_var c a ty
+    step (c :| (ty :~: TyVar a))
+      | a `notElem` untchs, a `doesNotOccurIn` ty = unify_var c a ty
+    step (_ :| (TyVar _ :~: _)) = return Nothing
+    step (_ :| (_ :~: TyVar _)) = return Nothing
+    step (c :| (ty_fam@TyFam {} :~: ty)) = unify_red c ty_fam ty
+    step (c :| (ty :~: ty_fam@TyFam {})) = unify_red c ty_fam ty
+    step (c :| (TyApp ty1 ty2 :~: TyApp ty1' ty2')) = do
       [c1, c2] <- replicateM 2 freshFcCoVar
-      (eq_cs', ty_subst', ev_subst') <-
-        rec (eq_cs ++ [c1 :| (ty1 :~: ty1'), c2 :| (ty2 :~: ty2')])
-      return
-        ( eq_cs'
-        , ty_subst'
-        , ev_subst' <> (c |-> FcCoApp (FcCoVar c1) (FcCoVar c2)))
-    go (TyCon {} :~: TyApp {}) = tcFail $ text "TODO"
-    go (TyApp {} :~: TyCon {}) = tcFail $ text "TODO"
+      return $
+        Just
+          ( [c1 :| (ty1 :~: ty1'), c2 :| (ty2 :~: ty2')]
+          , mempty
+          , c |-> FcCoApp (FcCoVar c1) (FcCoVar c2))
+    step (_ :| (TyCon {} :~: TyApp {})) = unify_fail
+    step (_ :| (TyApp {} :~: TyCon {})) = unify_fail
 
-    unify_var a ty = do
-      let subst = a |-> ty
-      (eq_cs', ty_subst', ev_subst') <- rec (substInAnnEqCs subst eq_cs)
+    unify_var c a ty = do
       fc_ty <- elabMonoTy ty
-      return
-        ( eq_cs'
-        , ty_subst' <> (a |-> ty)
-        , ev_subst' <> (c |-> FcCoRefl fc_ty))
+      return $ Just (mempty, (a |-> ty), (c |-> FcCoRefl fc_ty))
 
-    unify_red ty_fam ty = do
+    unify_red c ty_fam ty = do
       c' <- freshFcCoVar
       let (new_ty, co) = reduce p ty_fam
-      (eq_cs', ty_subst', ev_subst') <-
-        rec (eq_cs ++ [c' :| (new_ty :~: ty)])
-      return (eq_cs', ty_subst', ev_subst' <> (c |-> FcCoTrans co (FcCoVar c')))
+      return $
+        Just ([c' :| (new_ty :~: ty)], mempty, (c |-> FcCoTrans co (FcCoVar c')))
+
+    unify_fail = tcFail $ vcat
+        [ text "Unification failed."
+        , text "Constraints"  <+> colon <+> ppr eq_cs
+        , text "Untouchables" <+> colon <+> ppr untchs
+        ]
 
 -- | Type reduction
 reduce :: Axioms -> RnMonoTy -> (RnMonoTy, FcCoercion)
