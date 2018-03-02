@@ -715,8 +715,12 @@ unify'  untchs  p eq_cs =
       | a `notElem` untchs, a `doesNotOccurIn` ty = unify_var c a ty
     step (_ :| (TyVar _ :~: _)) = return Nothing
     step (_ :| (_ :~: TyVar _)) = return Nothing
-    step (c :| (ty_fam@TyFam {} :~: ty)) = unify_red c ty_fam ty
-    step (c :| (ty :~: ty_fam@TyFam {})) = unify_red c ty_fam ty
+    step (c :| (ty_fam@TyFam {} :~: ty))
+      | Just (ty', co) <- reduce p ty_fam = unify_fam ty' ty c co
+    step (c :| (ty :~: ty_fam@TyFam {}))
+      | Just (ty', co) <- reduce p ty_fam = unify_fam ty' ty c co
+    step (_ :| (TyFam _ _ :~: _)) = return Nothing
+    step (_ :| (_ :~: TyFam _ _)) = return Nothing
     step (c :| (TyApp ty1 ty2 :~: TyApp ty1' ty2')) = do
       [c1, c2] <- replicateM 2 freshFcCoVar
       return $
@@ -731,11 +735,10 @@ unify'  untchs  p eq_cs =
       fc_ty <- elabMonoTy ty
       return $ Just (mempty, (a |-> ty), (c |-> FcCoRefl fc_ty))
 
-    unify_red c ty_fam ty = do
+    unify_fam ty' ty c co = do
       c' <- freshFcCoVar
-      let (new_ty, co) = reduce p ty_fam
       return $
-        Just ([c' :| (new_ty :~: ty)], mempty, (c |-> FcCoTrans co (FcCoVar c')))
+        Just ([c' :| (ty' :~: ty)], mempty, (c |-> FcCoTrans co (FcCoVar c')))
 
     unify_fail = tcFail $ vcat
         [ text "Unification failed."
@@ -744,8 +747,8 @@ unify'  untchs  p eq_cs =
         ]
 
 -- | Type reduction
-reduce :: Axioms -> RnMonoTy -> (RnMonoTy, FcCoercion)
-reduce axioms ty' = reduceOrReflect ty' (repeatedReduce ty')
+reduce :: Axioms -> RnMonoTy -> Maybe (RnMonoTy, FcCoercion)
+reduce axioms = repeatedReduce
   where
     go = \case
       TyApp ty1 ty2 ->
@@ -768,7 +771,7 @@ reduce axioms ty' = reduceOrReflect ty' (repeatedReduce ty')
     matchAxiom :: RnTyFam -> [RnMonoTy] -> Axiom -> Maybe (RnMonoTy, FcCoercion)
     matchAxiom f1 tys (Axiom g as f2 us ty)
       | f1 == f2
-      , Just subst <- matchTypes us tys =
+      , Right subst <- unify as (zipWithExact (:~:) us tys) =
         Just
           ( applySubst subst ty
           , FcCoAx g (elabMonoTy' . substInMonoTy subst . TyVar <$> as))
@@ -787,27 +790,6 @@ reduce axioms ty' = reduceOrReflect ty' (repeatedReduce ty')
          RnMonoTy -> Maybe (RnMonoTy, FcCoercion) -> (RnMonoTy, FcCoercion)
     reduceOrReflect _ty (Just (new_ty, co)) = (new_ty,co)
     reduceOrReflect ty Nothing = (ty, FcCoRefl (elabMonoTy' ty))
-
--- | Match the left types with the right, returns a substitution if they match
-matchTypes :: [RnMonoTy] -> [RnMonoTy] -> Maybe HsTySubst
-matchTypes tys tys' = buildSubst <$> matchList mempty tys tys'
-  where
-    go  subst (TyApp ty1 ty2) (TyApp ty1' ty2') = do
-      subst'  <- go subst ty1 ty1'
-      go subst' ty2 ty2'
-    go  subst (TyFam f1 tys1) (TyFam f2 tys2)
-      | f1 == f2 = matchList subst tys1 tys2
-    go  subst (TyVar a) ty
-      | a `notElem` (fst <$> subst) = return $ (a,ty):subst
-    go _subst (TyCon tc1) (TyCon tc2)
-      | tc1 == tc2 = return mempty
-    go _subst _ty1 _ty2 = Nothing
-
-    matchList  subst (ty1:tys1) (ty2:tys2) = do
-      subst' <- go subst ty1 ty2
-      matchList subst' tys1 tys2
-    matchList  subst [] [] = return subst
-    matchList _subst _  _  = Nothing
 
 -- * Overlap Checking
 -- ------------------------------------------------------------------------------
