@@ -21,6 +21,8 @@ class forall (a ::*). (A a, B a) => C a where
 class forall (a :: *). E a where
   fe :: a -> a
 
+class forall (a :: *). F a where
+  ff :: forall (b :: *). E b => a -> b -> b
 
 instance E Bool where
   fe = \a. a

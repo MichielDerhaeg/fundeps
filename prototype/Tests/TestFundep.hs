@@ -13,7 +13,7 @@ class forall (a :: *) (b :: *). H a b | a -> b where
 class forall (a :: *) (b :: *). F a b | a -> b where
   ff :: a -> b
 
-instance forall (a::*) (b::*) (c::*). (G a c, H c b) => F a b where
-  ff = \x. x
+--instance forall (a::*) (b::*) (c::*). (G a c, H c b) => F a b where
+--  ff = \x. x
 
 fa

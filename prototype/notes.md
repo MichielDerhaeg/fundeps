@@ -3,6 +3,7 @@ Notes
 
   * Fontend/HsTypes.hs:ftDropSuper puts local schemes first, they need to be
     prioritised because of super classes, don't forget to mention this.
+    - Will become irrelevant anyway
 
   * Data constructor environment info carries polytypes instead of monotypes
     because the tycon and datacon info is translated and carried over into
@@ -16,6 +17,7 @@ Notes
 
   * Why lookup fc variant of tycon and datacon names when their name is the
     same? This requires their elaboration to be monadic without good reason.
+    - Just rewrap names.
 
   * To do type reduction, I would need something very similar to unification to
     match the axioms and produce the substitution. I could use the old
@@ -27,6 +29,14 @@ Notes
     would be created from this tyvar to the other type. We would need to check
     if this substitution has already been created. I might be missing something
     else.
+    - use old unification
+
+  * Elaboration of class declaration says that the method type needs to be
+    elaborated as `(forall as. TC as => poly ty)`. In System Fc this is fine,
+    but the haskell type can't look like this, so in practice we group the type
+    abstraction variables and type class constraints with the implicit type
+    variables and type class constraint so we have a valid haskell poly type and
+    the corresponding System Fc type looks like this as well.
 
 Substitution type class map
 ---------------------------

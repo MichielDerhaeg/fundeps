@@ -62,7 +62,7 @@ buildInitTcEnv pgm (RnEnv _rn_cls_infos dc_infos tc_infos) = do -- GEORGE: Assum
         -- Generate And Store The DataCon Info
         rn_dc  <- HsDC . mkName (mkSym ("K" ++ (show $ symOf rn_cls))) <$> getUniqueM
 
-        fd_fams <- forM [0..(length rn_fundeps)] $ \i ->
+        fd_fams <- forM (zip [0..] rn_fundeps) $ \(i,_fd) ->
           HsTF . mkName (mkSym ("F" ++ show (symOf rn_cls) ++ show i)) <$> getUniqueM
 
         let dc_info =
@@ -147,6 +147,7 @@ elabHsDataConInfo (HsDCClsInfo _dc as tc super tys fc_dc) = do
   fc_tc  <- lookupTyCon tc
   fc_sc  <- extendTcCtxTysM as (mapM elabClsCt super)
   fc_tys <- map snd <$> extendTcCtxTysM as (mapM wfElabPolyTy tys)
+  -- FIXME TODO extend..
   return $
     FcDCInfo
       fc_dc
@@ -301,12 +302,12 @@ wfElabQualTy (QQual ct ty) = do
 
 -- | Elaborate a class constraint
 wfElabClsCt :: RnClsCt -> TcM FcType
-wfElabClsCt (ClsCt cls [ty]) = do
-  (ty_kind, fc_ty) <- wfElabMonoTy ty
+wfElabClsCt (ClsCt cls tys) = do
+  (kinds, fc_tys) <- unzip <$> mapM wfElabMonoTy tys
   clsArgKinds cls >>= \case
-    [k] | k == ty_kind -> do
+    ks | ks == kinds -> do
       fc_tc <- lookupClsTyCon cls
-      return (FcTyApp (FcTyCon fc_tc) fc_ty)
+      return (fcTyApp (FcTyCon fc_tc) fc_tys)
     _other_kind -> tcFail (text "wfElabClsCt")
 
 -- | Elaborate a list of class constraints
@@ -351,8 +352,8 @@ elabMonoTy' (TyFam f tys)   = FcTyFam (rnTyFamToFcFam f) (elabMonoTy' <$> tys)
 
 -- | Elaborate a class constaint
 elabClsCt :: RnClsCt -> TcM FcType
-elabClsCt (ClsCt cls [ty]) =
-  FcTyApp <$> (FcTyCon <$> lookupClsTyCon cls) <*> elabMonoTy ty
+elabClsCt (ClsCt cls tys) =
+  fcTyApp <$> (FcTyCon <$> lookupClsTyCon cls) <*> mapM elabMonoTy tys
 
 -- | Elaborate an equality constraint
 elabEqCt :: EqCt -> TcM FcProp
@@ -705,9 +706,9 @@ unify'  untchs  p eq_cs =
       Nothing -> (fmap . fmap) (second (x:)) (go f xs)
 
     step (_ :| (TyVar a :~: TyVar b))
-      | a == b = return $ Just (mempty,mempty,mempty)
+      | a == b = return $ Just mempty
     step (_ :| (TyCon tc1 :~: TyCon tc2))
-      | tc1 == tc2 = return $ Just (mempty,mempty,mempty)
+      | tc1 == tc2 = return $ Just mempty
       | otherwise = unify_fail
     step (c :| (TyVar a :~: ty))
       | a `notElem` untchs, a `doesNotOccurIn` ty = unify_var c a ty
@@ -931,48 +932,125 @@ projection = go id
       throwErrorM $
       text "projection" <+> colon <+> text "encountered type family"
 
+dictDestruction :: AnnClsCs -> TcM (MatchCtx)
+dictDestruction [] = return MCtxHole
+dictDestruction ((d :| ClsCt cls tys):cs) = do
+  dc <- lookupClsDataCon cls
+  tc <- lookupClsTyCon cls
+  e2 <- dictDestruction (undefined ++ cs)
+  let pat = FcConPat dc [] [] []
+  return $ MCtxCase d pat e2
+
 -- | Elaborate a class declaration. Return
 --   a) The data declaration for the class
 --   b) The method implementation
 --   c) The extended typing environment
-elabClsDecl :: RnClsDecl -> TcM (FcDataDecl, FcValBind, [FcValBind], ProgramTheory, TcCtx)
-elabClsDecl (ClsD _ rn_cs cls [a] _fundeps method method_ty) = do
-  -- Generate a fresh type and data constructor for the class
-  -- GEORGE: They should already be generated during renaming.
+elabClsDecl ::
+     RnClsDecl
+  -> TcM ([FcFamDecl], FcDataDecl, [FcValBind], ProgramTheory, TcCtx)
+elabClsDecl (ClsD ab_s rn_cs cls as fundeps method method_ty) = do
   tc <- lookupClsTyCon   cls
   dc <- lookupClsDataCon cls
 
+  let bs    = labelOf ab_s \\ as
+  let fc_as = rnTyVarToFcTyVar <$> as
+  let fc_bs = rnTyVarToFcTyVar <$> bs
+
+  unambiguousCheck bs as rn_cs
+
   -- Elaborate the superclass constraints (with full well-formedness checking also)
-  fc_sc_tys <- extendCtxM a (kindOf a) (mapM wfElabClsCt rn_cs)
+  fc_sc_tys <- extendCtxM (labelOf ab_s) (dropLabel ab_s) (mapM wfElabClsCt rn_cs)
 
   -- Elaborate the method type (with full well-formedness checking also)
-  (_kind, fc_method_ty) <- extendCtxM a (kindOf a) (wfElabPolyTy method_ty)
+  (_kind, fc_method_ty) <- extendCtxM as (kindOf <$> as) (wfElabPolyTy method_ty)
+
+  fs <- lookupClsFDFams cls
+  let (fc_props, fc_fam_decls) = unzip $
+        map
+          (\(f, Fundep ais ai0) ->
+             ( FcProp
+                 (FcTyFam (rnTyFamToFcFam f) (rnTyVarsToFcTypes ais))
+                 (rnTyVarToFcType ai0)
+             , FcFamDecl (rnTyFamToFcFam f) (rnTyVarToFcTyVar <$> ais) (kindOf ai0)))
+          (zipExact fs fundeps)
 
   -- Generate the datatype declaration
-  let fc_data_decl = FcDataDecl tc [rnTyVarToFcTyVar a] [(dc, mempty, mempty, fc_sc_tys ++ [fc_method_ty])]
+  let fc_data_decl =
+        FcDataDecl
+          tc
+          fc_as
+          [(dc, fc_bs, fc_props, fc_sc_tys ++ [fc_method_ty])]
 
   -- Generate the method implementation
-  (fc_val_bind, hs_method_ty) <- elabMethodSig method a cls method_ty
+  (fc_val_bind, hs_method_ty) <- do
+    let (as', cs', ty') = destructPolyTy method_ty
+    let (real_as, real_cs) = (as <> labelOf as', ClsCt cls (TyVar <$> as):cs')
+
+    -- Source and target method types
+    let real_method_ty =
+          constructPolyTy
+            ( zipWithExact (:|) real_as (kindOf <$> real_as)
+            , real_cs
+            , ty')
+    (_kind, full_fc_method_ty) <- wfElabPolyTy real_method_ty
+
+    -- n superclass variables + 1 for the method
+    xs <- replicateM (length rn_cs +1) freshFcTmVar
+
+    -- Annotate the constraints with fresh dictionary variables
+    (ds, ann_cs) <- annotateClsCs real_cs
+    -- elaborate the annotated dictionary variables to System F term binders
+    dbinds <- annCtsToTmBinds ann_cs
+
+    let fc_as' = map rnTyVarToFcType $ labelOf <$> as'
+
+    -- Elaborate the dictionary types
+    fc_cs_tys <- mapM elabClsCt rn_cs
+
+    -- Elaborate the type of the dictionary contained method
+    dict_method_ty <- elabPolyTy method_ty
+
+    co_vars <- mapM (const freshFcCoVar) fc_props
+
+    let fc_method_rhs =
+          fcTmTyAbs (rnTyVarToFcTyVar <$> real_as) $
+          fcTmAbs dbinds $
+          FcTmCase
+            (FcTmVar (head ds))
+            [ FcAlt
+                (FcConPat
+                   dc
+                   (rnTyVarToFcTyVar <$> bs)
+                   (co_vars |: fc_props)
+                   (xs |: (fc_cs_tys ++ [dict_method_ty])))
+                (fcDictApp (fcTmTyApp (FcTmVar (last xs)) fc_as') (tail ds))
+            ]
+
+    let fc_val_bind = FcValBind (rnTmVarToFcTmVar method) full_fc_method_ty fc_method_rhs
+
+    return (fc_val_bind, real_method_ty)
 
   -- Construct the extended typing environment
   ty_ctx <- extendCtxM method hs_method_ty ask
 
+  -- TODO old way of dealing with superclasses
   (sc_schemes, sc_decls) <- fmap unzip $ forM (zip [0..] rn_cs) $ \(i,sc_ct) -> do
     d  <- freshDictVar -- For the declaration
     da <- freshDictVar -- For the input dictionary
 
-    let cls_head  = ClsCt cls [TyVar a] -- TC a
-    fc_cls_head  <- elabClsCt cls_head  -- T_TC a
+    let cls_head  = ClsCt cls (TyVar <$> as) -- TC   as
+    fc_cls_head  <- elabClsCt cls_head       -- T_TC as
 
     -- forall a. TC a => SC
-    let scheme = CtrScheme [a :| kindOf a] [cls_head] sc_ct
+    let scheme = CtrScheme (as |: (kindOf <$> as)) [cls_head] sc_ct
     -- forall a. T_TC a -> upsilon_SC
     fc_scheme <- elabScheme scheme
 
-    xs <- replicateM (length rn_cs + 1) freshFcTmVar               -- n+1 fresh variables
+    -- n+1 fresh variables
+    xs <- replicateM (length rn_cs + 1) freshFcTmVar
 
     let fc_tm =
-          FcTmTyAbs (rnTyVarToFcTyVar a) $
+          fcTmTyAbs fc_as $
           FcTmAbs da fc_cls_head $
           FcTmCase
             (FcTmVar da)
@@ -985,66 +1063,18 @@ elabClsDecl (ClsD _ rn_cs cls [a] _fundeps method method_ty) = do
 
     return (d :| scheme, proj)
 
-  return (fc_data_decl, fc_val_bind, sc_decls, sc_schemes, ty_ctx)
+  return (fc_fam_decls, fc_data_decl, fc_val_bind:sc_decls, sc_schemes, ty_ctx)
 
-elabClsDecl _ =
-  throwErrorM $
-  text "elabClsDecl" <+> colon <+>
-  text "multi-param type classes not yet supported"
-
--- | Elaborate a method signature to
---   a) a top-level binding
---   b) the actual source type (with the proper class qualification)
-elabMethodSig :: RnTmVar -> RnTyVar -> RnClass-> RnPolyTy -> TcM (FcValBind, RnPolyTy)
-elabMethodSig method a cls sigma = do
-  -- Create fresh variables and substitute
-  ([a'],a_subst) <- freshenRnTyVars [a]
-  let (bs, cs, ty) = destructPolyTy sigma
-  (bs',bs_subst) <- freshenRnTyVars (labelOf bs)
-  let new_as = a':bs'
-  let subst = a_subst <> bs_subst
-  let cs' = substInClsCs subst (ClsCt cls [TyVar a]:cs)
-  let ty' = substInMonoTy subst ty
-
-  -- Source and target method types
-  let method_ty =
-        constructPolyTy
-          ( zipWithExact (:|) new_as (map kindOf new_as)
-          , cs'
-          , ty')
-  (_kind, fc_method_ty) <- wfElabPolyTy method_ty
-
-  dc <- lookupClsDataCon cls  -- pattern constructor
-  super_cs <- lookupClsSuper cls
-  xs <- replicateM (length super_cs +1) freshFcTmVar -- n superclass variables + 1 for the method
-
-  -- Annotate the constraints with fresh dictionary variables
-  (ds, ann_cs) <- annotateClsCs cs'
-  -- elaborate the annotated dictionary variables to System F term binders
-  dbinds <- annCtsToTmBinds ann_cs
-
-  let fc_bs = map rnTyVarToFcType bs'
-
-  -- Elaborate the dictionary types
-  let cs_subst = rnTyVarToFcTyVar a |-> rnTyVarToFcType a'
-  fc_cs_tys <- fmap (substFcTyInTy cs_subst) <$> mapM elabClsCt super_cs
-
-  -- Elaborate the type of the dictionary contained method
-  fc_dict_method_ty <- elabPolyTy $ substInPolyTy a_subst sigma
-
-  let fc_method_rhs =
-        fcTmTyAbs (map rnTyVarToFcTyVar new_as) $
-        fcTmAbs dbinds $
-        FcTmCase
-          (FcTmVar (head ds))
-          [ FcAlt
-              (FcConPat dc mempty mempty (xs |: (fc_cs_tys ++ [fc_dict_method_ty])))
-              (fcDictApp (fcTmTyApp (FcTmVar (last xs)) fc_bs) (tail ds))
-          ]
-
-  let fc_val_bind = FcValBind (rnTmVarToFcTmVar method) fc_method_ty fc_method_rhs
-
-  return (fc_val_bind, method_ty)
+-- | Check if an instance/class context is ambiguous
+unambiguousCheck :: [RnTyVar] -> [RnTyVar] -> RnClsCs -> TcM ()
+unambiguousCheck bs as cs = do
+  subst <- determinacy as cs
+  unless (bs \\ substDom subst == mempty) $
+    tcFail $ text "unambiguousCheck" <+> colon <+> vcat (punctuate comma
+       [ text "bs" <+> colon <+> ppr bs
+       , text "as" <+> colon <+> ppr as
+       , text "class constraints" <+> colon <+> ppr cs
+       ])
 
 -- | Elaborate a list of annotated dictionary variables to a list of System F term binders.
 annCtsToTmBinds :: AnnClsCs -> TcM [(FcTmVar, FcType)]
@@ -1304,17 +1334,16 @@ elabProgram theory (PgmExp tm) = do
 
 -- Elaborate a class declaration
 elabProgram theory (PgmCls cls_decl pgm) = do
-  (fc_data_decl, fc_val_bind, fc_sc_proj, ext_theory, ext_ty_env) <-
+  (fc_fam_decls, fc_data_decl, fc_val_binds, ext_theory, ext_ty_env) <-
     elabClsDecl cls_decl
   (fc_pgm, ty, final_theory) <-
     setCtxM ext_ty_env (elabProgram (theory `ftExtendSuper` ext_theory) pgm)
   let fc_program =
         FcPgmDataDecl
           fc_data_decl
-          (FcPgmValDecl
-             fc_val_bind
-             (foldl (flip FcPgmValDecl) fc_pgm fc_sc_proj))
-  return (fc_program, ty, final_theory)
+             (foldl (flip FcPgmValDecl) fc_pgm fc_val_binds)
+  let qsdf = foldl (flip FcPgmFamDecl) fc_program fc_fam_decls
+  return (qsdf, ty, final_theory)
 
 -- | Elaborate a class instance
 elabProgram theory (PgmInst ins_decl pgm) = do
