@@ -61,7 +61,7 @@ buildInitTcEnv pgm (RnEnv _rn_cls_infos dc_infos tc_infos) = do -- GEORGE: Assum
         fc_dc  <- FcDC . mkName (mkSym ("K" ++ (show $ symOf rn_cls))) <$> getUniqueM
 
         fd_fams <- forM (zip [0..] rn_fundeps) $ \(i,_fd) ->
-          HsTF . mkName (mkSym ("F" ++ show (symOf rn_cls) ++ show i)) <$> getUniqueM
+          HsTF . mkName (mkSym ("F" ++ show (symOf rn_cls) ++ show (i :: Word))) <$> getUniqueM
 
         -- Generate And Store The Class Info
         let cls_info =
@@ -736,16 +736,14 @@ reduce axioms = repeatedReduce
 -- ------------------------------------------------------------------------------
 
 overlapCheck :: MonadError CompileError m => FullTheory -> RnClsCt -> m ()
-overlapCheck theory cls_ct@(ClsCt cls1 [ty1])
-  -- We only care about the instance theory
- =
+overlapCheck theory cls_ct@(ClsCt cls1 tys1) =
   case catMaybes (fmap overlaps (theory_inst theory)) of
     msg:_ -> tcFail msg
     []    -> return ()
   where
-    overlaps (_ :| scheme@(CtrScheme _ _ (ClsCt cls2 [ty2])))
+    overlaps (_ :| scheme@(CtrScheme _ _ (ClsCt cls2 tys2)))
       | cls1 == cls2
-      , Right {} <- unify [] [ty1 :~: ty2] =
+      , Right {} <- unify [] (zipWithExact (:~:) tys1 tys2) =
         Just (text "overlapCheck:" $$ ppr cls_ct $$ ppr scheme)
       | otherwise = Nothing
 

@@ -18,6 +18,7 @@ Notes
   * Why lookup fc variant of tycon and datacon names when their name is the
     same? This requires their elaboration to be monadic without good reason.
     - Just rewrap names.
+    * done, maybe check for other things that could just be rewrapped
 
   * To do type reduction, I would need something very similar to unification to
     match the axioms and produce the substitution. I could use the old
