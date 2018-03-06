@@ -60,19 +60,11 @@ type PsDataCon = HsDataCon Sym
 type RnDataCon = HsDataCon Name
 
 data HsDataConInfo
-  -- Normal DataCon
   = HsDCInfo { hs_dc_data_con    :: RnDataCon    -- ^ The data constructor name
              , hs_dc_univ        :: [RnTyVar]    -- ^ Universal type variables
              , hs_dc_parent      :: RnTyCon      -- ^ Parent type constructor
              , hs_dc_arg_tys     :: [RnPolyTy]   -- ^ Argument types
              , hs_dc_fc_data_con :: FcDataCon }  -- ^ Elaborated Data Constructor
-  -- DataCon generated for a class
-  | HsDCClsInfo { hs_dc_data_con    :: RnDataCon    -- ^ The data constructor name
-                , hs_dc_univ        :: [RnTyVar]    -- ^ Universal type variables
-                , hs_dc_parent      :: RnTyCon      -- ^ Parent type constructor
-                , hs_dc_super       :: RnClsCs
-                , hs_dc_arg_tys     :: [RnPolyTy]   -- ^ Argument types
-                , hs_dc_fc_data_con :: FcDataCon }  -- ^ Elaborated Data Constructor
 
 -- * Class Names
 -- ------------------------------------------------------------------------------
@@ -105,8 +97,8 @@ data ClassInfo
               , cls_fd_fams   :: [RnTyFam]  -- ^ Functional dependency type families
               , cls_method    :: RnTmVar    -- ^ Method name
               , cls_method_ty :: RnPolyTy   -- ^ Method type
-              , cls_tycon     :: RnTyCon    -- ^ Elaborated Type Constructor
-              , cls_datacon   :: RnDataCon  -- ^ Elaborated Data Constructor
+              , cls_tycon     :: FcTyCon    -- ^ Elaborated Type Constructor
+              , cls_datacon   :: FcDataCon  -- ^ Elaborated Data Constructor
               }
 
 data RnClsInfo
@@ -530,15 +522,6 @@ instance PrettyPrint HsDataConInfo where
       , text "parent"  <+> colon <+> ppr tc
       , text "arg_tys" <+> colon <+> ppr arg_tys
       ]
-  ppr (HsDCClsInfo _dc univs tc super arg_tys _dc_fc_data_con)
-    = braces $ hsep $ punctuate comma
-    $ [
-        text "univ"    <+> colon <+> ppr univs
-      , text "parent"  <+> colon <+> ppr tc
-      , text "super"   <+> colon <+> ppr super
-      , text "arg_tys" <+> colon <+> ppr arg_tys
-      ]
-  needsParens _ = False
 
 -- | Pretty print class names
 instance Symable a => PrettyPrint (Class a) where

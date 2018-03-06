@@ -55,25 +55,13 @@ buildInitTcEnv pgm (RnEnv _rn_cls_infos dc_infos tc_infos) = do -- GEORGE: Assum
     buildStoreClsInfos (PgmCls  c p) = case c of
       ClsD _rn_abs rn_cs rn_cls rn_as rn_fundeps rn_method method_ty -> do
         -- Generate And Store The TyCon Info
-        rn_tc <- HsTC . mkName (mkSym ("T" ++ (show $ symOf rn_cls))) <$> getUniqueM
-        let tc_info = HsTCInfo rn_tc rn_as (FcTC (nameOf rn_tc)) [] -- TODO?
-        addTyConInfoTcM rn_tc tc_info
+        fc_tc <- FcTC . mkName (mkSym ("T" ++ (show $ symOf rn_cls))) <$> getUniqueM
 
         -- Generate And Store The DataCon Info
-        rn_dc  <- HsDC . mkName (mkSym ("K" ++ (show $ symOf rn_cls))) <$> getUniqueM
+        fc_dc  <- FcDC . mkName (mkSym ("K" ++ (show $ symOf rn_cls))) <$> getUniqueM
 
         fd_fams <- forM (zip [0..] rn_fundeps) $ \(i,_fd) ->
           HsTF . mkName (mkSym ("F" ++ show (symOf rn_cls) ++ show i)) <$> getUniqueM
-
-        let dc_info =
-              HsDCClsInfo
-                rn_dc
-                rn_as
-                rn_tc
-                rn_cs
-                [method_ty]
-                (FcDC (nameOf rn_dc))
-        addDataConInfoTcM rn_dc dc_info
 
         -- Generate And Store The Class Info
         let cls_info =
@@ -85,8 +73,8 @@ buildInitTcEnv pgm (RnEnv _rn_cls_infos dc_infos tc_infos) = do -- GEORGE: Assum
                 fd_fams
                 rn_method
                 method_ty
-                rn_tc
-                rn_dc
+                fc_tc
+                fc_dc
         addClsInfoTcM rn_cls cls_info
 
         -- Continue with the rest
@@ -170,15 +158,11 @@ clsArgKinds cls = map kindOf . cls_type_args <$> lookupTcEnvM tc_env_cls_info cl
 
 -- | Lookup the System Fc type constructor for a class
 lookupClsTyCon :: RnClass -> TcM FcTyCon
-lookupClsTyCon cls = do
-  hs_tycon <- cls_tycon <$> lookupTcEnvM tc_env_cls_info cls
-  hs_tc_fc_ty_con <$> lookupTcEnvM tc_env_tc_info hs_tycon
+lookupClsTyCon cls = cls_tycon <$> lookupTcEnvM tc_env_cls_info cls
 
 -- | Lookup the System Fc data constructor for a class
 lookupClsDataCon :: RnClass -> TcM FcDataCon
-lookupClsDataCon cls = do
-  hs_datacon <- cls_datacon <$> lookupTcEnvM tc_env_cls_info cls
-  hs_dc_fc_data_con <$> lookupTcEnvM tc_env_dc_info hs_datacon
+lookupClsDataCon cls = cls_datacon <$> lookupTcEnvM tc_env_cls_info cls
 
 -- | Get the signature of a data constructor in pieces
 dataConSig :: RnDataCon -> TcM ([RnTyVar], [RnPolyTy], RnTyCon) -- GEORGE: Needs to take into account the class case too
@@ -1302,12 +1286,12 @@ elabProgram theory (PgmCls cls_decl pgm) = do
     elabClsDecl cls_decl
   (fc_pgm, ty, final_theory) <-
     setCtxM ext_ty_env (elabProgram (theory `ftExtendSuper` ext_theory) pgm)
-  let fc_program =
+  let fc_pgm_data_val_decls =
         FcPgmDataDecl
           fc_data_decl
              (foldl (flip FcPgmValDecl) fc_pgm fc_val_binds)
-  let qsdf = foldl (flip FcPgmFamDecl) fc_program fc_fam_decls
-  return (qsdf, ty, final_theory)
+  let fc_program = foldr FcPgmFamDecl fc_pgm_data_val_decls fc_fam_decls
+  return (fc_program, ty, final_theory)
 
 -- | Elaborate a class instance
 elabProgram theory (PgmInst ins_decl pgm) = do
