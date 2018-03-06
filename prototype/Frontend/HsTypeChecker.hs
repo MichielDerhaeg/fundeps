@@ -51,7 +51,7 @@ buildInitTcEnv pgm (RnEnv _rn_cls_infos dc_infos tc_infos) = do -- GEORGE: Assum
     buildStoreClsInfos (PgmExp {})   = return ()
     buildStoreClsInfos (PgmInst _ p) = buildStoreClsInfos p
     buildStoreClsInfos (PgmData _ p) = buildStoreClsInfos p
-    buildStoreClsInfos (PgmVal  _ p) = buildStoreClsInfos p -- TODO check if correct
+    buildStoreClsInfos (PgmVal  _ p) = buildStoreClsInfos p
     buildStoreClsInfos (PgmCls  c p) = case c of
       ClsD _rn_abs rn_cs rn_cls rn_as rn_fundeps rn_method method_ty -> do
         -- Generate And Store The TyCon Info
@@ -134,46 +134,6 @@ instance PrettyPrint TcEnv where
     ]
   needsParens _ = False
 
--- | Transform info for a type constructor to the System F variant
-elabHsTyConInfo :: HsTyConInfo -> FcTyConInfo
-elabHsTyConInfo (HsTCInfo _tc as fc_tc _) = FcTCInfo fc_tc (map rnTyVarToFcTyVar as)
-
-elabHsDataConInfo :: HsDataConInfo -> TcM FcDataConInfo
-elabHsDataConInfo (HsDCInfo _dc as tc tys fc_dc) = do
-  fc_tc  <- lookupTyCon tc
-  fc_tys <- map snd <$> extendTcCtxTysM as (mapM wfElabPolyTy tys)
-  return $ FcDCInfo fc_dc (map rnTyVarToFcTyVar as) mempty mempty fc_tc fc_tys
-elabHsDataConInfo (HsDCClsInfo _dc as tc super tys fc_dc) = do
-  fc_tc  <- lookupTyCon tc
-  fc_sc  <- extendTcCtxTysM as (mapM elabClsCt super)
-  fc_tys <- map snd <$> extendTcCtxTysM as (mapM wfElabPolyTy tys)
-  -- FIXME TODO extend..
-  return $
-    FcDCInfo
-      fc_dc
-      (map rnTyVarToFcTyVar as)
-      mempty
-      mempty
-      fc_tc
-      (fc_sc ++ fc_tys)
-
-buildInitFcAssocs :: TcM (AssocList FcTyCon FcTyConInfo, AssocList FcDataCon FcDataConInfo)
-buildInitFcAssocs = do
-  -- Convert the tyCon associations
-  tc_infos <- gets tc_env_tc_info
-  fc_tc_infos <- flip mapAssocListM tc_infos $ \(tc, tc_info) -> do
-    fc_tc <- lookupTyCon tc
-    return (fc_tc, elabHsTyConInfo tc_info)
-
-  -- Convert the dataCon associations
-  dc_infos <- gets tc_env_dc_info
-  fc_dc_infos <- flip mapAssocListM dc_infos $ \(dc, dc_info) -> do
-    fc_dc      <- lookupDataCon dc
-    fc_dc_info <- elabHsDataConInfo dc_info
-    return (fc_dc, fc_dc_info)
-
-  return (fc_tc_infos, fc_dc_infos)
-
 -- * Lookup data and type constructors for a class
 -- ------------------------------------------------------------------------------
 
@@ -181,7 +141,11 @@ buildInitFcAssocs = do
 --         2. It's exactly the same as lookupFcGblEnv. Abstract over both.
 
 -- | Lookup something in the global environment
-lookupTcEnvM ::  (Eq a, PrettyPrint a, MonadError CompileError m, MonadState s m) => (s -> AssocList a b) -> a -> m b
+lookupTcEnvM ::
+     (Eq a, PrettyPrint a, MonadError CompileError m, MonadState s m)
+  => (s -> AssocList a b)
+  -> a
+  -> m b
 lookupTcEnvM f x = gets f >>= \l -> case lookupInAssocList x l of
   Just y  -> return y
   Nothing -> tcFail (text "lookupTcEnvM" <+> colon <+> ppr x <+> text "is unbound")
@@ -1380,20 +1344,15 @@ hsElaborate ::
      RnEnv
   -> UniqueSupply
   -> RnProgram
-  -> Either CompileError ( ( ( (FcProgram, RnPolyTy, FullTheory)
-                             , ( AssocList FcTyCon FcTyConInfo
-                               , AssocList FcDataCon FcDataConInfo))
-                           , UniqueSupply)
+  -> Either CompileError ( (((FcProgram, RnPolyTy, FullTheory)), UniqueSupply)
                          , TcEnv)
 hsElaborate rn_gbl_env us pgm = runExcept
                               $ flip runStateT  tc_init_gbl_env -- Empty when you start
                               $ flip runReaderT tc_init_ctx
                               $ flip runUniqueSupplyT us
                               $ markTcError
-                              $ do { buildInitTcEnv pgm rn_gbl_env -- Create the actual global environment
-                                   ; result <- elabProgram tc_init_theory pgm
-                                   ; assocs <- buildInitFcAssocs
-                                   ; return (result, assocs) }
+                              $ do buildInitTcEnv pgm rn_gbl_env
+                                   elabProgram tc_init_theory pgm
   where
     tc_init_theory  = FT mempty mempty mempty
     tc_init_ctx     = mempty
