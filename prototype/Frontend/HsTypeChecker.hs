@@ -165,7 +165,7 @@ lookupClsDataCon :: RnClass -> TcM FcDataCon
 lookupClsDataCon cls = cls_datacon <$> lookupTcEnvM tc_env_cls_info cls
 
 -- | Get the signature of a data constructor in pieces
-dataConSig :: RnDataCon -> TcM ([RnTyVar], [RnPolyTy], RnTyCon) -- GEORGE: Needs to take into account the class case too
+dataConSig :: RnDataCon -> TcM ([RnTyVar], [RnMonoTy], RnTyCon)
 dataConSig dc = lookupTcEnvM tc_env_dc_info dc >>= \info ->
   return ( hs_dc_univ    info
          , hs_dc_arg_tys info
@@ -490,10 +490,9 @@ elabTmCon dc = do
 
 freshenDataConSig :: RnDataCon -> TcM ([RnTyVar], [RnMonoTy], RnTyCon)
 freshenDataConSig dc = do
-  (as, poly_arg_tys, tc) <- dataConSig dc
-  (bs, subst) <- freshenRnTyVars as                              -- Freshen up the universal type variables
-  arg_tys     <- polyTysToMonoTysM $ map (substInPolyTy subst) poly_arg_tys -- Substitute in the argument types
-  return (bs, arg_tys, tc)
+  (as, arg_tys, tc) <- dataConSig dc
+  (bs, subst) <- freshenRnTyVars as
+  return (bs, substInMonoTy subst <$> arg_tys, tc)
 
 -- | Cast a list of polytypes to monotypes. Fail if not possible
 polyTysToMonoTysM :: MonadError CompileError m => [PolyTy a] -> m [MonoTy a]
@@ -524,9 +523,9 @@ elabHsAlt scr_ty res_ty (HsAlt (HsPat dc xs) rhs) = do
   -- Generate fresh universal type variables for the universal tvs
   (bs, ty_subst) <- liftGenM (freshenRnTyVars as)
   -- Apply the renaming substitution to the argument types
-  let arg_tys = map (substInPolyTy ty_subst) orig_arg_tys
+  let arg_tys = substInMonoTy ty_subst <$> orig_arg_tys
   -- Type check the right hand side
-  (rhs_ty, fc_rhs) <- extendCtxM xs arg_tys (elabTerm rhs)
+  (rhs_ty, fc_rhs) <- extendCtxM xs (monoTyToPolyTy <$> arg_tys) (elabTerm rhs)
   -- The scrutinee type must match the pattern type
   (_cs, ann_cs) <- liftGenM $ annotateEqCs
     [ scr_ty :~: foldl TyApp (TyCon tc) (map TyVar bs)
@@ -534,7 +533,7 @@ elabHsAlt scr_ty res_ty (HsAlt (HsPat dc xs) rhs) = do
     , res_ty :~: rhs_ty ]
   storeEqCs ann_cs
 
-  fc_tys <- liftGenM $ mapM elabPolyTy arg_tys
+  let fc_tys = elabMonoTy' <$> arg_tys
   return (FcAlt (FcConPat fc_dc [] [] ((rnTmVarToFcTmVar <$> xs) |: fc_tys)) fc_rhs)
 
 -- | Elaborate a case expression TODO replace with old elabTmCase
@@ -548,10 +547,10 @@ elabTmCase' scr alts = do
     forM alts $ \(HsAlt (HsPat dc xs) rhs) -> do
       mapM_ notInCtxM xs
       (as, tys, _tc) <- liftGenM $ dataConSig dc
-      let arg_tys' = substInPolyTy (buildSubst (zip as (TyVar <$> as'))) <$> tys
+      let arg_tys' = substInMonoTy (buildSubst (zip as (TyVar <$> as'))) <$> tys
       fc_dc <- liftGenM (lookupDataCon dc)
-      fc_tys <- liftGenM $ mapM elabPolyTy arg_tys'
-      (rhs_ty, fc_rhs) <- extendCtxM xs arg_tys' $ elabTerm rhs
+      let fc_tys = elabMonoTy' <$> arg_tys'
+      (rhs_ty, fc_rhs) <- extendCtxM xs (monoTyToPolyTy <$> arg_tys') $ elabTerm rhs
       c' <- freshFcCoVar
       storeEqCs [c' :| (rhs_ty :~: result_ty)]
       return

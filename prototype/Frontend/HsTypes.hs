@@ -63,7 +63,7 @@ data HsDataConInfo
   = HsDCInfo { hs_dc_data_con    :: RnDataCon    -- ^ The data constructor name
              , hs_dc_univ        :: [RnTyVar]    -- ^ Universal type variables
              , hs_dc_parent      :: RnTyCon      -- ^ Parent type constructor
-             , hs_dc_arg_tys     :: [RnPolyTy]   -- ^ Argument types
+             , hs_dc_arg_tys     :: [RnMonoTy]   -- ^ Argument types
              , hs_dc_fc_data_con :: FcDataCon }  -- ^ Elaborated Data Constructor
 
 -- * Class Names
