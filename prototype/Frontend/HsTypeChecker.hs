@@ -285,27 +285,21 @@ wfElabPolyTy (PPoly (a :| _) ty) = do
 -- ------------------------------------------------------------------------------
 
 -- | Elaborate a monotype
-elabMonoTy :: RnMonoTy -> TcM FcType
-elabMonoTy (TyCon tc)      = FcTyCon <$> lookupTyCon tc
-elabMonoTy (TyApp ty1 ty2) = FcTyApp <$> elabMonoTy ty1 <*> elabMonoTy ty2
-elabMonoTy (TyVar v)       = return (rnTyVarToFcType v)
-elabMonoTy (TyFam f tys)   = FcTyFam (rnTyFamToFcFam f) <$> mapM elabMonoTy tys
-
--- | TODO replace old elabMonoTy
-elabMonoTy' :: RnMonoTy -> FcType
-elabMonoTy' (TyCon tc)      = FcTyCon $ rnTyConToFcTyCon tc
-elabMonoTy' (TyApp ty1 ty2) = FcTyApp (elabMonoTy' ty1) (elabMonoTy' ty2)
-elabMonoTy' (TyVar v)       = rnTyVarToFcType v
-elabMonoTy' (TyFam f tys)   = FcTyFam (rnTyFamToFcFam f) (elabMonoTy' <$> tys)
+elabMonoTy :: RnMonoTy -> FcType
+elabMonoTy (TyCon tc)      = FcTyCon $ rnTyConToFcTyCon tc
+elabMonoTy (TyApp ty1 ty2) = FcTyApp (elabMonoTy ty1) (elabMonoTy ty2)
+elabMonoTy (TyVar v)       = rnTyVarToFcType v
+elabMonoTy (TyFam f tys)   = FcTyFam (rnTyFamToFcFam f) (elabMonoTy <$> tys)
 
 -- | Elaborate a class constaint
 elabClsCt :: RnClsCt -> TcM FcType
-elabClsCt (ClsCt cls tys) =
-  fcTyApp <$> (FcTyCon <$> lookupClsTyCon cls) <*> mapM elabMonoTy tys
+elabClsCt (ClsCt cls tys) = do
+  fc_tc <- lookupClsTyCon cls
+  return $ fcTyApp (FcTyCon fc_tc) (elabMonoTy <$> tys)
 
 -- | Elaborate an equality constraint
-elabEqCt :: EqCt -> TcM FcProp
-elabEqCt (ty1 :~: ty2) = FcProp <$> elabMonoTy ty1 <*> elabMonoTy ty2
+elabEqCt :: EqCt -> FcProp
+elabEqCt (ty1 :~: ty2) = FcProp (elabMonoTy ty1) (elabMonoTy ty2)
 
 -- | Elaborate a class constaint scheme
 elabScheme :: CtrScheme -> TcM FcType
@@ -326,7 +320,7 @@ elabPolyTy (PPoly (a :| _) ty) =
 elabQualTy :: RnQualTy -> TcM FcType
 elabQualTy (QQual cls_ct ty) =
   mkFcArrowTy <$> elabClsCt cls_ct <*> elabQualTy ty
-elabQualTy (QMono ty) = elabMonoTy ty
+elabQualTy (QMono ty) = return $ elabMonoTy ty
 
 -- * Constraint store
 -- ------------------------------------------------------------------------------
@@ -459,7 +453,7 @@ elabTmVar x = do
   -- System F representation
   let fc_ds = map FcTmVar ds
   let fc_as = rnTyVarToFcType <$> as
-  fc_bs    <- liftGenM $ mapM (elabMonoTy . substInTyVar subst) bs'
+  let fc_bs = (elabMonoTy . substInTyVar subst) <$> bs'
   let fc_tm = fcTmApp (fcTmTyApp (rnTmVarToFcTerm x) (fc_as <> fc_bs)) fc_ds
   return (ty, fc_tm)
 
@@ -533,7 +527,7 @@ elabHsAlt scr_ty res_ty (HsAlt (HsPat dc xs) rhs) = do
     , res_ty :~: rhs_ty ]
   storeEqCs ann_cs
 
-  let fc_tys = elabMonoTy' <$> arg_tys
+  let fc_tys = elabMonoTy <$> arg_tys
   return (FcAlt (FcConPat fc_dc [] [] ((rnTmVarToFcTmVar <$> xs) |: fc_tys)) fc_rhs)
 
 -- | Elaborate a case expression TODO replace with old elabTmCase
@@ -549,7 +543,7 @@ elabTmCase' scr alts = do
       (as, tys, _tc) <- liftGenM $ dataConSig dc
       let arg_tys' = substInMonoTy (buildSubst (zip as (TyVar <$> as'))) <$> tys
       fc_dc <- liftGenM (lookupDataCon dc)
-      let fc_tys = elabMonoTy' <$> arg_tys'
+      let fc_tys = elabMonoTy <$> arg_tys'
       (rhs_ty, fc_rhs) <- extendCtxM xs (monoTyToPolyTy <$> arg_tys') $ elabTerm rhs
       c' <- freshFcCoVar
       storeEqCs [c' :| (rhs_ty :~: result_ty)]
@@ -679,9 +673,8 @@ unify'  untchs  p eq_cs =
     step (_ :| (TyCon {} :~: TyApp {})) = unify_fail
     step (_ :| (TyApp {} :~: TyCon {})) = unify_fail
 
-    unify_var c a ty = do
-      fc_ty <- elabMonoTy ty
-      return $ Just (mempty, (a |-> ty), (c |-> FcCoRefl fc_ty))
+    unify_var c a ty =
+      return $ Just (mempty, (a |-> ty), (c |-> FcCoRefl (elabMonoTy ty)))
 
     unify_fam ty' ty c co = do
       c' <- freshFcCoVar
@@ -722,7 +715,7 @@ reduce axioms = repeatedReduce
       , Right subst <- unify as (zipWithExact (:~:) us tys) =
         Just
           ( applySubst subst ty
-          , FcCoAx g (elabMonoTy' . substInMonoTy subst . TyVar <$> as))
+          , FcCoAx g (elabMonoTy . substInMonoTy subst . TyVar <$> as))
       | otherwise = Nothing
 
     repeatedReduce :: RnMonoTy -> Maybe (RnMonoTy, FcCoercion)
@@ -737,7 +730,7 @@ reduce axioms = repeatedReduce
     reduceOrReflect ::
          RnMonoTy -> Maybe (RnMonoTy, FcCoercion) -> (RnMonoTy, FcCoercion)
     reduceOrReflect _ty (Just (new_ty, co)) = (new_ty,co)
-    reduceOrReflect ty Nothing = (ty, FcCoRefl (elabMonoTy' ty))
+    reduceOrReflect ty Nothing = (ty, FcCoRefl (elabMonoTy ty))
 
 -- * Overlap Checking
 -- ------------------------------------------------------------------------------
@@ -780,7 +773,7 @@ entail as ((d' :| CtrScheme bs cls_cs (ClsCt cls2 [ty2])):schemes) ct@(d :| ClsC
   | cls1 == cls2
   , Right ty_subst <- unify as [ty1 :~: ty2] = do
     (d''s, ann_cls_cs) <- annotateClsCs $ substInClsCs ty_subst cls_cs
-    fc_subbed_bs <- mapM elabMonoTy . substInTyVars ty_subst $ labelOf bs
+    let fc_subbed_bs = map elabMonoTy . substInTyVars ty_subst $ labelOf bs
     let ev_subst =
           d |->
            foldl
@@ -800,8 +793,8 @@ closure untchs theory cls_ct = go theory cls_ct
       , Right ty_subst <- unify untchs [ty1 :~: ty2] = do
         d' <- freshDictVar
         let sub_q = substInClsCt ty_subst q
-        fc_subbed_alphas <-
-          mapM elabMonoTy . substInTyVars ty_subst $ labelOf alphas
+        let fc_subbed_alphas =
+              map elabMonoTy . substInTyVars ty_subst $ labelOf alphas
         let ev_subst =
               d' |->
                FcTmApp
@@ -1149,7 +1142,7 @@ elabInsDecl theory (InsD as ins_cs cls [typat] method method_tm) = do
   fc_dict_transformer <- do
     binds <- annCtsToTmBinds ann_ins_cs
     dc    <- lookupClsDataCon cls
-    fc_ty <- elabMonoTy ty
+    let fc_ty = elabMonoTy ty
     return $ substFcTmInTm closure_ev_subst $
       fcTmTyAbs fc_bs $
         fcTmAbs binds $
@@ -1201,7 +1194,7 @@ elabTermWithSig untch theory tm poly_ty = do
       (text "Failed to resolve constraints" <+>
        colon <+> ppr residual_cs $$ text "From" <+> colon <+> ppr theory
        $$ text "Wanted" <+> colon <+> ppr wanted)
-  fc_subst <- elabHsTySubst ty_subst
+  let fc_subst = elabHsTySubst ty_subst
 
   -- Generate the resulting System F term
   return $
@@ -1211,8 +1204,8 @@ elabTermWithSig untch theory tm poly_ty = do
         substFcTyInTm fc_subst fc_tm
 
 -- | Convert a source type substitution to a System F type substitution
-elabHsTySubst :: HsTySubst -> TcM FcTySubst
-elabHsTySubst = mapSubM (return . rnTyVarToFcTyVar) elabMonoTy
+elabHsTySubst :: HsTySubst -> FcTySubst
+elabHsTySubst =  mapSub rnTyVarToFcTyVar elabMonoTy
 
 -- * Type Inference With Constraint Simplification
 -- ------------------------------------------------------------------------------
@@ -1229,7 +1222,7 @@ elabTermSimpl theory tm = do
   let refined_wanted_ccs = substInAnnClsCs      ty_subst wanted_ccs             -- refine the wanted class constraints
   let refined_mono_ty    = substInMonoTy        ty_subst mono_ty                -- refine the monotype
   -- refine the term
-  refined_fc_tm <- flip substFcTyInTm fc_tm <$> elabHsTySubst ty_subst
+  let refined_fc_tm = substFcTyInTm (elabHsTySubst ty_subst) fc_tm
 
   let untouchables = nub (ftyvsOf refined_wanted_ccs ++ ftyvsOf refined_mono_ty)
 

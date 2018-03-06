@@ -222,13 +222,9 @@ instance SubstVar FcCoVar FcCoercion FcAlt where
 -- | General structure of substitutions as snoc lists
 data Sub x y = SNil | SCons (Sub x y) x y
 
-mapSubM :: Monad m => (x -> m x') -> (y -> m y') -> Sub x y -> m (Sub x' y')
-mapSubM _fx _fy SNil          = return SNil
-mapSubM  fx  fy (SCons s x y) = do
-  s' <- mapSubM fx fy s
-  x' <- fx x
-  y' <- fy y
-  return (SCons s' x' y')
+mapSub :: (x -> x') -> (y -> y') -> Sub x y -> (Sub x' y')
+mapSub _fx _fy SNil          = SNil
+mapSub  fx  fy (SCons s x y) = SCons (mapSub fx fy s) (fx x) (fy y)
 
 instance (PrettyPrint x, PrettyPrint y) => PrettyPrint (Sub x y) where
   ppr = brackets . sep . punctuate comma. reverse . to_doc_list
