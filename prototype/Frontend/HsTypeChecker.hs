@@ -53,7 +53,7 @@ buildInitTcEnv pgm (RnEnv _rn_cls_infos dc_infos tc_infos) = do -- GEORGE: Assum
     buildStoreClsInfos (PgmData _ p) = buildStoreClsInfos p
     buildStoreClsInfos (PgmVal  _ p) = buildStoreClsInfos p
     buildStoreClsInfos (PgmCls  c p) = case c of
-      ClsD _rn_abs rn_cs rn_cls rn_as rn_fundeps rn_method method_ty -> do
+      ClsD rn_abs rn_cs rn_cls rn_as rn_fundeps rn_method method_ty -> do
         -- Generate And Store The TyCon Info
         fc_tc <- FcTC . mkName (mkSym ("T" ++ (show $ symOf rn_cls))) <$> getUniqueM
 
@@ -66,6 +66,7 @@ buildInitTcEnv pgm (RnEnv _rn_cls_infos dc_infos tc_infos) = do -- GEORGE: Assum
         -- Generate And Store The Class Info
         let cls_info =
               ClassInfo
+                (labelOf rn_abs)
                 rn_cs
                 rn_cls
                 rn_as
@@ -176,6 +177,7 @@ lookupClsSuper :: RnClass -> TcM RnClsCs
 lookupClsSuper cls = cls_super <$> lookupTcEnvM tc_env_cls_info cls
 
 -- | Get the parameter of the class
+--   TODO remove
 lookupClsParam :: RnClass -> TcM RnTyVar
 lookupClsParam cls = do
   info <- lookupTcEnvM tc_env_cls_info cls
@@ -184,13 +186,16 @@ lookupClsParam cls = do
     _   -> tcFail (text "lookupClsParam")
 
 -- | Get the type parameters of the class
---   TODO replace old one
 lookupClsParams :: RnClass -> TcM [RnTyVar]
 lookupClsParams cls = cls_type_args <$> lookupTcEnvM tc_env_cls_info cls
 
 -- | Get the functional dependencies of the class
 lookupClsFundeps :: RnClass -> TcM [RnFundep]
 lookupClsFundeps cls = cls_fundeps <$> lookupTcEnvM tc_env_cls_info cls
+
+-- | Get the abstracted type variables of the class
+lookupClsAbs :: RnClass -> TcM [RnTyVar]
+lookupClsAbs cls = cls_abs <$> lookupTcEnvM tc_env_cls_info cls
 
 -- | Get the projection type families of the type constructor
 lookupTyConProj :: RnTyCon -> TcM [RnTyFam]
@@ -296,6 +301,10 @@ elabClsCt :: RnClsCt -> TcM FcType
 elabClsCt (ClsCt cls tys) = do
   fc_tc <- lookupClsTyCon cls
   return $ fcTyApp (FcTyCon fc_tc) (elabMonoTy <$> tys)
+
+-- | Elaborate class constraints
+elabClsCs :: RnClsCs -> TcM [FcType]
+elabClsCs = mapM elabClsCt
 
 -- | Elaborate an equality constraint
 elabEqCt :: EqCt -> FcProp
@@ -870,14 +879,42 @@ projection = go id
       throwErrorM $
       text "projection" <+> colon <+> text "encountered type family"
 
-dictDestruction :: AnnClsCs -> TcM (MatchCtx)
+-- TODO abstract over duplicated code
+--      produced environments
+dictDestruction :: AnnClsCs -> TcM MatchCtx
 dictDestruction [] = return MCtxHole
 dictDestruction ((d :| ClsCt cls tys):cs) = do
-  dc <- lookupClsDataCon cls
-  tc <- lookupClsTyCon cls
-  e2 <- dictDestruction (undefined ++ cs)
-  let pat = FcConPat dc [] [] []
-  return $ MCtxCase d pat e2
+  ClassInfo ab_s sc _cls as fds fams _m mty _tc dc <-
+    lookupTcEnvM tc_env_cls_info cls
+
+  let bs = ab_s \\ as
+  (bs', bs_subst) <- freshenRnTyVars bs
+  let subst = bs_subst <> (buildSubst $ zipExact as tys)
+
+  cvs <- genFreshCoVars $ length fds
+  let fc_props = substFcTyInProp (elabHsTySubst subst) <$>
+        map
+          (\(fam, Fundep ais ai0) ->
+              FcProp
+                 (FcTyFam (rnTyFamToFcFam fam) (rnTyVarsToFcTypes ais))
+                 (rnTyVarToFcType ai0))
+          (zipExact fams fds)
+
+  ds <- genFreshDictVars $ length sc
+  fc_tys <- elabClsCs $ substInClsCs subst sc
+
+  f <- freshFcTmVar
+  fc_mty <- elabPolyTy $ substInPolyTy subst mty
+
+  mctx <- dictDestruction $ ds |: substInClsCs subst sc ++ cs
+
+  let pat =
+        FcConPat
+          dc
+          (rnTyVarToFcTyVar <$> bs')
+          (cvs |: fc_props)
+          (ds  |: fc_tys ++ [f :| fc_mty])
+  return $ MCtxCase d pat mctx
 
 -- | Elaborate a class declaration. Return
 --   a) The data declaration for the class

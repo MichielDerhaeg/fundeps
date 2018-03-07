@@ -90,7 +90,8 @@ type PsFundep = Fundep Sym
 type RnFundep = Fundep Name
 
 data ClassInfo
-  = ClassInfo { cls_super     :: RnClsCs    -- ^ The superclass constraints
+  = ClassInfo { cls_abs       :: [RnTyVar]  -- ^ TODO
+              , cls_super     :: RnClsCs    -- ^ The superclass constraints
               , cls_class     :: RnClass    -- ^ The class name
               , cls_type_args :: [RnTyVar]  -- ^ Type arguments
               , cls_fundeps   :: [RnFundep] -- ^ Functional dependencies
@@ -540,9 +541,10 @@ instance PrettyPrint HsTyFamInfo where
 
 -- | Pretty print type class info
 instance PrettyPrint ClassInfo where
-  ppr (ClassInfo cs cls type_args fundeps fd_fams method method_ty tycon datacon)
+  ppr (ClassInfo abs cs cls type_args fundeps fd_fams method method_ty tycon datacon)
     = braces $ vcat $ punctuate comma
-    $ [ text "cls_super"     <+> colon <+> ppr cs
+    $ [ text "cls_abs"       <+> colon <+> ppr abs
+      , text "cls_super"     <+> colon <+> ppr cs
       , text "cls_class"     <+> colon <+> ppr cls
       , text "cls_type_args" <+> colon <+> ppr type_args
       , text "cls_fundeps"   <+> colon <+> ppr fundeps

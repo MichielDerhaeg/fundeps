@@ -12,6 +12,7 @@ Notes
     environment which we should in the future. Possible solution: make Fc
     completely independent, don't translate environment, traverse fc program
     twice, once to build environment, second time to type check
+    * done
 
   * Are local cls cs just AnnClsCs instead of AnnSchemes (Theory type)
 
@@ -38,6 +39,10 @@ Notes
     abstraction variables and type class constraints with the implicit type
     variables and type class constraint so we have a valid haskell poly type and
     the corresponding System Fc type looks like this as well.
+
+  * overlapping instances checking is omitted from spec?
+
+  * dictionary desctruction output environments? what do these contain?
 
 Substitution type class map
 ---------------------------
