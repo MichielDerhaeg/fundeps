@@ -835,7 +835,7 @@ determinacy as cls_cs = go cls_cs mempty
       as' <- lookupClsParams cls
       fds <- lookupClsFundeps cls
       fd_fams <- lookupClsFDFams cls
-      let cls_var_subst = buildSubst $ zip as' tys
+      let cls_var_subst = buildSubst $ zipExact as' tys
       new_subst <- fmap mconcat $
         forM (zip fds fd_fams) $ \(Fundep bs b0, fam) -> do
           let (t0:ts) = substInMonoTy cls_var_subst . TyVar <$> (b0 : bs)
@@ -916,13 +916,29 @@ dictDestruction ((d :| ClsCt cls tys):cs) = do
           (ds  |: fc_tys ++ [f :| fc_mty])
   return $ MCtxCase d pat mctx
 
+-- TODO cleanup
+generateAxioms :: CtrScheme -> TcM Axioms
+generateAxioms (CtrScheme as cs (ClsCt cls tys)) = do
+  fds <- lookupClsFundeps cls
+  fams <- lookupClsFDFams cls
+  as' <- lookupClsParams cls
+  let cls_var_subst = buildSubst $ zipExact as' tys
+  fmap catMaybes $ forM (zipExact fds fams) $ \(Fundep ais ai0,f) -> do
+    let ui0:uis = substInMonoTy cls_var_subst . TyVar <$> ai0:ais
+    let free_uis = ftyvsOf uis
+    subst <- determinacy free_uis cs
+    let subbed_ui0 = substInMonoTy subst ui0
+    if (ftyvsOf subbed_ui0 \\ free_uis == mempty) then return Nothing else do
+      g <- freshFcAxVar
+      return . Just $
+        Axiom g free_uis f uis subbed_ui0
+
 -- | Elaborate a class declaration. Return
 --   a) The data declaration for the class
 --   b) The method implementation
 --   c) The extended typing environment
-elabClsDecl ::
-     RnClsDecl
-  -> TcM ([FcFamDecl], FcDataDecl, [FcValBind], ProgramTheory, TcCtx)
+elabClsDecl :: RnClsDecl
+            -> TcM ([FcFamDecl], FcDataDecl, [FcValBind], ProgramTheory, TcCtx)
 elabClsDecl (ClsD ab_s rn_cs cls as fundeps method method_ty) = do
   tc <- lookupClsTyCon   cls
   dc <- lookupClsDataCon cls
