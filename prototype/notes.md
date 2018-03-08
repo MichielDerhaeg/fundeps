@@ -40,9 +40,9 @@ Notes
     variables and type class constraint so we have a valid haskell poly type and
     the corresponding System Fc type looks like this as well.
 
-  * overlapping instances checking is omitted from spec?
+  * sprinkle it with freshener
 
-  * dictionary desctruction output environments? what do these contain?
+  * store just existential tyvars of class
 
 Substitution type class map
 ---------------------------

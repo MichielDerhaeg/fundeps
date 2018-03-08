@@ -316,7 +316,7 @@ type RnClsCt = ClsCt Name
 type RnClsCs = ClsCs Name
 
 -- | TODO
-data TyCt = TyClsCt RnClsCt | EqCt EqCt
+data TyCt = TyClsCt RnClsCt | TyEqCt EqCt
 type TyCs = [TyCt]
 
 -- | Class constraint scheme
@@ -523,6 +523,7 @@ instance PrettyPrint HsDataConInfo where
       , text "parent"  <+> colon <+> ppr tc
       , text "arg_tys" <+> colon <+> ppr arg_tys
       ]
+  needsParens _ = False
 
 -- | Pretty print class names
 instance Symable a => PrettyPrint (Class a) where
@@ -541,9 +542,9 @@ instance PrettyPrint HsTyFamInfo where
 
 -- | Pretty print type class info
 instance PrettyPrint ClassInfo where
-  ppr (ClassInfo abs cs cls type_args fundeps fd_fams method method_ty tycon datacon)
+  ppr (ClassInfo ab_s cs cls type_args fundeps fd_fams method method_ty tycon datacon)
     = braces $ vcat $ punctuate comma
-    $ [ text "cls_abs"       <+> colon <+> ppr abs
+    $ [ text "cls_abs"       <+> colon <+> ppr ab_s
       , text "cls_super"     <+> colon <+> ppr cs
       , text "cls_class"     <+> colon <+> ppr cls
       , text "cls_type_args" <+> colon <+> ppr type_args

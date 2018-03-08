@@ -639,14 +639,14 @@ doesNotOccurIn a (TyVar b)       = a /= b
 doesNotOccurIn a (TyFam _ tys)   = (a `doesNotOccurIn`) `all` tys
 
 -- | Type Unification.
-unify' :: [RnTyVar] -> Axioms -> AnnEqCs -> TcM (AnnEqCs, HsTySubst, FcCoSubst)
-unify' _untchs _p []    = return (mempty,mempty,mempty)
-unify'  untchs  p eq_cs =
+entailEq :: [RnTyVar] -> Axioms -> AnnEqCs -> TcM (AnnEqCs, HsTySubst, FcCoSubst)
+entailEq _untchs _p []    = return (mempty,mempty,mempty)
+entailEq  untchs  p eq_cs =
   go step eq_cs >>= \case
     Nothing -> return (eq_cs, mempty, mempty)
     Just ((new_cs, ty_subst, ev_subst), eq_cs') -> do
       (eq_cs'', ty_subst', ev_subst') <-
-        unify' untchs p (substInAnnEqCs ty_subst (new_cs <> eq_cs'))
+        entailEq untchs p (substInAnnEqCs ty_subst (new_cs <> eq_cs'))
       return (eq_cs'', ty_subst <> ty_subst', ev_subst <> ev_subst')
   where
     go :: Monad m => (a -> m (Maybe b)) -> [a] -> m (Maybe (b, [a]))
@@ -918,20 +918,59 @@ dictDestruction ((d :| ClsCt cls tys):cs) = do
 
 -- TODO cleanup
 generateAxioms :: CtrScheme -> TcM Axioms
-generateAxioms (CtrScheme as cs (ClsCt cls tys)) = do
+generateAxioms scheme@(CtrScheme _as cs (ClsCt cls tys)) = do
   fds <- lookupClsFundeps cls
   fams <- lookupClsFDFams cls
   as' <- lookupClsParams cls
   let cls_var_subst = buildSubst $ zipExact as' tys
-  fmap catMaybes $ forM (zipExact fds fams) $ \(Fundep ais ai0,f) -> do
-    let ui0:uis = substInMonoTy cls_var_subst . TyVar <$> ai0:ais
+  forM (zipExact fds fams) $ \(Fundep ais ai0, f) -> do
+    let ui0:uis = substInMonoTy cls_var_subst . TyVar <$> ai0 : ais
     let free_uis = ftyvsOf uis
     subst <- determinacy free_uis cs
     let subbed_ui0 = substInMonoTy subst ui0
-    if (ftyvsOf subbed_ui0 \\ free_uis == mempty) then return Nothing else do
-      g <- freshFcAxVar
-      return . Just $
-        Axiom g free_uis f uis subbed_ui0
+    if (null (ftyvsOf subbed_ui0 \\ free_uis))
+      then gen_ax_fail
+      else do
+        g <- freshFcAxVar
+        return $ Axiom g free_uis f uis subbed_ui0
+  where
+    gen_ax_fail =
+      tcFail $
+      text "Liberal Coverage Condition violation by the constraint scheme" <+>
+      colon <+> ppr scheme
+
+-- | TODO merge entailment types, add recuduction entailment
+entailSuperClass :: Theory -> RnClsCt -> TcM ([FcType], [FcTerm], [FcCoercion])
+entailSuperClass theory (ClsCt cls tys) = do
+  ClassInfo ab_s sc _cls as fds fams _m _mty _tc _dc <-
+    lookupTcEnvM tc_env_cls_info cls
+  let bs = ab_s \\ as
+  subst <-
+    mappend <$> unify as (zipWithExact (:~:) (TyVar <$> as) tys) <*> determinacy as sc
+  cs <- genFreshCoVars $ length fds
+  let eq_cs = substInAnnEqCs subst $ cs |:
+        map
+          (\(Fundep ais ai0, f) -> (TyFam f (TyVar <$> ais)) :~: TyVar ai0)
+          (zipExact fds fams)
+  (residual_eq_cs, ty_subst, co_subst) <- entailEq as (p_eq_axioms theory) eq_cs
+  unless (null residual_eq_cs) $
+    tcFail $
+    text "Failed to resolve all equality constraints" <+>
+    colon <+> text "from" <+> colon <+> ppr theory
+  ds <- genFreshDictVars $ length sc
+  (residual_cls_cs, dict_subst) <-
+    simplify as
+      ((p_local_schemes theory) <> (p_inst_schemes theory))
+      (ds |: substInClsCs subst sc)
+  unless (null residual_cls_cs) $
+    tcFail $
+    text "Failed to resolve all class constraints" <+>
+    colon <+> text "from" <+> colon <+> ppr theory
+  let ev_subst = substFcCoInTm co_subst . substFcTmInTm dict_subst . FcTmVar
+  return
+    ( elabMonoTy . substInMonoTy (ty_subst <> subst) . TyVar <$> bs
+    , ev_subst <$> ds
+    , substFcCoInCo co_subst . FcCoVar <$> cs)
 
 -- | Elaborate a class declaration. Return
 --   a) The data declaration for the class
