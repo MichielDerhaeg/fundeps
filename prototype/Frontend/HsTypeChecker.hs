@@ -880,9 +880,8 @@ projection = go id
       text "projection" <+> colon <+> text "encountered type family"
 
 -- TODO abstract over duplicated code
---      produced environments
-dictDestruction :: AnnClsCs -> TcM MatchCtx
-dictDestruction [] = return MCtxHole
+dictDestruction :: AnnClsCs -> TcM (MatchCtx, AnnClsCs, TcCtx)
+dictDestruction [] = (,,) MCtxHole mempty <$> ask
 dictDestruction ((d :| ClsCt cls tys):cs) = do
   ClassInfo ab_s sc _cls as fds fams _m mty _tc dc <-
     lookupTcEnvM tc_env_cls_info cls
@@ -903,18 +902,21 @@ dictDestruction ((d :| ClsCt cls tys):cs) = do
   ds <- genFreshDictVars $ length sc
   fc_tys <- elabClsCs $ substInClsCs subst sc
 
-  f <- freshFcTmVar
-  fc_mty <- elabPolyTy $ substInPolyTy subst mty
+  f <- freshRnTmVar
+  let subbed_mty = substInPolyTy subst mty
+  fc_mty <- elabPolyTy subbed_mty
 
-  mctx <- dictDestruction $ ds |: substInClsCs subst sc ++ cs
+  let new_cs = ds |: substInClsCs subst sc
+  env <- extendCtxM f subbed_mty $ extendCtxM (bs) (kindOf <$> bs) ask
+  (mctx, new_cs', env') <- setCtxM env $ dictDestruction $ new_cs ++ cs
 
   let pat =
         FcConPat
           dc
           (rnTyVarToFcTyVar <$> bs')
           (cvs |: fc_props)
-          (ds  |: fc_tys ++ [f :| fc_mty])
-  return $ MCtxCase d pat mctx
+          (ds  |: fc_tys ++ [rnTmVarToFcTmVar f :| fc_mty])
+  return (MCtxCase d pat mctx, new_cs <> new_cs', env')
 
 -- TODO cleanup
 generateAxioms :: CtrScheme -> TcM Axioms
