@@ -698,25 +698,26 @@ entailEq  untchs  p eq_cs =
 
 -- | Type reduction
 reduce :: Axioms -> RnMonoTy -> Maybe (RnMonoTy, FcCoercion)
-reduce axioms = repeatedReduce
+reduce axioms = go
   where
-    go = \case
-      TyApp ty1 ty2 ->
-        case (repeatedReduce ty1, repeatedReduce ty2) of
-          (Nothing, Nothing) -> Nothing
-          (l, r) ->
-            let (ty1', co1) = reduceOrReflect ty1 l in
-            let (ty2', co2) = reduceOrReflect ty2 r in
-               Just (TyApp ty1' ty2', FcCoApp co1 co2)
+    go arg =
+      case step arg of
+        Nothing -> Nothing
+        Just (new_arg, co) ->
+          case go new_arg of
+            Nothing               -> Just (new_arg, co)
+            Just (newer_arg, co') -> Just (newer_arg, FcCoTrans co co')
+
+    step = \case
+      TyApp ty1 ty2 -> do
+        ([ty1',ty2'],[co1,co2]) <- reduceAll axioms [ty1, ty2]
+        return (TyApp ty1' ty2', FcCoApp co1 co2)
       TyCon _tc -> Nothing
       TyVar _x  -> Nothing
       TyFam f tys ->
-        let m_reds = repeatedReduce <$> tys
-        in if any isJust m_reds
-             then let (tys', cos') =
-                        unzip (uncurry reduceOrReflect <$> zip tys m_reds)
-                  in Just (TyFam f tys', FcCoFam (rnTyFamToFcFam f) cos')
-             else findJust (matchAxiom f tys <$> axioms)
+        case reduceAll axioms tys of
+          Just (tys', cos') -> Just (TyFam f tys', FcCoFam (rnTyFamToFcFam f) cos')
+          Nothing -> findJust (matchAxiom f tys <$> axioms)
 
     matchAxiom :: RnTyFam -> [RnMonoTy] -> Axiom -> Maybe (RnMonoTy, FcCoercion)
     matchAxiom f1 tys (Axiom g as f2 us ty)
@@ -727,17 +728,13 @@ reduce axioms = repeatedReduce
           , FcCoAx g (elabMonoTy . substInMonoTy subst . TyVar <$> as))
       | otherwise = Nothing
 
-    repeatedReduce :: RnMonoTy -> Maybe (RnMonoTy, FcCoercion)
-    repeatedReduce arg =
-      case go arg of
-        Nothing -> Nothing
-        Just (new_arg, co) ->
-          case repeatedReduce new_arg of
-            Nothing               -> Just (new_arg, co)
-            Just (newer_arg, co') -> Just (newer_arg, FcCoTrans co co')
-
-    reduceOrReflect ::
-         RnMonoTy -> Maybe (RnMonoTy, FcCoercion) -> (RnMonoTy, FcCoercion)
+reduceAll :: Axioms -> [RnMonoTy] -> Maybe ([RnMonoTy],[FcCoercion])
+reduceAll axioms tys =
+  if any isJust m_reds
+    then Just $ unzip (uncurry reduceOrReflect <$> zip tys m_reds)
+    else Nothing
+  where
+    m_reds = reduce axioms <$> tys
     reduceOrReflect _ty (Just (new_ty, co)) = (new_ty,co)
     reduceOrReflect ty Nothing = (ty, FcCoRefl (elabMonoTy ty))
 
@@ -776,9 +773,9 @@ simplify as theory (ct:cs) =
 -- | done. May produce additional class constraints.
 entail :: [RnTyVar] -> ProgramTheory -> AnnClsCt -> TcM (Maybe (AnnClsCs, FcTmSubst))
 entail _untch [] _cls_ct = return Nothing
-entail as ((d' :| CtrScheme bs cls_cs (ClsCt cls2 [ty2])):schemes) ct@(d :| ClsCt cls1 [ty1])
+entail as ((d' :| CtrScheme bs cls_cs (ClsCt cls2 tys2)):schemes) ct@(d :| ClsCt cls1 tys1)
   | cls1 == cls2
-  , Right ty_subst <- unify as [ty1 :~: ty2] = do
+  , Right ty_subst <- unify as (zipWithExact (:~:) tys1 tys2) = do
     (d''s, ann_cls_cs) <- annotateClsCs $ substInClsCs ty_subst cls_cs
     let fc_subbed_bs = map elabMonoTy . substInTyVars ty_subst $ labelOf bs
     let ev_subst =
@@ -973,6 +970,16 @@ entailSuperClass theory (ClsCt cls tys) = do
     ( elabMonoTy . substInMonoTy (ty_subst <> subst) . TyVar <$> bs
     , ev_subst <$> ds
     , substFcCoInCo co_subst . FcCoVar <$> cs)
+
+entailReduce :: Axioms -> AnnClsCt -> TcM (Maybe (AnnClsCt, FcTmSubst))
+entailReduce axioms (d :| ClsCt cls tys) =
+  case reduceAll axioms tys of
+    Nothing -> return Nothing
+    Just (tys', cos') -> do
+      d' <- freshDictVar
+      tc <- lookupClsTyCon cls
+      let co = foldl FcCoApp (FcCoRefl (FcTyCon tc)) (FcCoSym <$> cos')
+      return $ Just (d' :| ClsCt cls tys', d |-> FcTmCast (FcTmVar d') co)
 
 -- | Elaborate a class declaration. Return
 --   a) The data declaration for the class
