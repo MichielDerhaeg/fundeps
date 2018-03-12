@@ -71,6 +71,10 @@ instance SubstVar RnTyVar RnMonoTy TypeCt where
   substVar a ty (ClassCt ct)    = ClassCt $ substVar a ty ct
   substVar a ty (EqualityCt ct) = EqualityCt $ substVar a ty ct
 
+instance SubstVar RnTyVar RnMonoTy AnnTypeCt where
+  substVar a ty (AnnClsCt ct) = AnnClsCt $ fmap (substVar a ty) ct
+  substVar a ty (AnnEqCt  ct) = AnnEqCt  $ fmap (substVar a ty) ct
+
 -- * Target Language SubstVar Instances (Type Substitution)
 -- ------------------------------------------------------------------------------
 
@@ -330,7 +334,7 @@ substInTypeCt = sub_rec
 substInTypeCs :: HsTySubst -> TypeCs -> TypeCs
 substInTypeCs subst = fmap (substInTypeCt subst)
 
--- | TODO document
+-- | Apply a type substitution to a constraint scheme
 substInScheme :: HsTySubst -> CtrScheme -> CtrScheme
 substInScheme = sub_rec
 
@@ -341,6 +345,14 @@ substInQualTy = sub_rec
 -- | Apply a type substitution to a type scheme
 substInPolyTy :: HsTySubst -> RnPolyTy -> RnPolyTy
 substInPolyTy = sub_rec
+
+-- | Apply a type substitution to a annotated type contraint
+substInAnnTypeCt :: HsTySubst -> AnnTypeCt -> AnnTypeCt
+substInAnnTypeCt = sub_rec
+
+-- | Apply a type substitution to annotated type contraints
+substInAnnTypeCs :: HsTySubst -> AnnTypeCs -> AnnTypeCs
+substInAnnTypeCs subst = fmap (substInAnnTypeCt subst)
 
 -- * System F Type Substitution
 -- ------------------------------------------------------------------------------

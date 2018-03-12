@@ -639,22 +639,10 @@ doesNotOccurIn a (TyVar b)       = a /= b
 doesNotOccurIn a (TyFam _ tys)   = (a `doesNotOccurIn`) `all` tys
 
 -- | Type Unification.
-entailEq :: [RnTyVar] -> Axioms -> AnnEqCs -> TcM (AnnEqCs, HsTySubst, FcCoSubst)
-entailEq _untchs _p []    = return (mempty,mempty,mempty)
-entailEq  untchs  p eq_cs =
-  go step eq_cs >>= \case
-    Nothing -> return (eq_cs, mempty, mempty)
-    Just ((new_cs, ty_subst, ev_subst), eq_cs') -> do
-      (eq_cs'', ty_subst', ev_subst') <-
-        entailEq untchs p (substInAnnEqCs ty_subst (new_cs <> eq_cs'))
-      return (eq_cs'', ty_subst <> ty_subst', ev_subst <> ev_subst')
+entailEq :: [RnTyVar] -> Axioms -> AnnEqCt
+         -> TcM (Maybe (AnnEqCs, HsTySubst, FcCoSubst))
+entailEq untchs p ct = step ct
   where
-    go :: Monad m => (a -> m (Maybe b)) -> [a] -> m (Maybe (b, [a]))
-    go _f []     = return Nothing
-    go  f (x:xs) = f x >>= \case
-      Just y  -> return $ Just (y,xs)
-      Nothing -> (fmap . fmap) (second (x:)) (go f xs)
-
     step (_ :| (TyVar a :~: TyVar b))
       | a == b = return $ Just mempty
     step (_ :| (TyCon tc1 :~: TyCon tc2))
@@ -692,7 +680,7 @@ entailEq  untchs  p eq_cs =
 
     unify_fail = tcFail $ vcat
         [ text "Unification failed."
-        , text "Constraints"  <+> colon <+> ppr eq_cs
+        , text "Constraints"  <+> colon <+> ppr ct
         , text "Untouchables" <+> colon <+> ppr untchs
         ]
 
@@ -938,7 +926,6 @@ generateAxioms scheme@(CtrScheme _as cs (ClsCt cls tys)) = do
       text "Liberal Coverage Condition violation by the constraint scheme" <+>
       colon <+> ppr scheme
 
--- | TODO merge entailment types, add recuduction entailment
 entailSuperClass :: Theory -> RnClsCt -> TcM ([FcType], [FcTerm], [FcCoercion])
 entailSuperClass theory (ClsCt cls tys) = do
   ClassInfo ab_s sc _cls as fds fams _m _mty _tc _dc <-
@@ -951,25 +938,13 @@ entailSuperClass theory (ClsCt cls tys) = do
         map
           (\(Fundep ais ai0, f) -> (TyFam f (TyVar <$> ais)) :~: TyVar ai0)
           (zipExact fds fams)
-  (residual_eq_cs, ty_subst, co_subst) <- entailEq as (p_eq_axioms theory) eq_cs
-  unless (null residual_eq_cs) $
-    tcFail $
-    text "Failed to resolve all equality constraints" <+>
-    colon <+> text "from" <+> colon <+> ppr theory
-  ds <- genFreshDictVars $ length sc
-  (residual_cls_cs, dict_subst) <-
-    simplify as
-      (p_schemes theory)
-      (ds |: substInClsCs subst sc)
-  unless (null residual_cls_cs) $
-    tcFail $
-    text "Failed to resolve all class constraints" <+>
-    colon <+> text "from" <+> colon <+> ppr theory
-  let ev_subst = substFcCoInTm co_subst . substFcTmInTm dict_subst . FcTmVar
+  (ds, cls_cs) <- annotateClsCs sc
+  let general_cs = (AnnClsCt <$> cls_cs) <> (AnnEqCt <$> eq_cs)
+  (residual_cs, ty_subst, ev_subst) <- entailCs as theory general_cs
   return
     ( elabMonoTy . substInMonoTy (ty_subst <> subst) . TyVar <$> bs
-    , ev_subst <$> ds
-    , substFcCoInCo co_subst . FcCoVar <$> cs)
+    , substEvInTm ev_subst . FcTmVar <$> ds
+    , substEvInCo ev_subst . FcCoVar <$> cs)
 
 entailReduce :: Axioms -> AnnClsCt -> TcM (Maybe (AnnClsCt, FcTmSubst))
 entailReduce axioms (d :| ClsCt cls tys) =
@@ -980,6 +955,38 @@ entailReduce axioms (d :| ClsCt cls tys) =
       tc <- lookupClsTyCon cls
       let co = foldl FcCoApp (FcCoRefl (FcTyCon tc)) (FcCoSym <$> cos')
       return $ Just (d' :| ClsCt cls tys', d |-> FcTmCast (FcTmVar d') co)
+
+entailCs :: [RnTyVar] -> Theory -> AnnTypeCs -> TcM (AnnTypeCs, HsTySubst, EvSubst)
+entailCs untchs theory cs = do
+  go (entailCt untchs theory) cs >>= \case
+    Nothing -> return (cs, mempty, mempty)
+    Just ((new_cs, ty_subst, ev_subst), cs') -> do
+      (cs'', ty_subst', ev_subst') <-
+        entailCs untchs theory (substInAnnTypeCs ty_subst (new_cs <> cs'))
+      return (cs'', ty_subst <> ty_subst', ev_subst <> ev_subst')
+  where
+   go :: Monad m => (a -> m (Maybe b)) -> [a] -> m (Maybe (b, [a]))
+   go _f []     = return Nothing
+   go  f (x:xs) = f x >>= \case
+     Just y  -> return $ Just (y,xs)
+     Nothing -> (fmap . fmap) (second (x:)) (go f xs)
+
+entailCt :: [RnTyVar] -> Theory -> AnnTypeCt -> TcM (Maybe (AnnTypeCs, HsTySubst, EvSubst))
+entailCt untchs theory (AnnEqCt ct) =
+  entailEq untchs (p_eq_axioms theory) ct >>= \case
+    Nothing -> return Nothing
+    Just (eq_cs, ty_subst, co_subst) ->
+      return $ Just (AnnEqCt <$> eq_cs, ty_subst, coToEvSubst co_subst)
+entailCt untchs theory (AnnClsCt ct) =
+  entailReduce (p_eq_axioms theory) ct >>= \case
+    Just (cls_ct, tm_subst) ->
+      return $ Just ([AnnClsCt cls_ct], mempty, tmToEvSubst tm_subst)
+    -- TODO rename entail to entailCls
+    Nothing -> entail untchs (p_schemes theory) ct >>= \case
+      Nothing -> return Nothing
+      Just (cls_cs, tm_subst) ->
+        return $ Just (AnnClsCt <$> cls_cs, mempty, tmToEvSubst tm_subst)
+
 
 -- | Elaborate a class declaration. Return
 --   a) The data declaration for the class
@@ -1384,8 +1391,7 @@ elabTermWithSig' untchs theory tm poly_ty = do
   let wanted_cs =
         ((AnnClsCt <$> wanted_ccs) <> (AnnEqCt <$> wanted_eqs) <>
          [AnnEqCt (c :| (ty1 :~: ty2))])
-  -- TODO implement entailment
-  (residual_cs, ty_subst, ev_subst) <- undefined untchs theory' wanted_cs
+  (residual_cs, ty_subst, ev_subst) <- entailCs untchs theory' wanted_cs
 
   unless (null (residual_cs :: AnnTypeCs)) $
     tcFail
