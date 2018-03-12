@@ -1,17 +1,15 @@
-====
 TODO
 ====
-  * remove typat stuff if ok
 
-  * generate projection functions
-  * determinacy relation
-  * contraint generation
-  * type unification
+  * Revise inference top level value bindings
+  * Replace old type checker with new type checker entirely
+  * Implement conditions
+  * Test functional dependencies
+  * Sprinkle with freshener
 
-------
 Extras
 ------
+
   + Type Families
   + GADTs
-  + don't translate environments to fc, just use the program info
   + SystemFc to GHC Haskell

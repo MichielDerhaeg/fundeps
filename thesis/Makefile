@@ -4,7 +4,7 @@ export BSTINPUTS := .:./Styles//:${BSTINPUTS}
 export SHELL := /bin/bash
 
 MD_FILES=
-TEX_FILES=$(wildcard *.tex) $(MD_FILES:%.md=%.tex)
+TEX_FILES=$(wildcard *.tex) $(MD_FILES:%.md=%.tex) references.bib
 
 .SUFFIXES: .md .tex
 
