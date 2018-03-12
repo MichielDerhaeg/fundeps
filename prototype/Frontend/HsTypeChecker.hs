@@ -941,6 +941,11 @@ entailSuperClass theory (ClsCt cls tys) = do
   (ds, cls_cs) <- annotateClsCs sc
   let general_cs = (AnnClsCt <$> cls_cs) <> (AnnEqCt <$> eq_cs)
   (residual_cs, ty_subst, ev_subst) <- entailCs as theory general_cs
+  unless (null residual_cs) $
+    tcFail
+      (text "Failed to resolve super class constraints" <+> colon <+> ppr residual_cs
+       $$ text "From" <+> colon <+>
+       ppr theory $$ text "Constraints" <+> colon <+> ppr general_cs)
   return
     ( elabMonoTy . substInMonoTy (ty_subst <> subst) . TyVar <$> bs
     , substEvInTm ev_subst . FcTmVar <$> ds

@@ -16,4 +16,19 @@ class forall (a :: *) (b :: *). F a b | a -> b where
 --instance forall (a::*) (b::*) (c::*). (G a c, H c b) => F a b where
 --  ff = \x. x
 
-fa
+class forall (a :: *) (b :: *). C a b | a -> b where
+  fc :: a -> b
+
+data Nat = Suc Nat | Zero
+
+data Bool = True | False
+
+instance C Int Bool where
+  fc = \i. case i of
+            Zero   -> False
+            Suc i' -> True
+
+id = \x. x
+
+test :: C Int b => b -> Bool
+      = id

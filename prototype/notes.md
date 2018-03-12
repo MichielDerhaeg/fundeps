@@ -44,6 +44,13 @@ Notes
 
   * store just existential tyvars of class
 
+  * entailReduce: T_TC must be symetry, apply this rule and if not applicable,
+    apply entailCls?
+
+  * superclass entailment as & bs are untouchables?
+
+  * make Axioms and AnnSchemes SnocLists again
+
 Substitution type class map
 ---------------------------
 
