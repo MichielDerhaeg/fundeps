@@ -1284,7 +1284,7 @@ elabInsDecl' theory (InsD as ins_cs cls typats method method_tm) = do
     let theory' = i_theory `tExtendSchemes` [ins_d :| ins_scheme]
     expected_method_ty <- instMethodTy tys <$> lookupCtxM method
     setCtxM match_ctx $ extendCtxM (labelOf as) (dropLabel as) $
-      undefined theory' method_tm expected_method_ty -- TODO subsumption
+      elabTermWithSig' (labelOf as) theory' method_tm expected_method_ty
 
   dtrans_ty <- extendCtxM (labelOf as) (dropLabel as) $ do
     fc_head_ty <-  wfElabClsCt head_ct
@@ -1368,6 +1368,40 @@ elabTermWithSig untch theory tm poly_ty = do
     fcTmAbs dbinds $
       substFcTmInTm (closure_ev_subst <> ev_subst) $
         substFcTyInTm fc_subst fc_tm
+
+elabTermWithSig' :: [RnTyVar] -> Theory -> RnTerm -> RnPolyTy -> TcM FcTerm
+elabTermWithSig' untchs theory tm poly_ty = do
+  let (as, cs, ty2) = destructPolyTy poly_ty
+
+  ((ty1, fc_tm), wanted_eqs, wanted_ccs) <- runGenM $ elabTerm tm
+
+  c <- freshFcCoVar
+  given_ccs <- snd <$> annotateClsCs cs
+
+  (mctx, match_ccs, _) <- dictDestruction given_ccs
+
+  let theory' = theory `tExtendSchemes` clsCsToSchemes (match_ccs <> given_ccs)
+  let wanted_cs =
+        ((AnnClsCt <$> wanted_ccs) <> (AnnEqCt <$> wanted_eqs) <>
+         [AnnEqCt (c :| (ty1 :~: ty2))])
+  -- TODO implement entailment
+  (residual_cs, ty_subst, ev_subst) <- undefined untchs theory' wanted_cs
+
+  unless (null (residual_cs :: AnnTypeCs)) $
+    tcFail
+      (text "Failed to resolve constraints" <+>
+       colon <+>
+       ppr residual_cs $$ text "From" <+>
+       colon <+> ppr theory $$ text "Wanted" <+> colon <+> ppr wanted_cs)
+
+  dbinds <- elabAnnClsCs given_ccs
+  let fc_ty_subst = elabHsTySubst ty_subst
+  return $
+    fcTmTyAbs (rnTyVarToFcTyVar <$> (labelOf as)) $
+    fcTmAbs dbinds $
+    matchCtxApply mctx $
+    substEvInTm ev_subst $
+    substFcTyInTm fc_ty_subst $ FcTmCast fc_tm (FcCoVar c)
 
 -- | Convert a source type substitution to a System F type substitution
 elabHsTySubst :: HsTySubst -> FcTySubst

@@ -750,7 +750,7 @@ instance PrettyPrint TypeCt where
   ppr (EqualityCt ct) = ppr ct
   ppr (ClassCt ct)    = ppr ct
 
-  needsParens _ = True
+  needsParens _ = False
 
 -- | Pretty print axioms
 instance PrettyPrint Axiom where
@@ -772,3 +772,10 @@ instance PrettyPrint Theory where
       , text "p_eq_axioms" <+> colon <+> ppr eq_ax
       ]
   needsParens _ = False
+
+-- | Pretty print annotated type constraints
+instance PrettyPrint AnnTypeCt where
+  ppr (AnnEqCt  ct) = ppr ct
+  ppr (AnnClsCt ct) = ppr ct
+
+  needsParens _     = False
