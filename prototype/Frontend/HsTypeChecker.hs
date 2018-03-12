@@ -959,7 +959,7 @@ entailSuperClass theory (ClsCt cls tys) = do
   ds <- genFreshDictVars $ length sc
   (residual_cls_cs, dict_subst) <-
     simplify as
-      ((p_local_schemes theory) <> (p_inst_schemes theory))
+      (p_schemes theory)
       (ds |: substInClsCs subst sc)
   unless (null residual_cls_cs) $
     tcFail $
@@ -1039,7 +1039,7 @@ elabClsDecl (ClsD ab_s rn_cs cls as fundeps method method_ty) = do
     -- Annotate the constraints with fresh dictionary variables
     (ds, ann_cs) <- annotateClsCs real_cs
     -- elaborate the annotated dictionary variables to System F term binders
-    dbinds <- annCtsToTmBinds ann_cs
+    dbinds <- elabAnnClsCs ann_cs
 
     let fc_as' = map rnTyVarToFcType $ labelOf <$> as'
 
@@ -1116,8 +1116,8 @@ unambiguousCheck bs as cs = do
        ])
 
 -- | Elaborate a list of annotated dictionary variables to a list of System F term binders.
-annCtsToTmBinds :: AnnClsCs -> TcM [(FcTmVar, FcType)]
-annCtsToTmBinds = mapM (\(d :| ct) -> (,) d <$> elabClsCt ct)
+elabAnnClsCs :: AnnClsCs -> TcM [(FcTmVar, FcType)]
+elabAnnClsCs = mapM (\(d :| ct) -> (,) d <$> elabClsCt ct)
 
 -- * Data Declaration Elaboration
 -- ------------------------------------------------------------------------------
@@ -1216,7 +1216,7 @@ elabInsDecl theory (InsD as ins_cs cls [typat] method method_tm) = do
 
   -- Elaborate the method implementation
   fc_method_tm <- do
-    expected_method_ty <- instMethodTy ty <$> lookupCtxM method
+    expected_method_ty <- instMethodTy [ty] <$> lookupCtxM method
     elabTermWithSig (labelOf bs) local_theory method_tm expected_method_ty
 
   -- Entail the superclass constraints
@@ -1239,7 +1239,7 @@ elabInsDecl theory (InsD as ins_cs cls [typat] method method_tm) = do
 
   -- The full implementation of the dictionary transformer
   fc_dict_transformer <- do
-    binds <- annCtsToTmBinds ann_ins_cs
+    binds <- elabAnnClsCs ann_ins_cs
     dc    <- lookupClsDataCon cls
     let fc_ty = elabMonoTy ty
     return $ substFcTmInTm closure_ev_subst $
@@ -1252,15 +1252,82 @@ elabInsDecl theory (InsD as ins_cs cls [typat] method method_tm) = do
 
   return (fc_val_bind, ext_theory)
 
+elabInsDecl' :: Theory -> RnInsDecl -> TcM ([FcAxiomDecl], FcValBind, Theory)
+elabInsDecl' theory (InsD as ins_cs cls typats method method_tm) = do
+  let tys = hsTyPatToMonoTy <$> typats
+  let head_ct = ClsCt cls tys
+  let bs = labelOf as \\ ftyvsOf tys
+  let fc_as = rnTyVarToFcTyVar . labelOf <$> as
+
+  overlapCheck undefined head_ct -- new theory
+  unambiguousCheck bs (labelOf as) ins_cs
+
+  ins_d <- freshDictVar
+  ins_scheme <- freshenLclBndrs $ CtrScheme as ins_cs head_ct
+
+  ann_ins_cs <- snd <$> annotateClsCs ins_cs
+
+  (mctx, match_cs, match_ctx) <- dictDestruction ann_ins_cs
+
+  axioms <- generateAxioms ins_scheme
+  -- TODO reverse order of extension (add in front instead of back)
+  let i_theory = theory `tExtendAxioms`  axioms
+                        `tExtendSchemes` (clsCsToSchemes ann_ins_cs)
+                        `tExtendSchemes` (clsCsToSchemes match_cs)
+
+  (fc_tys, fc_tms, fc_cos) <- entailSuperClass i_theory head_ct
+
+  let ext_theory = theory `tExtendAxioms`  axioms
+                          `tExtendSchemes` [ins_d :| ins_scheme]
+
+  fc_method_tm <- do
+    let theory' = i_theory `tExtendSchemes` [ins_d :| ins_scheme]
+    expected_method_ty <- instMethodTy tys <$> lookupCtxM method
+    setCtxM match_ctx $ extendCtxM (labelOf as) (dropLabel as) $
+      undefined theory' method_tm expected_method_ty -- TODO subsumption
+
+  dtrans_ty <- extendCtxM (labelOf as) (dropLabel as) $ do
+    fc_head_ty <-  wfElabClsCt head_ct
+    fc_ins_cs <- wfElabClsCs ins_cs
+    return $ fcTyAbs fc_as $ fcTyArr fc_ins_cs fc_head_ty
+
+  fc_dict_transformer <- do
+    binds <- elabAnnClsCs ann_ins_cs -- TODO rename to elabAnnClsCs
+    dc    <- lookupClsDataCon cls
+    return $
+      fcTmTyAbs fc_as $
+       fcTmAbs binds $
+         matchCtxApply mctx $
+          FcTmDataCon dc `fcTmTyApp` fc_tys
+                         `fcTmCoApp` fc_cos
+                         `fcTmApp`   fc_tms
+                         `FcTmApp`   fc_method_tm
+
+  let fc_val_bind = FcValBind ins_d dtrans_ty fc_dict_transformer
+  return (elabAxiom <$> axioms, fc_val_bind, ext_theory)
+
+-- TODO better location
+elabAxiom :: Axiom -> FcAxiomDecl
+elabAxiom (Axiom g as f us ty) =
+  FcAxiomDecl
+    g
+    (rnTyVarToFcTyVar <$> as)
+    (rnTyFamToFcFam f)
+    (elabMonoTy <$> us)
+    (elabMonoTy ty)
+
+clsCsToSchemes :: AnnClsCs -> AnnSchemes
+clsCsToSchemes = (fmap . fmap) (CtrScheme [] [])
+
 -- | Instantiate a method type for a particular instance
-instMethodTy :: RnMonoTy -> RnPolyTy -> RnPolyTy
-instMethodTy typat poly_ty = constructPolyTy (new_as, new_cs, new_ty)
+instMethodTy :: [RnMonoTy] -> RnPolyTy -> RnPolyTy
+instMethodTy typats poly_ty = constructPolyTy (new_as, new_cs, new_ty)
   where
-    ((a :| _kind):as,_c:cs,ty) = destructPolyTy poly_ty
-    subst      = a |-> typat
-    new_as     = as
-    new_cs     = substInClsCs  subst cs
-    new_ty     = substInMonoTy subst ty
+    (as,_ct:cs,ty) = destructPolyTy poly_ty
+    subst  = buildSubst $ zip (labelOf as) typats
+    new_as = drop (length typats) as
+    new_cs = substInClsCs  subst cs
+    new_ty = substInMonoTy subst ty
 
 -- | Elaborate a term with an explicit type signature (method implementation).
 -- This involves both inference and type subsumption.
@@ -1274,7 +1341,7 @@ elabTermWithSig untch theory tm poly_ty = do
 
   -- Generate fresh dictionary variables for the given constraints
   given_ccs <- snd <$> annotateClsCs cs
-  dbinds <- annCtsToTmBinds given_ccs
+  dbinds <- elabAnnClsCs given_ccs
   (super_cs, closure_ev_subst) <- closureAll untch (theory_super theory) given_ccs
   let given_schemes = (fmap . fmap) (CtrScheme [] []) (super_cs <> given_ccs)
 
@@ -1335,7 +1402,7 @@ elabTermSimpl theory tm = do
 
   -- Elaborate the term
   let fc_as = map rnTyVarToFcTyVar new_as
-  dbinds   <- annCtsToTmBinds residual_cs
+  dbinds   <- elabAnnClsCs residual_cs
   let full_fc_tm = fcTmTyAbs fc_as $
                      fcTmAbs dbinds $
                        substFcTmInTm ev_subst refined_fc_tm

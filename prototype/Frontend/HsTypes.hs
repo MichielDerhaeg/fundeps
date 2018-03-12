@@ -428,12 +428,18 @@ data Axiom = Axiom
 type Axioms = [Axiom]
 
 data Theory = Theory
-  { p_super_schemes :: AnnSchemes
-  , p_inst_schemes  :: AnnSchemes
-  , p_local_schemes :: AnnSchemes -- TODO just AnnClsCs?
-  , p_eq_cs         :: AnnEqCs
+  { p_schemes       :: AnnSchemes
+  , p_eq_cs         :: AnnEqCs -- TODO required?
   , p_eq_axioms     :: Axioms
   }
+
+tExtendAxioms :: Theory -> Axioms -> Theory
+tExtendAxioms theory axioms =
+  theory { p_eq_axioms = p_eq_axioms theory `mappend` axioms }
+
+tExtendSchemes :: Theory -> AnnSchemes -> Theory
+tExtendSchemes theory schemes =
+  theory { p_schemes = p_schemes theory `mappend` schemes }
 
 -- | Extend the superclass component of the theory
 ftExtendSuper :: FullTheory -> ProgramTheory -> FullTheory
@@ -759,12 +765,10 @@ instance PrettyPrint Axiom where
 
 -- | Pretty print the theory
 instance PrettyPrint Theory where
-  ppr (Theory super inst local eq_cs eq_ax)
+  ppr (Theory schemes eq_cs eq_ax)
     = braces $ vcat $ punctuate comma
-    $ [ text "p_super_schemes" <+> colon <+> ppr super
-      , text "p_inst_schemes"  <+> colon <+> ppr inst
-      , text "p_local_schemes" <+> colon <+> ppr local
-      , text "p_eq_cs"         <+> colon <+> ppr eq_cs
-      , text "p_eq_axioms"     <+> colon <+> ppr eq_ax
+    $ [ text "p_schemes"   <+> colon <+> ppr schemes
+      , text "p_eq_cs"     <+> colon <+> ppr eq_cs
+      , text "p_eq_axioms" <+> colon <+> ppr eq_ax
       ]
   needsParens _ = False

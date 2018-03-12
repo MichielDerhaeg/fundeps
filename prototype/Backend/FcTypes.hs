@@ -323,6 +323,10 @@ fcTmApp tm tms = foldl FcTmApp tm tms
 fcTmTyApp :: FcTerm -> [FcType] -> FcTerm
 fcTmTyApp tm tys = foldl FcTmTyApp tm tys
 
+-- | Uncurried version of data constructor FcTmCoApp
+fcTmCoApp :: FcTerm -> [FcCoercion] -> FcTerm
+fcTmCoApp = foldl FcTmCoApp
+
 -- | Create a data constructor application
 fcDataConApp :: FcDataCon -> FcType -> [FcTerm] -> FcTerm
 fcDataConApp dc ty = fcTmApp (FcTmTyApp (FcTmDataCon dc) ty)
