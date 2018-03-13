@@ -72,56 +72,47 @@ with other major type system features like GADTs and Type Families.
   In \textit{ICPF '05}. ACM.
 \end{itemize}
 
-\vspace{1cm}
+\vspace{.5cm}
 {\bf Finished work:}
-Firstly, I have studied some related work concerning type systems. I have read
-the book \textit{Types and Programming Languages} and several papers concerning
-Haskell's type system, System $F_C$, type classes, and functional dependencies.
+Firstly, I have done some additional reading. I have read several papers
+concerning functional dependencies and type families.
 
-Furthermore, I have simplified the implementation of a prototype compiler for a
-Haskell-like functional language, which has already been developed by the
-research group.
+Secondly, the specification omitted several cases, type signatures, all mentions
+of kinds and contained small errors. Most of which have been completed and
+corrected.
 
-% George says: 'cleaned up' is too informal for this sort of text
-% George says: Use "I have" instead "I've"
+Finally, the prototype compiler has been extended to support functional
+dependencies but the new type checker still needs to be thoroughly tested.
 
-\vspace{1cm}
+\vspace{.5cm}
 {\bf Main results:}
 We now have an implementation of a prototype compiler for a basic functional
-programming language with type classes which we can easily extend with the
-features we will later require.
-
-Additionally, the implementation currently supports superclass constraints
-without relying on backtracking (as opposed to the non-simplified version of
-the compiler), which is essential for implementing type inference for
+programming language with type classes which is extended with support for
 functional dependencies.
 
-\vspace{1cm}
+Because the inference algorithm uses type families internally, it can very
+easily be extended to support user-defined type families.
+
+The specification mentions projection functions, which are assumed to exist for
+all data types. I have discovered that this is not sufficient and kind
+polymorphism is a strict requirement.
+
+\vspace{.5cm}
 {\bf Main difficulties:}
-A significant amount of time had to be invested into familiarizing myself with
-the research area, but this was to be expected, as I had little to no prior
-knowlegde about it.
+Because kind polymorphism appears to be the best solution for the projection
+issue, we have opted to implement it. This implies that there probably won't be
+enough time to implement GADTs.
 
-An unexpected amount of time has been invested in moving from the theory to the
-implementation. Figuring out the correlation between the code and the theory
-took an unexpected amount of effort initially.
-
-We've opted for a type class constraint solver without non-determinism. We
-therefore had to devise another method to deal with superclasses.
-
-\vspace{1cm}
+\vspace{.5cm}
 {\bf Planning:}
-By the end of November I expect to have extended the target language of the
-compiler from System F to System F$_C$, and have finished the parts of the
-thesis text concerning the required background. The implementation of type
-inference is expected to come to completion by Christmas, and the main thesis
-text by the end of March.
+% pun intended
+I expect the implementation to be fully functional and tested by next week.
+% TODO rest
 
 \vspace{1cm}
-{\bf Continuing to work like this, I expect to achieve a 15/20 by the end of the
+{\bf Continuing to work like this, I expect to achieve a 16/20 by the end of the
 thesis.}
 
 {\bf I expect to hand in my thesis in June.}
-
 
 \end{document}
