@@ -16,7 +16,7 @@
 \vspace{0.5cm}
 {\bf Daily leaders:} George Karachalias
 
-\vspace{1cm}
+\vspace{.5cm}
 {\bf Short context and goal: }
 When declaring type classes with multiple parameters, it is often useful to
 define functional dependencies between these paremeters to prevent any
@@ -28,10 +28,10 @@ principal type.
 \mbox{}\\
 An extension of System F with type equality coercions has made elaboration
 possible and the goal of this thesis is to implement a proposed solution to
-discover practical issues that may arise and study how this solution interacts
+discover practical issues that may arise, and study how this solution interacts
 with other major type system features like GADTs and Type Families.
 
-\vspace{1cm}
+\vspace{.5cm}
 {\bf Literature study:}
 \begin{itemize}
 \item
@@ -57,11 +57,11 @@ with other major type system features like GADTs and Type Families.
 \item
   M. Sulzmann, G. J. Duck, S. Peyton Jones and P. J. Stuckey. 2006.
   Understanding functional dependencies via constraint handling rules.
-  In %TODO
+  J. Funct. Program. 1, vol. 17, pp. 83--129.
 \item
   M. P. Jones. 2000.
   Type classes with functional dependencies.
-  In \textit{ESOP/ETA (LNCS) 2000}. p 230-244.
+  In \textit{ESOP/ETA (LNCS) 2000}. pp. 230--244.
 \item
   M. M. T. Chakravarty, G. Keller, S. Peyton Jones and S. Marlow. 2005.
   Associated Types with Class.
@@ -74,45 +74,49 @@ with other major type system features like GADTs and Type Families.
 
 \vspace{.5cm}
 {\bf Finished work:}
-Firstly, I have done some additional reading. I have read several papers
-concerning functional dependencies and type families.
-
-Secondly, the specification omitted several cases, type signatures, all mentions
-of kinds and contained small errors. Most of which have been completed and
-corrected.
-
-Finally, the prototype compiler has been extended to support functional
-dependencies but the new type checker still needs to be thoroughly tested.
+Firstly, I have read several papers concerning functional dependencies, GADTs,
+and type families.
+%
+Secondly, the specification of Karachalias and Schrijvers (2017) omitted
+several cases, type signatures, all mentions of kinds and contained small
+errors. I have addressed such omissions and errors.
+%
+Finally, I have extended the prototype compiler with support for
+multi-parameter type classes and functional dependencies. The new type checker
+still needs to be thoroughly tested.
 
 \vspace{.5cm}
 {\bf Main results:}
 We now have an implementation of a prototype compiler for a basic functional
 programming language with type classes which is extended with support for
 functional dependencies.
-
+%
 Because the inference algorithm uses type families internally, it can very
 easily be extended to support user-defined type families.
-
-The specification mentions projection functions, which are assumed to exist for
-all data types. I have discovered that this is not sufficient and kind
-polymorphism is a strict requirement.
+%
+The specification mentions the so-called {\em type-level projection functions},
+which are assumed to exist for all data types. I have discovered that this
+approach is not as expressive as full support for kind polymorphism, and thus
+undermines the expressiveness of the system of Karachalias and Schrijvers
+(2017).
 
 \vspace{.5cm}
 {\bf Main difficulties:}
 Because kind polymorphism appears to be the best solution for the projection
-issue, we have opted to implement it. This implies that there probably won't be
-enough time to implement GADTs.
+issue, we have opted to implement it. This implies that there probably will not
+be enough time to implement GADTs.
 
 \vspace{.5cm}
 {\bf Planning:}
-% pun intended
+% pun intended. Nice pun mate! ^^
 I expect the implementation to be fully functional and tested by next week.
-% TODO rest
+After that, the implementation will be extended with source-level type families
+so that their interaction with functional dependencies can be studied.
 
-\vspace{1cm}
+\vspace{.5cm}
 {\bf Continuing to work like this, I expect to achieve a 16/20 by the end of the
 thesis.}
-
+%
 {\bf I expect to hand in my thesis in June.}
 
 \end{document}
