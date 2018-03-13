@@ -28,7 +28,7 @@ import Control.Monad.State
 import Control.Monad.Except
 import Control.Arrow (second)
 import Data.Either (partitionEithers)
-import Data.List (nub, (\\), intersect)
+import Data.List ((\\), intersect)
 import Data.Maybe (catMaybes, isJust)
 
 -- * Create the typechecking environment from the renaming one
@@ -66,7 +66,7 @@ buildInitTcEnv pgm (RnEnv _rn_cls_infos dc_infos tc_infos) = do -- GEORGE: Assum
         -- Generate And Store The Class Info
         let cls_info =
               ClassInfo
-                (labelOf rn_abs)
+                (labelOf rn_abs \\ rn_as)
                 rn_cs
                 rn_cls
                 rn_as
@@ -193,9 +193,9 @@ lookupClsParams cls = cls_type_args <$> lookupTcEnvM tc_env_cls_info cls
 lookupClsFundeps :: RnClass -> TcM [RnFundep]
 lookupClsFundeps cls = cls_fundeps <$> lookupTcEnvM tc_env_cls_info cls
 
--- | Get the abstracted type variables of the class
-lookupClsAbs :: RnClass -> TcM [RnTyVar]
-lookupClsAbs cls = cls_abs <$> lookupTcEnvM tc_env_cls_info cls
+-- | Get the existential type variables of the class
+lookupClsExis :: RnClass -> TcM [RnTyVar]
+lookupClsExis cls = cls_exis <$> lookupTcEnvM tc_env_cls_info cls
 
 -- | Get the projection type families of the type constructor
 lookupTyConProj :: RnTyCon -> TcM [RnTyFam]
@@ -434,7 +434,7 @@ elabTmApp tm1 tm2 = do
   storeEqCs [c :| (mkRnArrowTy [ty2] a :~: ty1)]
   -- TODO plug in
   let fc_tm = FcTmApp (FcTmCast fc_tm1 (FcCoVar c)) fc_tm2
-  return (a, FcTmApp fc_tm1 fc_tm2)
+  return (a, fc_tm)
 
 -- | Elaborate a lambda abstraction
 elabTmAbs :: RnTmVar -> RnTerm -> GenM (RnMonoTy, FcTerm)
@@ -507,41 +507,6 @@ polyTysToMonoTysM (ty:tys) = case polyTyToMonoTy ty of
 -- | Elaborate a case expression
 elabTmCase :: RnTerm -> [RnAlt] -> GenM (RnMonoTy, FcTerm)
 elabTmCase scr alts = do
-  (scr_ty, fc_scr) <- elabTerm scr               -- Elaborate the scrutinee
-  rhs_ty  <- TyVar <$> freshRnTyVar KStar        -- Generate a fresh type variable for the result
-  fc_alts <- mapM (elabHsAlt scr_ty rhs_ty) alts -- Check the alternatives
-  return (rhs_ty, FcTmCase fc_scr fc_alts)
-
--- | Elaborate a case alternative
-elabHsAlt :: RnMonoTy {- Type of the scrutinee -}
-          -> RnMonoTy {- Result type           -}
-          -> RnAlt    {- Case alternative      -}
-          -> GenM FcAlt
-elabHsAlt scr_ty res_ty (HsAlt (HsPat dc xs) rhs) = do
-  -- Get the constructor's signature
-  (as, orig_arg_tys, tc) <- liftGenM (dataConSig dc)
-  -- Get the constructor's System F representation
-  fc_dc <- liftGenM (lookupDataCon dc)
-
-  -- Generate fresh universal type variables for the universal tvs
-  (bs, ty_subst) <- liftGenM (freshenRnTyVars as)
-  -- Apply the renaming substitution to the argument types
-  let arg_tys = substInMonoTy ty_subst <$> orig_arg_tys
-  -- Type check the right hand side
-  (rhs_ty, fc_rhs) <- extendCtxM xs (monoTyToPolyTy <$> arg_tys) (elabTerm rhs)
-  -- The scrutinee type must match the pattern type
-  (_cs, ann_cs) <- liftGenM $ annotateEqCs
-    [ scr_ty :~: foldl TyApp (TyCon tc) (map TyVar bs)
-  -- All right hand sides should be the same
-    , res_ty :~: rhs_ty ]
-  storeEqCs ann_cs
-
-  let fc_tys = elabMonoTy <$> arg_tys
-  return (FcAlt (FcConPat fc_dc [] [] ((rnTmVarToFcTmVar <$> xs) |: fc_tys)) fc_rhs)
-
--- | Elaborate a case expression TODO replace with old elabTmCase
-elabTmCase' :: RnTerm -> [RnAlt] -> GenM (RnMonoTy, FcTerm)
-elabTmCase' scr alts = do
   (scr_ty, fc_scr) <- elabTerm scr
   result_ty <- TyVar <$> freshRnTyVar KStar
   c <- freshFcCoVar
@@ -638,15 +603,93 @@ doesNotOccurIn a (TyApp ty1 ty2) = a `doesNotOccurIn` ty1 && a `doesNotOccurIn` 
 doesNotOccurIn a (TyVar b)       = a /= b
 doesNotOccurIn a (TyFam _ tys)   = (a `doesNotOccurIn`) `all` tys
 
--- | Type Unification.
+-- * Overlap Checking
+-- ------------------------------------------------------------------------------
+
+overlapCheck :: MonadError CompileError m => Theory -> RnClsCt -> m ()
+overlapCheck theory cls_ct@(ClsCt cls1 tys1) =
+  case catMaybes (fmap overlaps (theory_schemes theory)) of
+    msg:_ -> tcFail msg
+    []    -> return ()
+  where
+    overlaps (_ :| scheme@(CtrScheme _ _ (ClsCt cls2 tys2)))
+      | cls1 == cls2
+      , Right {} <- unify [] (zipWithExact (:~:) tys1 tys2) =
+        Just (text "overlapCheck:" $$ ppr cls_ct $$ ppr scheme)
+      | otherwise = Nothing
+
+-- * Constraint Entailment
+-- ------------------------------------------------------------------------------
+
+entailCs :: [RnTyVar] -> Theory -> AnnTypeCs -> TcM (AnnTypeCs, HsTySubst, EvSubst)
+entailCs untchs theory cs =
+  go (entailCt untchs theory) cs >>= \case
+    Nothing -> return (cs, mempty, mempty)
+    Just ((new_cs, ty_subst, ev_subst), cs') -> do
+      (cs'', ty_subst', ev_subst') <-
+        entailCs untchs theory (substInAnnTypeCs ty_subst (new_cs <> cs'))
+      return (cs'', ty_subst' <> ty_subst, ev_subst' <> ev_subst)
+  where
+   go :: Monad m => (a -> m (Maybe b)) -> [a] -> m (Maybe (b, [a]))
+   go _f []     = return Nothing
+   go  f (x:xs) = f x >>= \case
+     Just y  -> return $ Just (y,xs)
+     Nothing -> (fmap . fmap) (second (x:)) (go f xs)
+
+entailCt :: [RnTyVar] -> Theory -> AnnTypeCt -> TcM (Maybe (AnnTypeCs, HsTySubst, EvSubst))
+entailCt untchs theory (AnnEqCt ct) =
+  entailEq untchs (theory_axioms theory) ct >>= \case
+    Nothing -> return Nothing
+    Just (eq_cs, ty_subst, co_subst) ->
+      return $ Just (AnnEqCt <$> eq_cs, ty_subst, coToEvSubst co_subst)
+entailCt untchs theory (AnnClsCt ct) =
+  entailReduce (theory_axioms theory) ct >>= \case
+    Just (cls_ct, tm_subst) ->
+      return $ Just ([AnnClsCt cls_ct], mempty, tmToEvSubst tm_subst)
+    Nothing -> entailCls untchs (theory_schemes theory) ct >>= \case
+      Nothing -> return Nothing
+      Just (cls_cs, tm_subst) ->
+        return $ Just (AnnClsCt <$> cls_cs, mempty, tmToEvSubst tm_subst)
+
+-- | Entail a single type class constraint. Returns Nothing if nothing has been
+--   done. May produce additional class constraints.
+entailCls :: [RnTyVar] -> ProgramTheory -> AnnClsCt -> TcM (Maybe (AnnClsCs, FcTmSubst))
+entailCls _untch [] _cls_ct = return Nothing
+entailCls as ((d' :| CtrScheme bs cls_cs (ClsCt cls2 tys2)):schemes) ct@(d :| ClsCt cls1 tys1)
+  | cls1 == cls2
+  , Right ty_subst <- unify as (zipWithExact (:~:) tys1 tys2) = do
+    (d''s, ann_cls_cs) <- annotateClsCs $ substInClsCs ty_subst cls_cs
+    let fc_subbed_bs = map elabMonoTy . substInTyVars ty_subst $ labelOf bs
+    let ev_subst =
+          d |->
+           foldl
+             FcTmApp
+             (foldl FcTmTyApp (FcTmVar d') fc_subbed_bs)
+             (FcTmVar <$> d''s)
+    return $ Just (ann_cls_cs, ev_subst)
+  | otherwise = entailCls as schemes ct
+
+entailReduce :: Axioms -> AnnClsCt -> TcM (Maybe (AnnClsCt, FcTmSubst))
+entailReduce axioms (d :| ClsCt cls tys) =
+  case reduceAll axioms tys of
+    Nothing -> return Nothing
+    Just (tys', cos') -> do
+      d' <- freshDictVar
+      tc <- lookupClsTyCon cls
+      let co = foldl FcCoApp (FcCoRefl (FcTyCon tc)) (FcCoSym <$> cos')
+      return $ Just (d' :| ClsCt cls tys', d |-> FcTmCast (FcTmVar d') co)
+
+-- | Equality contstraint entailment
 entailEq :: [RnTyVar] -> Axioms -> AnnEqCt
          -> TcM (Maybe (AnnEqCs, HsTySubst, FcCoSubst))
 entailEq untchs p ct = step ct
   where
-    step (_ :| (TyVar a :~: TyVar b))
-      | a == b = return $ Just mempty
-    step (_ :| (TyCon tc1 :~: TyCon tc2))
-      | tc1 == tc2 = return $ Just mempty
+    step (c :| (TyVar a :~: TyVar b))
+      | a == b =
+        return $ Just (mempty, mempty, c |-> FcCoRefl (elabMonoTy (TyVar a)))
+    step (c :| (TyCon tc1 :~: TyCon tc2))
+      | tc1 == tc2 =
+        return $ Just (mempty, mempty, c |-> FcCoRefl (elabMonoTy (TyCon tc1)))
       | otherwise = unify_fail
     step (c :| (TyVar a :~: ty))
       | a `notElem` untchs, a `doesNotOccurIn` ty = unify_var c a ty
@@ -679,7 +722,7 @@ entailEq untchs p ct = step ct
         Just ([c' :| (ty' :~: ty)], mempty, (c |-> FcCoTrans co (FcCoVar c')))
 
     unify_fail = tcFail $ vcat
-        [ text "Unification failed."
+        [ text "Equality contraint entailment failed."
         , text "Constraints"  <+> colon <+> ppr ct
         , text "Untouchables" <+> colon <+> ppr untchs
         ]
@@ -726,85 +769,28 @@ reduceAll axioms tys =
     reduceOrReflect _ty (Just (new_ty, co)) = (new_ty,co)
     reduceOrReflect ty Nothing = (ty, FcCoRefl (elabMonoTy ty))
 
--- * Overlap Checking
--- ------------------------------------------------------------------------------
-
-overlapCheck :: MonadError CompileError m => FullTheory -> RnClsCt -> m ()
-overlapCheck theory cls_ct@(ClsCt cls1 tys1) =
-  case catMaybes (fmap overlaps (theory_inst theory)) of
-    msg:_ -> tcFail msg
-    []    -> return ()
-  where
-    overlaps (_ :| scheme@(CtrScheme _ _ (ClsCt cls2 tys2)))
-      | cls1 == cls2
-      , Right {} <- unify [] (zipWithExact (:~:) tys1 tys2) =
-        Just (text "overlapCheck:" $$ ppr cls_ct $$ ppr scheme)
-      | otherwise = Nothing
-
--- * Constraint Entailment
--- ------------------------------------------------------------------------------
-
--- | Simplify the wanted type class constraints. Return the residual constraints
--- | and the dictionary substitution.
-simplify :: [RnTyVar] -> ProgramTheory -> AnnClsCs -> TcM (AnnClsCs, FcTmSubst)
-simplify _as _theory [] = return (mempty, mempty)
-simplify as theory (ct:cs) =
-  entail as theory ct >>= \case
-    Nothing -> do
-      (residual_cs, fc_tm_subst) <- simplify as theory cs
-      return (ct:residual_cs, fc_tm_subst)
-    Just (cs', fc_subst) -> do
-      (residual_cs, fc_subst') <- simplify as theory $ cs' <> cs
-      return (residual_cs, fc_subst' <> fc_subst)
-
--- | Entail a single type class constraint. Returns Nothing if nothing has been
--- | done. May produce additional class constraints.
-entail :: [RnTyVar] -> ProgramTheory -> AnnClsCt -> TcM (Maybe (AnnClsCs, FcTmSubst))
-entail _untch [] _cls_ct = return Nothing
-entail as ((d' :| CtrScheme bs cls_cs (ClsCt cls2 tys2)):schemes) ct@(d :| ClsCt cls1 tys1)
-  | cls1 == cls2
-  , Right ty_subst <- unify as (zipWithExact (:~:) tys1 tys2) = do
-    (d''s, ann_cls_cs) <- annotateClsCs $ substInClsCs ty_subst cls_cs
-    let fc_subbed_bs = map elabMonoTy . substInTyVars ty_subst $ labelOf bs
-    let ev_subst =
-          d |->
-           foldl
-             FcTmApp
-             (foldl FcTmTyApp (FcTmVar d') fc_subbed_bs)
-             (FcTmVar <$> d''s)
-    return $ Just (ann_cls_cs, ev_subst)
-  | otherwise = entail as schemes ct
-
--- | Returns the (transitive) super class constaints of the type class constraint
--- | using the super class theory.
-closure :: [RnTyVar] -> ProgramTheory -> AnnClsCt -> TcM (AnnClsCs, FcTmSubst)
-closure untchs theory cls_ct = go theory cls_ct
-  where
-    go ((d_top :| CtrScheme alphas [ClsCt cls2 [ty2]] q):schemes) ct@(d :| ClsCt cls1 [ty1])
-      | cls1 == cls2
-      , Right ty_subst <- unify untchs [ty1 :~: ty2] = do
-        d' <- freshDictVar
-        let sub_q = substInClsCt ty_subst q
-        let fc_subbed_alphas =
-              map elabMonoTy . substInTyVars ty_subst $ labelOf alphas
-        let ev_subst =
-              d' |->
-               FcTmApp
-                 (foldl FcTmTyApp (FcTmVar d_top) fc_subbed_alphas)
-                 (FcTmVar d)
-        (cls_cs, ev_subst') <- go schemes ct
-        (all_cs, ev_subst'') <- closureAll untchs theory (d' :| sub_q : cls_cs)
-        return (d' :| sub_q : cls_cs <> all_cs, ev_subst <> ev_subst' <> ev_subst'')
-      | otherwise = go schemes ct
-    go [] _cls_ct = return (mempty, mempty)
-    go _ _ =
-      tcFail $
-        text "closure" <+> colon <+>
-          text "constraint scheme has too many implications"
-
-closureAll :: [RnTyVar] -> ProgramTheory -> AnnClsCs -> TcM (AnnClsCs, FcTmSubst)
-closureAll as theory cs =
-  ((\(a, b) -> (mconcat a, mconcat b)) . unzip) <$> mapM (closure as theory) cs
+entailSuperClass :: [RnTyVar] -> Theory -> RnClsCt -> TcM ([FcType], [FcTerm], [FcCoercion])
+entailSuperClass untchs theory (ClsCt cls tys) = do
+  ClassInfo bs sc _cls as fds fams _m _mty _tc _dc <-
+    lookupTcEnvM tc_env_cls_info cls
+  subst <- mappend (buildSubst (zipExact as tys)) <$> determinacy as sc
+  cs <- genFreshCoVars $ length fds
+  let eq_cs = substInAnnEqCs subst $ cs |:
+        map
+          (\(Fundep ais ai0, f) -> (TyFam f (TyVar <$> ais)) :~: TyVar ai0)
+          (zipExact fds fams)
+  (ds, cls_cs) <- annotateClsCs $ substInClsCs subst sc
+  let general_cs = (AnnEqCt <$> eq_cs) <> (AnnClsCt <$> cls_cs)
+  (residual_cs, ty_subst, ev_subst) <- entailCs untchs theory general_cs
+  unless (null residual_cs) $
+    tcFail
+      (text "Failed to resolve super class constraints" <+> colon <+> ppr residual_cs
+       $$ text "From" <+> colon <+>
+       ppr theory $$ text "Constraints" <+> colon <+> ppr general_cs)
+  return
+    ( elabMonoTy . substInMonoTy (ty_subst <> subst) . TyVar <$> bs
+    , substEvInTm ev_subst . FcTmVar <$> ds
+    , substEvInCo ev_subst . FcCoVar <$> cs)
 
 -- | Determinacy relation
 determinacy :: [RnTyVar] -> RnClsCs -> TcM HsTySubst
@@ -926,72 +912,6 @@ generateAxioms scheme@(CtrScheme _as cs (ClsCt cls tys)) = do
       text "Liberal Coverage Condition violation by the constraint scheme" <+>
       colon <+> ppr scheme
 
-entailSuperClass :: Theory -> RnClsCt -> TcM ([FcType], [FcTerm], [FcCoercion])
-entailSuperClass theory (ClsCt cls tys) = do
-  ClassInfo ab_s sc _cls as fds fams _m _mty _tc _dc <-
-    lookupTcEnvM tc_env_cls_info cls
-  let bs = ab_s \\ as
-  subst <-
-    mappend <$> unify as (zipWithExact (:~:) (TyVar <$> as) tys) <*> determinacy as sc
-  cs <- genFreshCoVars $ length fds
-  let eq_cs = substInAnnEqCs subst $ cs |:
-        map
-          (\(Fundep ais ai0, f) -> (TyFam f (TyVar <$> ais)) :~: TyVar ai0)
-          (zipExact fds fams)
-  (ds, cls_cs) <- annotateClsCs sc
-  let general_cs = (AnnClsCt <$> cls_cs) <> (AnnEqCt <$> eq_cs)
-  (residual_cs, ty_subst, ev_subst) <- entailCs as theory general_cs
-  unless (null residual_cs) $
-    tcFail
-      (text "Failed to resolve super class constraints" <+> colon <+> ppr residual_cs
-       $$ text "From" <+> colon <+>
-       ppr theory $$ text "Constraints" <+> colon <+> ppr general_cs)
-  return
-    ( elabMonoTy . substInMonoTy (ty_subst <> subst) . TyVar <$> bs
-    , substEvInTm ev_subst . FcTmVar <$> ds
-    , substEvInCo ev_subst . FcCoVar <$> cs)
-
-entailReduce :: Axioms -> AnnClsCt -> TcM (Maybe (AnnClsCt, FcTmSubst))
-entailReduce axioms (d :| ClsCt cls tys) =
-  case reduceAll axioms tys of
-    Nothing -> return Nothing
-    Just (tys', cos') -> do
-      d' <- freshDictVar
-      tc <- lookupClsTyCon cls
-      let co = foldl FcCoApp (FcCoRefl (FcTyCon tc)) (FcCoSym <$> cos')
-      return $ Just (d' :| ClsCt cls tys', d |-> FcTmCast (FcTmVar d') co)
-
-entailCs :: [RnTyVar] -> Theory -> AnnTypeCs -> TcM (AnnTypeCs, HsTySubst, EvSubst)
-entailCs untchs theory cs = do
-  go (entailCt untchs theory) cs >>= \case
-    Nothing -> return (cs, mempty, mempty)
-    Just ((new_cs, ty_subst, ev_subst), cs') -> do
-      (cs'', ty_subst', ev_subst') <-
-        entailCs untchs theory (substInAnnTypeCs ty_subst (new_cs <> cs'))
-      return (cs'', ty_subst <> ty_subst', ev_subst <> ev_subst')
-  where
-   go :: Monad m => (a -> m (Maybe b)) -> [a] -> m (Maybe (b, [a]))
-   go _f []     = return Nothing
-   go  f (x:xs) = f x >>= \case
-     Just y  -> return $ Just (y,xs)
-     Nothing -> (fmap . fmap) (second (x:)) (go f xs)
-
-entailCt :: [RnTyVar] -> Theory -> AnnTypeCt -> TcM (Maybe (AnnTypeCs, HsTySubst, EvSubst))
-entailCt untchs theory (AnnEqCt ct) =
-  entailEq untchs (p_eq_axioms theory) ct >>= \case
-    Nothing -> return Nothing
-    Just (eq_cs, ty_subst, co_subst) ->
-      return $ Just (AnnEqCt <$> eq_cs, ty_subst, coToEvSubst co_subst)
-entailCt untchs theory (AnnClsCt ct) =
-  entailReduce (p_eq_axioms theory) ct >>= \case
-    Just (cls_ct, tm_subst) ->
-      return $ Just ([AnnClsCt cls_ct], mempty, tmToEvSubst tm_subst)
-    -- TODO rename entail to entailCls
-    Nothing -> entail untchs (p_schemes theory) ct >>= \case
-      Nothing -> return Nothing
-      Just (cls_cs, tm_subst) ->
-        return $ Just (AnnClsCt <$> cls_cs, mempty, tmToEvSubst tm_subst)
-
 
 -- | Elaborate a class declaration. Return
 --   a) The data declaration for the class
@@ -1084,37 +1004,7 @@ elabClsDecl (ClsD ab_s rn_cs cls as fundeps method method_ty) = do
   -- Construct the extended typing environment
   ty_ctx <- extendCtxM method hs_method_ty ask
 
-  -- TODO old way of dealing with superclasses
-  (sc_schemes, sc_decls) <- fmap unzip $ forM (zip [0..] rn_cs) $ \(i,sc_ct) -> do
-    d  <- freshDictVar -- For the declaration
-    da <- freshDictVar -- For the input dictionary
-
-    let cls_head  = ClsCt cls (TyVar <$> as) -- TC   as
-    fc_cls_head  <- elabClsCt cls_head       -- T_TC as
-
-    -- forall a. TC a => SC
-    let scheme = CtrScheme (as |: (kindOf <$> as)) [cls_head] sc_ct
-    -- forall a. T_TC a -> upsilon_SC
-    fc_scheme <- elabScheme scheme
-
-    -- n+1 fresh variables
-    xs <- replicateM (length rn_cs + 1) freshFcTmVar
-
-    let fc_tm =
-          fcTmTyAbs fc_as $
-          FcTmAbs da fc_cls_head $
-          FcTmCase
-            (FcTmVar da)
-            [ FcAlt
-                (FcConPat dc [] [] (xs |: (fc_sc_tys ++ [fc_method_ty])))
-                (FcTmVar (xs !! i))
-            ]
-
-    let proj = FcValBind d fc_scheme fc_tm
-
-    return (d :| scheme, proj)
-
-  return (fc_fam_decls, fc_data_decl, fc_val_bind:sc_decls, sc_schemes, ty_ctx)
+  return (fc_fam_decls, fc_data_decl, fc_val_bind:[], [], ty_ctx)
 
 -- | Check if an instance/class context is ambiguous
 unambiguousCheck :: [RnTyVar] -> [RnTyVar] -> RnClsCs -> TcM ()
@@ -1189,89 +1079,14 @@ extendCtxKindAnnotatedTysM ann_as = extendCtxM as (map kindOf as)
 -- * Class Instance Elaboration
 -- ------------------------------------------------------------------------------
 
--- | Elaborate a class instance. Take the program theory also as input and return
---   a) The dictionary transformer implementation
---   b) The extended program theory
-elabInsDecl :: FullTheory -> RnInsDecl -> TcM (FcValBind, FullTheory)
-elabInsDecl theory (InsD as ins_cs cls [typat] method method_tm) = do
-  let ty = hsTyPatToMonoTy typat
-  let bs      = as
-  let fc_bs   = map (rnTyVarToFcTyVar . labelOf) bs
-  let head_ct = ClsCt cls [ty]
-
-  -- Ensure the instance does not overlap
-  overlapCheck theory head_ct
-
-  -- Create the instance constraint scheme
-  ins_d <- freshDictVar
-  ins_scheme <- fmap (ins_d :|) $ freshenLclBndrs $ CtrScheme bs ins_cs head_ct
-
-  --  Generate fresh dictionary variables for the instance context
-  ann_ins_cs <- snd <$> annotateClsCs ins_cs
-  (closure_cs, closure_ev_subst) <- closureAll
-                                      (labelOf bs)
-                                      (theory_super theory)
-                                       ann_ins_cs
-  let ann_ins_schemes = (fmap . fmap) (CtrScheme [] []) (closure_cs <> ann_ins_cs)
-
-  -- The extended program theory
-  let ext_theory = theory `ftExtendInst` [ins_scheme]
-
-  --  The local program theory
-  let local_theory = ext_theory `ftExtendLocal` ann_ins_schemes
-
-  -- Create the dictionary transformer type
-  dtrans_ty <- do
-    fc_head_ty <- extendTcCtxTysM (labelOf bs) (wfElabClsCt head_ct)
-    fc_ins_cs <- extendTcCtxTysM (labelOf bs) (wfElabClsCs ins_cs)
-    return $ fcTyAbs fc_bs $ fcTyArr fc_ins_cs fc_head_ty
-
-  -- Elaborate the method implementation
-  fc_method_tm <- do
-    expected_method_ty <- instMethodTy [ty] <$> lookupCtxM method
-    elabTermWithSig (labelOf bs) local_theory method_tm expected_method_ty
-
-  -- Entail the superclass constraints
-  fc_super_tms <- do
-    a <- lookupClsParam cls
-    (ds, super_cs) <- substVar a ty <$>
-                        lookupClsSuper cls >>= annotateClsCs
-
-    (residual_cs, ev_subst) <- simplify
-                                 (labelOf bs)
-                                 (ftDropSuper local_theory) -- TODO apearantly these should not include the instance scheme
-                                  super_cs
-
-    unless (null residual_cs) $
-      tcFail (text "Failed to resolve superclass constraints" <+>
-                   colon <+>
-                   ppr residual_cs $$ text "From" <+> colon <+> ppr local_theory)
-
-    return (map (substFcTmInTm ev_subst . FcTmVar) ds)
-
-  -- The full implementation of the dictionary transformer
-  fc_dict_transformer <- do
-    binds <- elabAnnClsCs ann_ins_cs
-    dc    <- lookupClsDataCon cls
-    let fc_ty = elabMonoTy ty
-    return $ substFcTmInTm closure_ev_subst $
-      fcTmTyAbs fc_bs $
-        fcTmAbs binds $
-           fcDataConApp dc fc_ty (fc_super_tms ++ [fc_method_tm])
-
-  -- Resulting dictionary transformer
-  let fc_val_bind = FcValBind ins_d dtrans_ty fc_dict_transformer
-
-  return (fc_val_bind, ext_theory)
-
-elabInsDecl' :: Theory -> RnInsDecl -> TcM ([FcAxiomDecl], FcValBind, Theory)
-elabInsDecl' theory (InsD as ins_cs cls typats method method_tm) = do
+elabInsDecl :: Theory -> RnInsDecl -> TcM ([FcAxiomDecl], FcValBind, Theory)
+elabInsDecl theory (InsD as ins_cs cls typats method method_tm) = do
   let tys = hsTyPatToMonoTy <$> typats
   let head_ct = ClsCt cls tys
   let bs = labelOf as \\ ftyvsOf tys
   let fc_as = rnTyVarToFcTyVar . labelOf <$> as
 
-  overlapCheck undefined head_ct -- new theory
+  overlapCheck theory head_ct
   unambiguousCheck bs (labelOf as) ins_cs
 
   ins_d <- freshDictVar
@@ -1282,12 +1097,11 @@ elabInsDecl' theory (InsD as ins_cs cls typats method method_tm) = do
   (mctx, match_cs, match_ctx) <- dictDestruction ann_ins_cs
 
   axioms <- generateAxioms ins_scheme
-  -- TODO reverse order of extension (add in front instead of back)
   let i_theory = theory `tExtendAxioms`  axioms
                         `tExtendSchemes` (clsCsToSchemes ann_ins_cs)
                         `tExtendSchemes` (clsCsToSchemes match_cs)
 
-  (fc_tys, fc_tms, fc_cos) <- entailSuperClass i_theory head_ct
+  (fc_exis_tys, fc_tms, fc_cos) <- entailSuperClass (labelOf as) i_theory head_ct
 
   let ext_theory = theory `tExtendAxioms`  axioms
                           `tExtendSchemes` [ins_d :| ins_scheme]
@@ -1296,7 +1110,7 @@ elabInsDecl' theory (InsD as ins_cs cls typats method method_tm) = do
     let theory' = i_theory `tExtendSchemes` [ins_d :| ins_scheme]
     expected_method_ty <- instMethodTy tys <$> lookupCtxM method
     setCtxM match_ctx $ extendCtxM (labelOf as) (dropLabel as) $
-      elabTermWithSig' (labelOf as) theory' method_tm expected_method_ty
+      elabTermWithSig (labelOf as) theory' method_tm expected_method_ty
 
   dtrans_ty <- extendCtxM (labelOf as) (dropLabel as) $ do
     fc_head_ty <-  wfElabClsCt head_ct
@@ -1304,13 +1118,14 @@ elabInsDecl' theory (InsD as ins_cs cls typats method method_tm) = do
     return $ fcTyAbs fc_as $ fcTyArr fc_ins_cs fc_head_ty
 
   fc_dict_transformer <- do
-    binds <- elabAnnClsCs ann_ins_cs -- TODO rename to elabAnnClsCs
+    binds <- elabAnnClsCs ann_ins_cs
     dc    <- lookupClsDataCon cls
     return $
       fcTmTyAbs fc_as $
        fcTmAbs binds $
          matchCtxApply mctx $
-          FcTmDataCon dc `fcTmTyApp` fc_tys
+          FcTmDataCon dc `fcTmTyApp` (elabMonoTy <$> tys)
+                         `fcTmTyApp` fc_exis_tys
                          `fcTmCoApp` fc_cos
                          `fcTmApp`   fc_tms
                          `FcTmApp`   fc_method_tm
@@ -1343,46 +1158,8 @@ instMethodTy typats poly_ty = constructPolyTy (new_as, new_cs, new_ty)
 
 -- | Elaborate a term with an explicit type signature (method implementation).
 -- This involves both inference and type subsumption.
-elabTermWithSig :: [RnTyVar] -> FullTheory -> RnTerm -> RnPolyTy -> TcM FcTerm
-elabTermWithSig untch theory tm poly_ty = do
-  let (as, cs, ty) = destructPolyTy poly_ty
-  let fc_as = map rnTyVarToFcTyVar (labelOf as)
-
-  -- Infer the type of the expression and the wanted constraints
-  ((mono_ty, fc_tm), wanted_eqs, wanted_ccs) <- runGenM $ elabTerm tm
-
-  -- Generate fresh dictionary variables for the given constraints
-  given_ccs <- snd <$> annotateClsCs cs
-  dbinds <- elabAnnClsCs given_ccs
-  (super_cs, closure_ev_subst) <- closureAll untch (theory_super theory) given_ccs
-  let given_schemes = (fmap . fmap) (CtrScheme [] []) (super_cs <> given_ccs)
-
-  -- Resolve all the wanted constraints
-  let untouchables = nub (untch ++ map labelOf as)
-  ty_subst <- unify untouchables $ (dropLabel wanted_eqs) ++ [mono_ty :~: ty]
-  let local_theory = ftDropSuper theory <> given_schemes
-  let wanted = substInAnnClsCs ty_subst wanted_ccs
-
-   -- rightEntailsRec untouchables local_theory wanted
-  (residual_cs, ev_subst) <- simplify untouchables local_theory wanted
-
-  -- Ensure that the constraints are completely resolved
-  unless (null residual_cs) $
-    tcFail
-      (text "Failed to resolve constraints" <+>
-       colon <+> ppr residual_cs $$ text "From" <+> colon <+> ppr theory
-       $$ text "Wanted" <+> colon <+> ppr wanted)
-  let fc_subst = elabHsTySubst ty_subst
-
-  -- Generate the resulting System F term
-  return $
-    fcTmTyAbs fc_as $
-    fcTmAbs dbinds $
-      substFcTmInTm (closure_ev_subst <> ev_subst) $
-        substFcTyInTm fc_subst fc_tm
-
-elabTermWithSig' :: [RnTyVar] -> Theory -> RnTerm -> RnPolyTy -> TcM FcTerm
-elabTermWithSig' untchs theory tm poly_ty = do
+elabTermWithSig :: [RnTyVar] -> Theory -> RnTerm -> RnPolyTy -> TcM FcTerm
+elabTermWithSig untchs theory tm poly_ty = do
   let (as, cs, ty2) = destructPolyTy poly_ty
 
   ((ty1, fc_tm), wanted_eqs, wanted_ccs) <- runGenM $ elabTerm tm
@@ -1393,12 +1170,12 @@ elabTermWithSig' untchs theory tm poly_ty = do
   (mctx, match_ccs, _) <- dictDestruction given_ccs
 
   let theory' = theory `tExtendSchemes` clsCsToSchemes (match_ccs <> given_ccs)
+  let untouchables = untchs <> labelOf as
   let wanted_cs =
-        ((AnnClsCt <$> wanted_ccs) <> (AnnEqCt <$> wanted_eqs) <>
-         [AnnEqCt (c :| (ty1 :~: ty2))])
-  (residual_cs, ty_subst, ev_subst) <- entailCs untchs theory' wanted_cs
+        (AnnEqCt <$> (c :| (ty1 :~: ty2)) : wanted_eqs) <> (AnnClsCt <$> wanted_ccs)
+  (residual_cs, ty_subst, ev_subst) <- entailCs untouchables theory' wanted_cs
 
-  unless (null (residual_cs :: AnnTypeCs)) $
+  unless (null residual_cs) $
     tcFail
       (text "Failed to resolve constraints" <+>
        colon <+>
@@ -1411,8 +1188,8 @@ elabTermWithSig' untchs theory tm poly_ty = do
     fcTmTyAbs (rnTyVarToFcTyVar <$> (labelOf as)) $
     fcTmAbs dbinds $
     matchCtxApply mctx $
-    substEvInTm ev_subst $
-    substFcTyInTm fc_ty_subst $ FcTmCast fc_tm (FcCoVar c)
+    substFcTyInTm fc_ty_subst $
+    substEvInTm ev_subst $ FcTmCast fc_tm (FcCoVar c)
 
 -- | Convert a source type substitution to a System F type substitution
 elabHsTySubst :: HsTySubst -> FcTySubst
@@ -1421,47 +1198,44 @@ elabHsTySubst =  mapSub rnTyVarToFcTyVar elabMonoTy
 -- * Type Inference With Constraint Simplification
 -- ------------------------------------------------------------------------------
 
-elabTermSimpl :: ProgramTheory -> RnTerm -> TcM (RnPolyTy, FcTerm)
+-- TODO probably wrong
+elabTermSimpl :: Theory -> RnTerm -> TcM (RnPolyTy, FcTerm)
 elabTermSimpl theory tm = do
   -- Infer the type of the expression and the wanted constraints
   ((mono_ty, fc_tm), wanted_eqs, wanted_ccs) <- runGenM $ elabTerm tm
 
-  -- Simplify as much as you can
-  -- Solve the needed equalities first
-  ty_subst <- unify mempty (dropLabel wanted_eqs)
-
-  let refined_wanted_ccs = substInAnnClsCs      ty_subst wanted_ccs             -- refine the wanted class constraints
-  let refined_mono_ty    = substInMonoTy        ty_subst mono_ty                -- refine the monotype
-  -- refine the term
-  let refined_fc_tm = substFcTyInTm (elabHsTySubst ty_subst) fc_tm
-
-  let untouchables = nub (ftyvsOf refined_wanted_ccs ++ ftyvsOf refined_mono_ty)
-
-  (residual_cs, ev_subst) <- simplify untouchables theory refined_wanted_ccs
+  let wanted_cs = (AnnEqCt <$> wanted_eqs) <> (AnnClsCt <$> wanted_ccs)
+  (residual_cs, ty_subst, ev_subst) <- entailCs [] theory wanted_cs
 
   -- Generalize the type
-  let new_mono_ty = refined_mono_ty
-  let new_cs      = map dropLabel residual_cs
-  let new_as      = untouchables
+  let new_mono_ty = substInMonoTy ty_subst mono_ty
+  let new_cs      = map dropLabel $ filterAnnClsCs residual_cs
+  let new_as      = ftyvsOf new_mono_ty
   let gen_ty      = constructPolyTy (map (\a -> a :| kindOf a) new_as, new_cs, new_mono_ty)
 
   -- Elaborate the term
   let fc_as = map rnTyVarToFcTyVar new_as
-  dbinds   <- elabAnnClsCs residual_cs
+  let refined_fc_tm = substFcTyInTm (elabHsTySubst ty_subst) fc_tm
+  dbinds   <- elabAnnClsCs $ filterAnnClsCs residual_cs
   let full_fc_tm = fcTmTyAbs fc_as $
                      fcTmAbs dbinds $
-                       substFcTmInTm ev_subst refined_fc_tm
+                       substEvInTm ev_subst refined_fc_tm
 
   return (gen_ty, full_fc_tm)
+  where
+    -- TODO meh
+    filterAnnClsCs (AnnClsCt ct:cs) = ct:filterAnnClsCs cs
+    filterAnnClsCs (_ct:cs)         =    filterAnnClsCs cs
+    filterAnnClsCs []               = []
 
 -- * Value Binding Elaboration
 -- ------------------------------------------------------------------------------
 
 -- | Elaborate a top-level value binding
-elabValBind :: FullTheory -> RnValBind -> TcM (FcValBind, TcCtx)
+elabValBind :: Theory -> RnValBind -> TcM (FcValBind, TcCtx)
 elabValBind theory (ValBind a m_ty tm) = do
   (ty,fc_tm) <- case m_ty of
-    Nothing -> elabTermSimpl (ftDropSuper theory) tm
+    Nothing -> elabTermSimpl theory tm
     Just ty -> do
       fc_tm <- elabTermWithSig [] theory tm ty
       return (ty,fc_tm)
@@ -1474,13 +1248,13 @@ elabValBind theory (ValBind a m_ty tm) = do
 -- ------------------------------------------------------------------------------
 
 -- | Elaborate a program
-elabProgram :: FullTheory -> RnProgram
+elabProgram :: Theory -> RnProgram
             -> TcM ( FcProgram       {- Elaborated program       -}
                    , RnPolyTy        {- Term type (MonoTy?)      -}
-                   , FullTheory )    {- Final program theory     -}
+                   , Theory )    {- Final program theory     -}
 -- Elaborate the program expression
 elabProgram theory (PgmExp tm) = do
-  (ty, fc_tm) <- elabTermSimpl (ftDropSuper theory) tm
+  (ty, fc_tm) <- elabTermSimpl theory tm
   return (FcPgmTerm fc_tm, ty, theory) -- GEORGE: You should actually return the ones we have accumulated.
 
 -- Elaborate a class declaration
@@ -1488,7 +1262,7 @@ elabProgram theory (PgmCls cls_decl pgm) = do
   (fc_fam_decls, fc_data_decl, fc_val_binds, ext_theory, ext_ty_env) <-
     elabClsDecl cls_decl
   (fc_pgm, ty, final_theory) <-
-    setCtxM ext_ty_env (elabProgram (theory `ftExtendSuper` ext_theory) pgm)
+    setCtxM ext_ty_env (elabProgram (theory `tExtendSchemes` ext_theory) pgm)
   let fc_pgm_data_val_decls =
         FcPgmDataDecl
           fc_data_decl
@@ -1498,9 +1272,10 @@ elabProgram theory (PgmCls cls_decl pgm) = do
 
 -- | Elaborate a class instance
 elabProgram theory (PgmInst ins_decl pgm) = do
-  (fc_val_bind, ext_theory) <- elabInsDecl theory ins_decl
+  (fc_axiom_decls, fc_val_bind, ext_theory) <- elabInsDecl theory ins_decl
   (fc_pgm, ty, final_theory) <- elabProgram ext_theory pgm
-  let fc_program = FcPgmValDecl fc_val_bind fc_pgm
+  let fc_program =
+        foldr (FcPgmAxiomDecl) (FcPgmValDecl fc_val_bind fc_pgm) fc_axiom_decls
   return (fc_program, ty, final_theory)
 
 -- Elaborate a datatype declaration
@@ -1531,7 +1306,7 @@ hsElaborate ::
      RnEnv
   -> UniqueSupply
   -> RnProgram
-  -> Either CompileError ( (((FcProgram, RnPolyTy, FullTheory)), UniqueSupply)
+  -> Either CompileError ( (((FcProgram, RnPolyTy, Theory)), UniqueSupply)
                          , TcEnv)
 hsElaborate rn_gbl_env us pgm = runExcept
                               $ flip runStateT  tc_init_gbl_env -- Empty when you start
@@ -1541,7 +1316,7 @@ hsElaborate rn_gbl_env us pgm = runExcept
                               $ do buildInitTcEnv pgm rn_gbl_env
                                    elabProgram tc_init_theory pgm
   where
-    tc_init_theory  = FT mempty mempty mempty
+    tc_init_theory  = Theory mempty mempty
     tc_init_ctx     = mempty
     tc_init_gbl_env = TcEnv mempty mempty mempty mempty
 

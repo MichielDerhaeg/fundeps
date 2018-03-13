@@ -440,6 +440,11 @@ coToEvSubst co_subst = EvSubst mempty co_subst
 tmToEvSubst :: FcTmSubst -> EvSubst
 tmToEvSubst tm_subst = EvSubst tm_subst mempty
 
+-- | TODO more pretty
+instance PrettyPrint EvSubst where
+  ppr (EvSubst tm_subst co_subst) = ppr tm_subst $$ ppr co_subst
+  needsParens _ = False
+
 -- * The Subst class
 -- ------------------------------------------------------------------------------
 

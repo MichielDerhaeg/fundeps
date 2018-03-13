@@ -38,7 +38,7 @@ throwMainError :: CompileError -> IO ()
 throwMainError (CompileError phase e) = putStrLn (renderWithColor msg)
   where
     label = colorDoc red (text (show phase) <+> text "failure")
-    msg = brackets label <+> colorDoc red e
+    msg = brackets label $$ e
 
 markErrorPhase :: MonadError CompileError m => CompilePhase -> m a -> m a
 markErrorPhase phase f =

@@ -90,7 +90,7 @@ type PsFundep = Fundep Sym
 type RnFundep = Fundep Name
 
 data ClassInfo
-  = ClassInfo { cls_abs       :: [RnTyVar]  -- ^ TODO
+  = ClassInfo { cls_exis      :: [RnTyVar]  -- ^ Existential type variables
               , cls_super     :: RnClsCs    -- ^ The superclass constraints
               , cls_class     :: RnClass    -- ^ The class name
               , cls_type_args :: [RnTyVar]  -- ^ Type arguments
@@ -412,10 +412,6 @@ type AnnTypeCs = [AnnTypeCt]
 -- | The program theory is just a list of name-annotated constrains
 type ProgramTheory = AnnSchemes
 
-data FullTheory = FT { theory_super :: ProgramTheory
-                     , theory_inst  :: ProgramTheory
-                     , theory_local :: ProgramTheory
-                     }
 -- | TODO doc
 data Axiom = Axiom
   { ax_fc_var :: FcAxVar
@@ -428,38 +424,17 @@ data Axiom = Axiom
 type Axioms = [Axiom]
 
 data Theory = Theory
-  { p_schemes       :: AnnSchemes
-  , p_eq_cs         :: AnnEqCs -- TODO required?
-  , p_eq_axioms     :: Axioms
+  { theory_schemes :: AnnSchemes
+  , theory_axioms  :: Axioms
   }
 
 tExtendAxioms :: Theory -> Axioms -> Theory
 tExtendAxioms theory axioms =
-  theory { p_eq_axioms = p_eq_axioms theory `mappend` axioms }
+  theory { theory_axioms = axioms `mappend` theory_axioms theory }
 
 tExtendSchemes :: Theory -> AnnSchemes -> Theory
 tExtendSchemes theory schemes =
-  theory { p_schemes = p_schemes theory `mappend` schemes }
-
--- | Extend the superclass component of the theory
-ftExtendSuper :: FullTheory -> ProgramTheory -> FullTheory
-ftExtendSuper theory super_cs = theory { theory_super = theory_super theory `mappend` super_cs }
-
--- | Extend the instance component of the theory
-ftExtendInst :: FullTheory -> ProgramTheory -> FullTheory
-ftExtendInst theory inst_cs = theory { theory_inst = theory_inst theory `mappend` inst_cs }
-
--- | Extend the local component of the theory
-ftExtendLocal :: FullTheory -> ProgramTheory -> FullTheory
-ftExtendLocal theory local_cs = theory { theory_local = theory_local theory `mappend` local_cs }
-
--- | Collapse the full program theory to a program theory (just concatenate)
-ftToProgramTheory :: FullTheory -> ProgramTheory
-ftToProgramTheory (FT super inst local) = mconcat [super,inst,local]
-
--- | Drop the superclass component of the full theory and turn it into a program theory (concatenate)
-ftDropSuper :: FullTheory -> ProgramTheory
-ftDropSuper (FT _super inst local) = local `mappend` inst
+  theory { theory_schemes = schemes `mappend` theory_schemes theory }
 
 -- * Collecting Free Variables Out Of Objects
 -- ------------------------------------------------------------------------------
@@ -560,15 +535,6 @@ instance PrettyPrint ClassInfo where
       , text "cls_method_ty" <+> colon <+> ppr method_ty
       , text "cls_tycon"     <+> colon <+> ppr tycon
       , text "cls_datacon"   <+> colon <+> ppr datacon
-      ]
-  needsParens _ = False
-
-instance PrettyPrint FullTheory where
-  ppr (FT super inst local)
-    = braces $ vcat $ punctuate comma
-    $ [ text "theory_super" <+> colon <+> ppr super
-      , text "theory_inst"  <+> colon <+> ppr inst
-      , text "theory_local" <+> colon <+> ppr local
       ]
   needsParens _ = False
 
@@ -765,11 +731,10 @@ instance PrettyPrint Axiom where
 
 -- | Pretty print the theory
 instance PrettyPrint Theory where
-  ppr (Theory schemes eq_cs eq_ax)
+  ppr (Theory schemes axioms)
     = braces $ vcat $ punctuate comma
-    $ [ text "p_schemes"   <+> colon <+> ppr schemes
-      , text "p_eq_cs"     <+> colon <+> ppr eq_cs
-      , text "p_eq_axioms" <+> colon <+> ppr eq_ax
+    $ [ text "theory_schemes" <+> colon <+> ppr schemes
+      , text "theory_axioms"  <+> colon <+> ppr axioms
       ]
   needsParens _ = False
 
