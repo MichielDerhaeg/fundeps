@@ -172,19 +172,6 @@ dataConSig dc = lookupTcEnvM tc_env_dc_info dc >>= \info ->
          , hs_dc_arg_tys info
          , hs_dc_parent  info )
 
--- | Get the superclasses of a class
-lookupClsSuper :: RnClass -> TcM RnClsCs
-lookupClsSuper cls = cls_super <$> lookupTcEnvM tc_env_cls_info cls
-
--- | Get the parameter of the class
---   TODO remove
-lookupClsParam :: RnClass -> TcM RnTyVar
-lookupClsParam cls = do
-  info <- lookupTcEnvM tc_env_cls_info cls
-  case cls_type_args info of
-    [a] -> return a
-    _   -> tcFail (text "lookupClsParam")
-
 -- | Get the type parameters of the class
 lookupClsParams :: RnClass -> TcM [RnTyVar]
 lookupClsParams cls = cls_type_args <$> lookupTcEnvM tc_env_cls_info cls
@@ -192,10 +179,6 @@ lookupClsParams cls = cls_type_args <$> lookupTcEnvM tc_env_cls_info cls
 -- | Get the functional dependencies of the class
 lookupClsFundeps :: RnClass -> TcM [RnFundep]
 lookupClsFundeps cls = cls_fundeps <$> lookupTcEnvM tc_env_cls_info cls
-
--- | Get the existential type variables of the class
-lookupClsExis :: RnClass -> TcM [RnTyVar]
-lookupClsExis cls = cls_exis <$> lookupTcEnvM tc_env_cls_info cls
 
 -- | Get the projection type families of the type constructor
 lookupTyConProj :: RnTyCon -> TcM [RnTyFam]
@@ -496,13 +479,6 @@ freshenDataConSig dc = do
   (as, arg_tys, tc) <- dataConSig dc
   (bs, subst) <- freshenRnTyVars as
   return (bs, substInMonoTy subst <$> arg_tys, tc)
-
--- | Cast a list of polytypes to monotypes. Fail if not possible
-polyTysToMonoTysM :: MonadError CompileError m => [PolyTy a] -> m [MonoTy a]
-polyTysToMonoTysM []       = return []
-polyTysToMonoTysM (ty:tys) = case polyTyToMonoTy ty of
-  Just mono_ty -> fmap (mono_ty:) (polyTysToMonoTysM tys)
-  Nothing      -> tcFail (text "polyTysToMonoTysM" <+> colon <+> text "non-monotype")
 
 -- | Elaborate a case expression
 elabTmCase :: RnTerm -> [RnAlt] -> GenM (RnMonoTy, FcTerm)

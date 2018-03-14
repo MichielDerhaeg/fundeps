@@ -15,15 +15,12 @@ import Utils.Ctx
 import Utils.PrettyPrint
 import Utils.Utils
 import Utils.Annotated
-import Utils.FreeVars
 import Utils.Errors
 
 import Control.Monad.Writer
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Except
-import Data.List (nub)
-import Control.Arrow (second)
 
 -- * Renaming monad
 -- ------------------------------------------------------------------------------
@@ -128,7 +125,7 @@ rnMonoTy :: PsMonoTy -> RnM RnMonoTy
 rnMonoTy (TyCon tc)      = TyCon <$> lookupTyCon tc
 rnMonoTy (TyApp ty1 ty2) = TyApp <$> rnMonoTy ty1 <*> rnMonoTy ty2
 rnMonoTy (TyVar psa)     = TyVar <$> lookupCtxM psa
-rnMonoTy (TyFam f tys)   = error "TODO"
+rnMonoTy  TyFam {}       = error "TODO"
 
 -- | Rename a qualified type
 rnQualTy :: PsQualTy -> RnM RnQualTy
@@ -273,10 +270,6 @@ rnInsDecl (InsD as cs cls_name typats method_name method_tm) = do
 
   rn_method_tm    <- rnTerm method_tm
   return (InsD (rn_as |: (kindOf <$> rn_as)) rn_cs rn_cls_name rn_tys rn_method_name rn_method_tm)
-
-extendKindedVarsCtxM :: [RnTyVar] -> RnM a -> RnM a
-extendKindedVarsCtxM []     m = m
-extendKindedVarsCtxM (a:as) m = extendCtxM (rnTyVarToPsTyVar a) a (extendKindedVarsCtxM as m)
 
 -- | Lookup the name of the method of a particular class
 lookupClassMethodName :: PsClass -> RnM RnTmVar
