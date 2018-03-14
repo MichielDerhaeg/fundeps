@@ -10,7 +10,7 @@ import Utils.Errors
 import Utils.PrettyPrint (text)
 
 -- | Utilities
-import Control.Applicative
+import Control.Applicative (Alternative, liftA2, (<**>))
 import Data.Functor (($>))
 import Control.Monad.Reader
 

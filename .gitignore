@@ -1,6 +1,9 @@
 .stack-work/
 tags
 
+prototype/dist/
+prototype/dist-newstyle/
+
 *.aux
 *.fdb_latexmk
 *.fls
