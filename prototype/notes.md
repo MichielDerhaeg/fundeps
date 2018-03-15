@@ -51,6 +51,15 @@ Notes
 
   * make Axioms and AnnSchemes SnocLists again
 
+  * Value Binding Translation: the computed free unbound variables are the
+    untouchables for the class constraint entailment, but are computed after
+    entailment. => first equality than class cs?
+    * they could become part of the abstraction, but some freshening needs
+      to happen
+
+  * match context bindings contain annotated equality constraints, according to
+    class elaboration those should end up in the theory
+
 Substitution type class map
 ---------------------------
 
