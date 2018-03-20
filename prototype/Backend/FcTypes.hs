@@ -154,7 +154,7 @@ instance PrettyPrint FcDataConInfo where
       ]
   needsParens _ = False
 
--- TODO doc
+-- | Type Families
 newtype FcTyFam = FcFV { unFcFV :: Name }
   deriving (Eq, Ord, Symable, Named, Uniquable)
 
@@ -172,6 +172,7 @@ instance PrettyPrint FcFamInfo where
       ]
   needsParens _ = False
 
+-- | Coercion variables
 newtype FcCoVar = FcCV { unFcCV :: Name }
   deriving (Eq, Ord, Symable, Named, Uniquable)
 
@@ -258,7 +259,7 @@ fcTyApp ty tys = foldl FcTyApp ty tys
 fcTyConApp :: FcTyCon -> [FcType] -> FcType
 fcTyConApp tc tys = fcTyApp (FcTyCon tc) tys
 
--- TODO doc
+-- | Uncurried version of data contructor FcTyQual
 fcTyQual :: [FcProp] -> FcType -> FcType
 fcTyQual psis ty = foldr FcTyQual ty psis
 
@@ -353,11 +354,11 @@ data FcValBind = FcValBind { fval_bind_var :: FcTmVar   -- ^ Variable Name
 data FcFamDecl = FcFamDecl FcTyFam [FcTyVar] Kind -- type F(as)
 
 data FcAxiomDecl = FcAxiomDecl -- g as : F(us) ~ v
-  { fax_decl_vr  :: FcAxVar   -- ^ Axiom variable -- g
-  , fax_decl_tv  :: [FcTyVar] -- ^ Universal Type variables -- as
-  , fax_decl_fv  :: FcTyFam  -- ^ Type Family -- F
-  , fax_decl_fvs :: [FcType] -- ^ Type Family type arguments -- us
-  , fax_decl_ty  :: FcType    -- ^ Equal Type -- v
+  { fax_decl_vr  :: FcAxVar    -- ^ Axiom variable             -- g
+  , fax_decl_tv  :: [FcTyVar]  -- ^ Universal Type variables   -- as
+  , fax_decl_fv  :: FcTyFam    -- ^ Type Family                -- F
+  , fax_decl_fvs :: [FcType]   -- ^ Type Family type arguments -- us
+  , fax_decl_ty  :: FcType     -- ^ Equal Type                 -- v
   }
 
 -- | Program
@@ -496,18 +497,22 @@ instance PrettyPrint FcProgram where
   ppr (FcPgmTerm tm)               = ppr tm
   needsParens _ = False
 
+-- | Pretty print a proposition
 instance PrettyPrint FcProp where
   ppr (FcProp ty1 ty2) = ppr ty1 <+> text "~" <+> ppr ty2
   needsParens _        = True
 
+-- | Pretty print a type family
 instance PrettyPrint FcTyFam where
   ppr           = ppr . symOf
   needsParens _ = False
 
+-- | Pretty print a coercion variable
 instance PrettyPrint FcCoVar where
   ppr           = ppr . unFcCV
   needsParens _ = False
 
+-- | Pretty print an axiom variable
 instance PrettyPrint FcAxVar where
   ppr           = ppr . unFcAV
   needsParens _ = False
@@ -515,7 +520,7 @@ instance PrettyPrint FcAxVar where
 -- | Pretty print coercions
 instance PrettyPrint FcCoercion where
   ppr (FcCoVar c) = ppr c
-  ppr (FcCoAx g tys) = ppr g <+> sep (map ppr tys) -- TODO
+  ppr (FcCoAx g tys) = ppr g <+> sep (map ppr tys)
   ppr (FcCoRefl ty) = text "<" <> ppr ty <> text ">"
   ppr (FcCoSym co) = text "sym" <+> ppr co
   ppr (FcCoTrans co1 co2) = ppr co1 <> text ";" <+> ppr co2

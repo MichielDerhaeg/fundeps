@@ -61,7 +61,7 @@ instance SubstVar RnTyVar RnMonoTy RnPolyTy where
 instance SubstVar RnTyVar RnMonoTy EqCt where
   substVar a aty (ty1 :~: ty2) = substVar a aty ty1 :~: substVar a aty ty2
 
--- | TODO document me
+-- | Substitute a type variable for a type in a constraint scheme
 instance SubstVar RnTyVar RnMonoTy CtrScheme where
   substVar a ty (CtrScheme as cs ct)
     | a `elem` fmap labelOf as = error "substTyVarInScheme: Shadowing"
@@ -112,7 +112,7 @@ instance SubstVar FcTyVar FcType FcTerm where
 -- | Substitute a type variable for a type in a case alternative
 instance SubstVar FcTyVar FcType FcAlt where
   substVar a ty (FcAlt (FcConPat k bs cs vs) tm)
-    | a `elem` bs = error "TODO shadowing"
+    | a `elem` bs = error "substFcTyvarInTm: Shadowing (FcAlt)"
     | otherwise =
       FcAlt
         (FcConPat
@@ -122,9 +122,11 @@ instance SubstVar FcTyVar FcType FcAlt where
            ((fmap . fmap) (substVar a ty) vs))
         (substVar a ty tm)
 
+-- | Substitute a type variable for a type in a proposition
 instance SubstVar FcTyVar FcType FcProp where
   substVar a aty (FcProp ty1 ty2) = FcProp (substVar a aty ty1) (substVar a aty ty2)
 
+-- | Substitute a type variable for a type in a coercion
 instance SubstVar FcTyVar FcType FcCoercion where
   substVar a aty = \case
     FcCoVar v -> FcCoVar v
@@ -137,7 +139,7 @@ instance SubstVar FcTyVar FcType FcCoercion where
     FcCoRight co -> FcCoRight $ substVar a aty co
     FcCoFam f crs -> FcCoFam f $ map (substVar a aty) crs
     FcCoAbs b co
-      | a == b -> error "TODO"
+      | a == b -> error "substFcTyInCo: Shadowing (FcCoAbs)"
       | otherwise -> FcCoAbs b $ substVar a aty co
     FcCoInst co1 co2 -> FcCoInst (substVar a aty co1) (substVar a aty co2)
     FcCoQual phi co -> FcCoQual (substVar a aty phi) (substVar a aty co)
@@ -182,6 +184,7 @@ instance SubstVar FcTmVar FcTerm FcAlt where
 
 -- TODO implement specialised functions and types
 
+-- | Substitute a coercion variable for a coercion in a coercion
 instance SubstVar FcCoVar FcCoercion FcCoercion where
   substVar c co = \case
     FcCoVar c'
@@ -199,6 +202,7 @@ instance SubstVar FcCoVar FcCoercion FcCoercion where
     FcCoQInst co1 co2  -> FcCoQInst (substVar c co co1) (substVar c co co2)
     co' -> co'
 
+-- | Substitute a coercion variable for a coercion in a Fc term
 instance SubstVar FcCoVar FcCoercion FcTerm where
   substVar c co = \case
     FcTmVar y            -> FcTmVar y
@@ -215,6 +219,7 @@ instance SubstVar FcCoVar FcCoercion FcTerm where
     FcTmCoApp t co'      -> FcTmCoApp (substVar c co t) (substVar c co co')
     FcTmCast t co'       -> FcTmCast (substVar c co t) (substVar c co co')
 
+-- | Substitute a coercion variable for a coercion in a case alternative
 -- TODO distinct checking?
 instance SubstVar FcCoVar FcCoercion FcAlt where
   substVar c co (FcAlt (FcConPat dc bs cs vs) tm)
@@ -440,7 +445,8 @@ coToEvSubst co_subst = EvSubst mempty co_subst
 tmToEvSubst :: FcTmSubst -> EvSubst
 tmToEvSubst tm_subst = EvSubst tm_subst mempty
 
--- | TODO more pretty
+-- | Pretty print an evidence substitution
+-- TODO more pretty
 instance PrettyPrint EvSubst where
   ppr (EvSubst tm_subst co_subst) = ppr tm_subst $$ ppr co_subst
   needsParens _ = False
@@ -537,7 +543,7 @@ instance FreshenLclBndrs FcAlt where
       freshenLclBndrs
         (applySubst ty_subst (applySubst co_subst (applySubst tm_subst tm)))
 
--- | TODO document
+-- | Freshen the binders of a constraint scheme
 instance FreshenLclBndrs CtrScheme where
   freshenLclBndrs (CtrScheme as cs ct) = do
     new_as <- mapM (freshRnTyVar . kindOf) (labelOf as)
@@ -548,10 +554,12 @@ instance FreshenLclBndrs CtrScheme where
         (substInClsCs local_subst cs)
         (substInClsCt local_subst ct)
 
+-- | Freshen the binders of the types in a propotition
 instance FreshenLclBndrs FcProp where
   freshenLclBndrs (FcProp ty1 ty2) =
     FcProp <$> freshenLclBndrs ty1 <*> freshenLclBndrs ty2
 
+-- | Freshen the binders of a coercion
 instance FreshenLclBndrs FcCoercion where
   freshenLclBndrs (FcCoVar c) = return $ FcCoVar c
   freshenLclBndrs (FcCoAx g tys) = FcCoAx g <$> mapM freshenLclBndrs tys
