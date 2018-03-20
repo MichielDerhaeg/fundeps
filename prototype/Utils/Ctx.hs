@@ -16,6 +16,7 @@ module Utils.Ctx
   , extendCtx
   , lookupCtx
   , TcCtx
+  , FcCoCtx
   ) where
 
 import           Backend.FcTypes
@@ -157,3 +158,14 @@ instance Context TcCtx RnTyVar Kind where
   lookupCtx (ctx :> _) b = lookupCtx ctx b
   lookupCtx SN _ = Nothing
   extendCtx ctx src trg = ctx :> TcTyVarBnd src trg
+
+-- * System Fc simplifier context
+-- ------------------------------------------------------------------------------
+
+type FcCoCtx = SnocList FcCoBinding
+data FcCoBinding = FcCoBinding FcCoVar FcProp
+
+instance Context FcCoCtx FcCoVar FcProp where
+  lookupCtx (ctx :> FcCoBinding a psi) b = if a == b then Just psi else lookupCtx ctx b
+  lookupCtx SN _ = Nothing
+  extendCtx ctx src trg = ctx :> FcCoBinding src trg

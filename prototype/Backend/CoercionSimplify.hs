@@ -1,17 +1,28 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase       #-}
+
 module Backend.CoercionSimplify
   ( simplifyFcProgram
   ) where
 
 import           Backend.FcTypes
 import           Utils.Annotated
+import           Utils.AssocList
+import           Utils.Ctx
+import           Utils.Substitution
 import           Utils.Utils
 
 import           Control.Applicative
+import           Control.Monad.Reader
+import           Control.Monad.State
 
 -- | Repeatedly simplify a System Fc program until no rules apply.
 -- Returns `Nothing` if it can't be simplified anymore.
 simplifyFcProgram :: FcProgram -> Maybe FcProgram
-simplifyFcProgram = keep go
+simplifyFcProgram pgm = flip evalStateT (SimplEnv mempty)
+                      $ flip runReaderT mempty
+                      $ do buildSimplEnv pgm
+                           go pgm
   where
     go (FcPgmTerm tm)            = FcPgmTerm           <$> simplifyFcTerm tm
     go (FcPgmDataDecl  decl pgm) = FcPgmDataDecl  decl <$> go pgm
@@ -23,7 +34,7 @@ simplifyFcProgram = keep go
       where
         pat tm' pgm' = FcPgmValDecl (FcValBind f ty tm') pgm'
 
-simplifyFcTerm :: FcTerm -> Maybe FcTerm
+simplifyFcTerm :: FcTerm -> SimplifyM FcTerm
 simplifyFcTerm = go
   where
     -- rewrite rules
@@ -49,7 +60,7 @@ simplifyFcTerm = go
     go (FcTmCase tm alts) = doAlt2 FcTmCase
       go tm
       simplifyFcAlts alts
-    go (FcTmPropAbs c prop tm) = doAlt2 (FcTmPropAbs c)
+    go (FcTmPropAbs c prop tm) = extendCtxM c prop $ doAlt2 (FcTmPropAbs c)
       simplifyProp prop
       go tm
     go (FcTmCoApp tm co) = doAlt2 FcTmCoApp
@@ -59,7 +70,7 @@ simplifyFcTerm = go
       go tm
       simplifyCoercion co
 
-simplifyFcType :: FcType -> Maybe FcType
+simplifyFcType :: FcType -> SimplifyM FcType
 simplifyFcType = go
   where
     go (FcTyVar _a) = empty
@@ -73,23 +84,26 @@ simplifyFcType = go
       go ty
     go (FcTyFam f tys) = FcTyFam f <$> doAltList go tys
 
-simplifyFcAlts :: FcAlts -> Maybe FcAlts
+simplifyFcAlts :: FcAlts -> SimplifyM FcAlts
 simplifyFcAlts alts = doAltList simplifyFcAlt alts
 
-simplifyFcAlt :: FcAlt -> Maybe FcAlt
-simplifyFcAlt (FcAlt (FcConPat dc bs ann_cs ann_xs) tm) = doAlt3 pat
-  (doAltList simplifyProp)   (dropLabel ann_cs)
-  (doAltList simplifyFcType) (dropLabel ann_xs)
-  simplifyFcTerm tm
+simplifyFcAlt :: FcAlt -> SimplifyM FcAlt
+simplifyFcAlt (FcAlt (FcConPat dc bs ann_cs ann_xs) tm) =
+  extendCtxM (labelOf ann_cs) (dropLabel ann_cs) $
+  doAlt3 pat
+    (doAltList simplifyProp) (dropLabel ann_cs)
+    (doAltList simplifyFcType) (dropLabel ann_xs)
+    simplifyFcTerm tm
   where
-    pat props tys tm' = FcAlt (FcConPat dc bs (labelOf ann_cs |: props) (labelOf ann_xs |: tys)) tm'
+    pat props tys tm' =
+      FcAlt (FcConPat dc bs (labelOf ann_cs |: props) (labelOf ann_xs |: tys)) tm'
 
-simplifyProp :: FcProp -> Maybe FcProp
+simplifyProp :: FcProp -> SimplifyM FcProp
 simplifyProp (FcProp ty1 ty2) = doAlt2 FcProp
   simplifyFcType ty1
   simplifyFcType ty2
 
-simplifyCoercion :: FcCoercion -> Maybe FcCoercion
+simplifyCoercion :: FcCoercion -> SimplifyM FcCoercion
 simplifyCoercion = go
   where
     -- rewrite rules
@@ -156,3 +170,72 @@ keep f x = case f x of
     Nothing  -> Just x'
     result   -> result
 
+newtype SimplEnv = SimplEnv { unSimplEnv :: AssocList FcAxVar FcAxiomInfo }
+
+type SimplifyM = (ReaderT FcCoCtx (StateT SimplEnv Maybe))
+
+buildSimplEnv :: FcProgram -> SimplifyM ()
+buildSimplEnv (FcPgmTerm _tm)         = return ()
+buildSimplEnv (FcPgmFamDecl _tm pgm)  = buildSimplEnv pgm
+buildSimplEnv (FcPgmValDecl _tm pgm)  = buildSimplEnv pgm
+buildSimplEnv (FcPgmDataDecl _tm pgm) = buildSimplEnv pgm
+buildSimplEnv (FcPgmAxiomDecl (FcAxiomDecl g as f tys ty) pgm) = do
+  modify (\(SimplEnv l) -> SimplEnv (extendAssocList g info l))
+  buildSimplEnv pgm
+  where
+    info = FcAxiomInfo g as f tys ty
+
+typeOfCo :: FcCoercion -> SimplifyM FcProp
+typeOfCo (FcCoVar c) = lookupCoVar c
+typeOfCo (FcCoAx g tys) = do
+  axiom <- lookupAxiom g
+  return $
+    substFcTyInProp (buildSubst (zip (fc_ax_uv axiom) tys)) (axiomToProp axiom)
+typeOfCo (FcCoRefl ty) = return $ FcProp ty ty
+typeOfCo (FcCoSym co) = do
+  FcProp ty1 ty2 <- typeOfCo co
+  return $ FcProp ty2 ty1
+typeOfCo (FcCoTrans co1 co2) = do
+  FcProp ty1 _ <- typeOfCo co1
+  FcProp _ ty2 <- typeOfCo co2
+  return $ FcProp ty1 ty2
+typeOfCo (FcCoApp co1 co2) = do
+  FcProp ty1 ty2 <- typeOfCo co1
+  FcProp ty3 ty4 <- typeOfCo co2
+  return $ FcProp (FcTyApp ty1 ty3) (FcTyApp ty2 ty4)
+typeOfCo (FcCoLeft co) = typeOfCo co >>= \case
+  FcProp (FcTyApp ty1 _ty2) (FcTyApp ty3 _ty4) -> return $ FcProp ty1 ty3
+  _ -> empty
+typeOfCo (FcCoRight co) = typeOfCo co >>= \case
+  FcProp (FcTyApp _ty1 ty2) (FcTyApp _ty3 ty4) -> return $ FcProp ty2 ty4
+  _ -> empty
+typeOfCo (FcCoFam f crcs) = do
+  (tys1, tys2) <- unzip . (fmap propToTuple) <$> mapM typeOfCo crcs
+  return $ FcProp (FcTyFam f tys1) (FcTyFam f tys2)
+  where
+    propToTuple (FcProp ty1 ty2) = (ty1, ty2)
+typeOfCo (FcCoAbs a co) = do
+  FcProp ty1 ty2 <- typeOfCo co
+  return $ FcProp (FcTyAbs a ty1) (FcTyAbs a ty2)
+typeOfCo (FcCoInst co1 co2) = typeOfCo co1 >>= \case
+  FcProp (FcTyAbs a ty1) (FcTyAbs b ty2) -> do
+    FcProp ty3 ty4 <- typeOfCo co2
+    return $ FcProp (substVar a ty3 ty1) (substVar b ty4 ty2)
+  _ -> empty
+typeOfCo (FcCoQual psi co) = do
+  FcProp ty1 ty2 <- typeOfCo co
+  return $ FcProp (FcTyQual psi ty1) (FcTyQual psi ty2)
+typeOfCo (FcCoQInst co1 _co2) = typeOfCo co1 >>= \case
+  FcProp (FcTyQual _psi1 ty1) (FcTyQual _psi2 ty2) -> do
+    return $ FcProp ty1 ty2
+  _ -> empty
+
+lookupAxiom :: FcAxVar -> SimplifyM FcAxiomInfo
+lookupAxiom g = gets unSimplEnv >>= \l -> case lookupInAssocList g l of
+  Nothing -> empty
+  Just info -> pure info
+
+lookupCoVar :: FcCoVar -> SimplifyM FcProp
+lookupCoVar c = ask >>= \ctx -> case lookupCtx ctx c of
+  Nothing -> empty
+  Just prop -> pure prop

@@ -3,7 +3,7 @@
 {-# LANGUAGE FlexibleContexts     #-}
 {-# LANGUAGE LambdaCase           #-}
 
-module Backend.FcTypeChecker (fcTypeCheck) where
+module Backend.FcTypeChecker (fcTypeCheck, FcGblEnv) where
 
 import Backend.FcTypes
 
