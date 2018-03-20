@@ -12,6 +12,7 @@ executable prototype
                      , mtl
   other-modules:       Backend.FcTypeChecker
                      , Backend.FcTypes
+                     , Backend.CoercionSimplify
                      , Frontend.HsParser
                      , Frontend.HsRenamer
                      , Frontend.HsTypeChecker
