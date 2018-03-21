@@ -3,7 +3,7 @@
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-} -- George says: God I hate this flag
 
-module Frontend.HsTypeChecker (hsElaborate) where
+module Frontend.HsTypeChecker where
 
 import Frontend.HsTypes
 import Frontend.HsRenamer

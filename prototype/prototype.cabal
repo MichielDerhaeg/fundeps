@@ -17,6 +17,7 @@ executable prototype
                      , Frontend.HsRenamer
                      , Frontend.HsTypeChecker
                      , Frontend.HsTypes
+                     , Frontend.HsEntail
                      , Utils.Annotated
                      , Utils.AssocList
                      , Utils.Ctx
