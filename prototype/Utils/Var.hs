@@ -18,6 +18,7 @@ module Utils.Var
 , rnTmVarToFcTmVar, rnTyVarToFcTyVar
   -- * Generating fresh variables
 , freshRnTmVar, freshRnTyVar, freshFcTmVar, freshFcTyVar, freshDictVar
+, isUniVar
 ) where
 
 import Utils.Unique
@@ -76,6 +77,7 @@ newtype HsTmVar a = HsTmVar { hstmvar_name :: a }
 data HsTyVar :: * -> * where
   PsTyVar :: Sym  ->         HsTyVar Sym
   RnTyVar :: Name -> Kind -> HsTyVar Name
+  UnTyVar :: Name -> Kind -> HsTyVar Name
     -- GEORGE: The only reason we store the kind inside is because of the
     -- unification variables that do not get into the environment gamma
 
@@ -85,9 +87,14 @@ instance Eq a => Eq (HsTmVar a) where
 instance Eq a => Eq (HsTyVar a) where
   (PsTyVar a  ) == (PsTyVar b  ) = (a == b)
   (RnTyVar a _) == (RnTyVar b _) = (a == b)
-#if __GLASGOW_HASKELL__ < 800
-  _ == _ = error "We need >= GHC 8.0 to avoid this.."
-#endif
+  (UnTyVar a _) == (UnTyVar b _) = (a == b)
+  _ == _ = False
+
+instance Ord (HsTyVar Sym) where
+  a <= b = symOf a <= symOf b
+
+instance Ord (HsTyVar Name) where
+  a <= b = nameOf a <= nameOf b
 
 -- | Parsed term and type variables
 type PsTmVar = HsTmVar Sym
@@ -117,6 +124,11 @@ mkRnTyVar = RnTyVar
 rnTyVarToPsTyVar :: RnTyVar -> PsTyVar
 rnTyVarToPsTyVar = PsTyVar . symOf
 
+-- | Checks if the type variable is a unification variable
+isUniVar :: HsTyVar a -> Bool
+isUniVar UnTyVar {} = True
+isUniVar _ = False
+
 instance PrettyPrint a => PrettyPrint (HsTmVar a) where
   ppr           = ppr . hstmvar_name
   needsParens _ = False
@@ -124,6 +136,7 @@ instance PrettyPrint a => PrettyPrint (HsTmVar a) where
 instance PrettyPrint a => PrettyPrint (HsTyVar a) where
   ppr (PsTyVar name  ) = ppr name
   ppr (RnTyVar name _) = ppr name
+  ppr (UnTyVar name _) = ppr name
   needsParens _        = False
 
 instance Uniquable a => Uniquable (HsTmVar a) where
@@ -132,6 +145,7 @@ instance Uniquable a => Uniquable (HsTmVar a) where
 instance Uniquable a => Uniquable (HsTyVar a) where
   getUnique (PsTyVar name  ) = getUnique name
   getUnique (RnTyVar name _) = getUnique name
+  getUnique (UnTyVar name _) = getUnique name
 
 -- * Target Variables
 -- ------------------------------------------------------------------------------
@@ -171,6 +185,7 @@ instance Uniquable FcTyVar where
 -- | Convert a source renamed variable to a System F variable
 rnTyVarToFcTyVar :: HsTyVar Name -> FcTyVar
 rnTyVarToFcTyVar (RnTyVar name kind) = FcTyVar name kind
+rnTyVarToFcTyVar (UnTyVar name kind) = FcTyVar name kind
 #if __GLASGOW_HASKELL__ < 800
 rnTyVarToFcTyVar _ {- PsTyVar {} -}  = error "We need GHC 8.0"
 #endif
@@ -197,6 +212,7 @@ instance Symable a => Symable (HsTmVar a) where
 instance Symable (HsTyVar a) where
   symOf (PsTyVar sym)        = sym
   symOf (RnTyVar name _kind) = symOf name
+  symOf (UnTyVar name _kind) = symOf name
 
 instance Symable FcTmVar where
   symOf = name_name . fctmvar_name
@@ -218,6 +234,7 @@ instance Named (HsTmVar Name) where
 
 instance Named (HsTyVar Name) where
   nameOf (RnTyVar name _kind) = name
+  nameOf (UnTyVar name _kind) = name
 #if __GLASGOW_HASKELL__ < 800
   nameOf _ {- PsTyVar {} -}   = error "We need GHC 8.0"
 #endif
@@ -233,6 +250,7 @@ instance Named FcTyVar where
 
 instance Kinded (HsTyVar Name) where
   kindOf (RnTyVar _name kind) = kind
+  kindOf (UnTyVar _name kind) = kind
 #if __GLASGOW_HASKELL__ < 800
   kindOf _ {- PsTyVar {} -}   = error "We need GHC 8.0"
 #endif
@@ -255,7 +273,7 @@ freshRnTmVar = HsTmVar . MkName (MkSym "x") <$> getUniqueM
 
 -- | Create a fresh renamed term variable
 freshRnTyVar :: MonadUnique m => Kind -> m RnTyVar
-freshRnTyVar k = flip RnTyVar k . MkName (MkSym "t") <$> getUniqueM
+freshRnTyVar k = flip UnTyVar k . MkName (MkSym "t") <$> getUniqueM
 
 -- | Generate a fresh System F term variable
 freshFcTmVar :: MonadUnique m => m FcTmVar

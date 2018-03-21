@@ -1,12 +1,13 @@
 module Frontend.HsEntail where
 
-import Frontend.HsTypes
-import Frontend.HsTypeChecker
-import Backend.FcTypes
+import           Backend.FcTypes
+import           Frontend.HsTypeChecker
+import           Frontend.HsTypes
 
-import Utils.Annotated
-import Utils.Var
-import Utils.Substitution
+import           Utils.Annotated
+import           Utils.FreeVars
+import           Utils.Substitution
+import           Utils.Var
 
 type WantedEqCt = Ann FcCoVar EqCt
 
@@ -54,3 +55,25 @@ coCt _ _ = error "TODO"
 
 fcCoApp :: FcCoercion -> [FcCoercion] -> FcCoercion -- TODO move to FcTypes
 fcCoApp co crcs = foldl FcCoApp co crcs
+
+isCan :: TypeCt -> Bool
+isCan (EqualityCt (TyVar a :~: ty)) =
+  isOrphan ty && not (a `elem` ftyvsOf ty) && ((TyVar a) `smallerThan` ty)
+isCan (EqualityCt (TyFam _f tys :~: ty)) = all isOrphan (ty:tys)
+isCan (ClassCt (ClsCt _cls tys)) = all isOrphan tys
+isCan _ct = False
+
+smallerThan :: RnMonoTy -> RnMonoTy -> Bool
+smallerThan (TyVar a) (TyVar b) = isUniVar a || a <= b
+smallerThan TyVar {} ty = isOrphan ty
+smallerThan TyFam {} TyVar {} = True
+smallerThan TyFam {} TyApp {} = True
+smallerThan TyFam {} TyCon {} = True
+smallerThan _ _ = False
+
+-- | Checks if the type contains no type families
+isOrphan :: RnMonoTy -> Bool
+isOrphan TyCon {} = True
+isOrphan (TyApp ty1 ty2) = isOrphan ty1 && isOrphan ty2
+isOrphan TyVar {} = True
+isOrphan TyFam {} = False
