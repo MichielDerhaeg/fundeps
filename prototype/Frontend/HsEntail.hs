@@ -41,3 +41,16 @@ coTy ct@(_co :| (TyVar a :~: ty)) tyfam@(TyFam f tys) =
   where
     crcs = labelOf (coTy ct <$> tys)
 coTy _ _ = error "TODO"
+
+-- TODO getting type class dict tycon is monadic and Fc only
+-- just rewrap the name or reuse the unique?
+coCt :: GivenEqCt -> RnClsCt -> GivenEqCt
+coCt ct@(_co :| (TyVar a :~: ty)) (ClsCt cls tys) =
+  (fcCoApp (FcCoRefl (FcTyCon undefined)) crcs) :| ((dict_ty) :~: (substVar a ty dict_ty))
+    where
+      dict_ty = foldl TyApp (TyCon undefined) tys
+      crcs = labelOf (coTy ct <$> tys)
+coCt _ _ = error "TODO"
+
+fcCoApp :: FcCoercion -> [FcCoercion] -> FcCoercion -- TODO move to FcTypes
+fcCoApp co crcs = foldl FcCoApp co crcs
