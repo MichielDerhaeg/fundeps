@@ -1,7 +1,7 @@
 
 export TEXINPUTS := .:./Styles//:${TEXINPUTS}
 export BSTINPUTS := .:./Styles//:${BSTINPUTS}
-export SHELL := /bin/bash
+export SHELL := /bin/sh
 
 MD_FILES=
 TEX_FILES=$(wildcard *.tex) $(MD_FILES:%.md=%.tex) references.bib
