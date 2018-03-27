@@ -8,6 +8,7 @@ import           Utils.Annotated
 import           Utils.FreeVars
 import           Utils.Substitution
 import           Utils.Var
+import           Utils.Utils
 
 type WantedEqCt = Ann FcCoVar EqCt
 
@@ -27,45 +28,53 @@ data GivenCt
   = GivenEqCt GivenEqCt
   | GivenClsCt GivenClsCt
 
+type GivenCs = [GivenCt]
+
+type EntailM = TcM
+
 -- | Substitute an equality within a type and generate a coercion.
 -- This is weird, type type signature could be more precise.
 -- Instead of returning what we passed and throwing it away.
-coTy :: GivenEqCt -> RnMonoTy -> GivenEqCt
-coTy ct@(_co :| (TyVar a :~: _ty)) (TyVar b)
-  | a == b = ct
-  | otherwise = FcCoRefl (elabMonoTy (TyVar b)) :| (TyVar b :~: TyVar b)
-coTy ct@(_co :| (TyVar a :~: ty)) (TyApp ty1 ty2) =
-  (FcCoApp co1' co2') :| ((TyApp ty1 ty2) :~: (substVar a ty (TyApp ty1 ty2)))
+coTy :: FcCoercion -> RnTyVar -> RnMonoTy -> RnMonoTy -> (FcCoercion, RnMonoTy)
+coTy co a ty b_ty@(TyVar b)
+  | a == b = (co, ty)
+  | otherwise = (FcCoRefl (elabMonoTy b_ty), b_ty)
+coTy co a ty (TyApp ty1 ty2) =
+  (FcCoApp co1' co2', substVar a ty (TyApp ty1 ty2))
   where
-    co1' :| _ = coTy ct ty1
-    co2' :| _ = coTy ct ty2
-coTy (_co :| (TyVar _a :~: _ty)) tc@(TyCon _tc) =
-  FcCoRefl (elabMonoTy tc) :| (tc :~: tc)
-coTy ct@(_co :| (TyVar a :~: ty)) tyfam@(TyFam f tys) =
-  (FcCoFam (rnTyFamToFcFam f) crcs) :| (tyfam :~: substVar a ty tyfam)
+    (co1' , _) = coTy co a ty ty1
+    (co2' , _) = coTy co a ty ty2
+coTy _co _a _ty tc@(TyCon _tc) =
+  (FcCoRefl (elabMonoTy tc), tc)
+coTy co a ty tyfam@(TyFam f tys) =
+  (FcCoFam (rnTyFamToFcFam f) crcs, substVar a ty tyfam)
   where
-    crcs = labelOf (coTy ct <$> tys)
-coTy _ _ = error "TODO"
+    crcs = fst . coTy co a ty <$> tys
 
 -- TODO getting type class dict tycon is monadic and Fc only
 -- just rewrap the name or reuse the unique?
-coCt :: GivenEqCt -> RnClsCt -> GivenEqCt
-coCt ct@(_co :| (TyVar a :~: ty)) (ClsCt cls tys) =
-  (fcCoApp (FcCoRefl (FcTyCon undefined)) crcs) :| ((dict_ty) :~: (substVar a ty dict_ty))
+coCt :: FcCoercion -> RnTyVar -> RnMonoTy -> RnClsCt -> (FcCoercion, RnClsCt)
+coCt co a ty ct@(ClsCt cls tys) =
+  (fcCoApp (FcCoRefl (FcTyCon cls_tc)) crcs, substVar a ty ct)
     where
-      dict_ty = foldl TyApp (TyCon undefined) tys
-      crcs = labelOf (coTy ct <$> tys)
-coCt _ _ = error "TODO"
+      cls_tc = undefined cls
+      crcs =  fst . coTy co a ty <$> tys
 
 fcCoApp :: FcCoercion -> [FcCoercion] -> FcCoercion -- TODO move to FcTypes
 fcCoApp co crcs = foldl FcCoApp co crcs
 
 isCan :: TypeCt -> Bool
-isCan (EqualityCt (TyVar a :~: ty)) =
+isCan (EqualityCt ct) = isCanEq  ct
+isCan (ClassCt ct)    = isCanCls ct
+
+isCanEq :: EqCt -> Bool
+isCanEq (TyVar a :~: ty) =
   isOrphan ty && not (a `elem` ftyvsOf ty) && ((TyVar a) `smallerThan` ty)
-isCan (EqualityCt (TyFam _f tys :~: ty)) = all isOrphan (ty:tys)
-isCan (ClassCt (ClsCt _cls tys)) = all isOrphan tys
-isCan _ct = False
+isCanEq (TyFam _f tys :~: ty) = all isOrphan (ty:tys)
+isCanEq _ = False
+
+isCanCls :: RnClsCt -> Bool
+isCanCls (ClsCt _cls tys) = all isOrphan tys
 
 smallerThan :: RnMonoTy -> RnMonoTy -> Bool
 smallerThan (TyVar a) (TyVar b) = isUniVar a || a <= b
@@ -82,7 +91,7 @@ isOrphan (TyApp ty1 ty2) = isOrphan ty1 && isOrphan ty2
 isOrphan TyVar {} = True
 isOrphan TyFam {} = False
 
-interactWanted :: WantedCt -> WantedCt -> TcM (WantedCs, EvSubst)
+interactWanted :: WantedCt -> WantedCt -> EntailM (WantedCs, EvSubst)
 interactWanted (WantedEqCt (c1 :| ct1@(TyVar a :~: ty1)))
                (WantedEqCt (c2 :| ct2@(TyVar b :~: ty2)))
   -- EQSAME
@@ -93,30 +102,29 @@ interactWanted (WantedEqCt (c1 :| ct1@(TyVar a :~: ty1)))
       , coToEvSubst (c2 |-> FcCoTrans (FcCoVar c1) (FcCoVar c2')))
   -- EQDIFF
   | a `elem` ftyvsOf ty2, isCan (EqualityCt ct1), isCan (EqualityCt ct2)
-  , let (co :| (_ty1 :~: sub_ty2)) = coTy (FcCoVar c1 :| ct1) ty2 = do
+  , let (co, sub_ty2) = coTy (FcCoVar c1) a ty1 ty2 = do
     c2' <- freshFcCoVar
     return
       ( WantedEqCt <$> [c1 :| ct1, c2' :| (TyVar b :~: sub_ty2)]
       , coToEvSubst (c2 |-> FcCoTrans (FcCoVar c2') (FcCoSym co)))
-interactWanted (WantedEqCt (c1 :| ct1@(TyVar     a :~: _ty1)))
+interactWanted (WantedEqCt (c1 :| ct1@(TyVar     a :~:  ty1)))
                (WantedEqCt (c2 :|     (TyFam f tys :~:  ty2)))
   -- EQFEQ
   | isCan (EqualityCt ct1), a `elem` ftyvsOf (ty2 : tys)
-  , let (co1 :| (_ :~: sub_tyfam)) = coTy (FcCoVar c1 :| ct1) (TyFam f tys)
-  , let (co2 :| (_ :~: sub_ty2  )) = coTy (FcCoVar c1 :| ct1) ty2 = do
+  , let (co1, sub_tyfam) = coTy (FcCoVar c1) a ty1 (TyFam f tys)
+  , let (co2, sub_ty2)   = coTy (FcCoVar c1) a ty1 ty2 = do
     c2' <- freshFcCoVar
     return
       ( WantedEqCt <$> [ c1 :| ct1, c2' :| (sub_tyfam :~: sub_ty2)]
       , coToEvSubst (c2 |-> FcCoTrans co1 (FcCoTrans (FcCoVar c2') (FcCoSym co2))))
-interactWanted (WantedEqCt  (c :| ct1@(TyVar a :~: _ty)))
-               (WantedClsCt (d :| ct2@(ClsCt cls   tys)))
+interactWanted (WantedEqCt  (c :| ct1@(TyVar a :~: ty)))
+               (WantedClsCt (d :| ct2@(ClsCt _cls tys)))
   -- EQDICT
   | isCan (EqualityCt ct1), a `elem` ftyvsOf tys
-  , let (co :| (_ :~: sub_cls)) = coCt (FcCoVar c :| ct1) ct2
-  , let sub_tys = undefined sub_cls = do -- TODO
+  , let (co, sub_cls) = coCt (FcCoVar c) a ty ct2 = do
     d' <- freshDictVar
     return
-      ( [WantedEqCt (c :| ct1), WantedClsCt (d' :| (ClsCt cls sub_tys))]
+      ( [WantedEqCt (c :| ct1), WantedClsCt (d' :| sub_cls)]
       , tmToEvSubst (d |-> FcTmCast (FcTmVar d') (FcCoSym co)))
 interactWanted (WantedEqCt (c1 :| ct1@(TyFam _f1 _tys1 :~: ty1)))
                (WantedEqCt (c2 :|     (TyFam _f2 _tys2 :~: ty2))) = do
@@ -128,8 +136,95 @@ interactWanted (WantedEqCt (c1 :| ct1@(TyFam _f1 _tys1 :~: ty1)))
 interactWanted (WantedClsCt (d1 :| ClsCt cls1 tys1))
                (WantedClsCt (d2 :| ClsCt cls2 tys2))
   -- DDICT
-  | tys1 `undefined` tys2, cls1 == cls2 = do -- TODO type equality
+  | and (zipWithExact eqMonoTy tys1 tys2), cls1 == cls2 = do
     return
       ( [WantedClsCt (d1 :| ClsCt cls1 tys1)]
       , tmToEvSubst (d2 |-> FcTmVar d1))
 interactWanted _ _ = error "TODO"
+
+-- TODO always return first total constraint? order important?
+interactGiven :: GivenCt -> GivenCt -> EntailM GivenCs
+interactGiven (GivenEqCt (co1 :| ct1@((TyVar a) :~: ty1)))
+              (GivenEqCt (co2 :| ct2@((TyVar b) :~: ty2)))
+  -- EQSAME
+  | a == b, isCan (EqualityCt ct1), isCan (EqualityCt ct2) =
+  return
+    ( GivenEqCt <$> [co1 :| ct1
+    , (FcCoTrans (FcCoSym co1) co2) :| (ty1 :~: ty2)])
+  -- EQDIFF
+  | a `elem` ftyvsOf ty2, isCan (EqualityCt ct1), isCan (EqualityCt ct2)
+  , let (co, sub_ty) = coTy co1 a ty1 ty2 = do
+  return
+    ( GivenEqCt <$> [co1 :| ct1
+    , (FcCoTrans co2 co) :| (TyVar b :~: sub_ty)])
+interactGiven (GivenEqCt (co1 :|  ct1@(TyVar a       :~: ty1)))
+              (GivenEqCt (co2 :| (fam@(TyFam _f tys) :~: ty2)))
+  -- EQFEQ
+  | isCan (EqualityCt ct1), a `elem` ftyvsOf tys
+  , let (co1', sub_fam) = coTy co1 a ty1 fam
+  , let (co2', sub_ty2) = coTy co1 a ty1 ty2 =
+  return ( GivenEqCt <$> [co1 :| ct1
+         , FcCoTrans (FcCoSym co1') (FcCoTrans co2 co2') :| (sub_fam :~: sub_ty2)])
+interactGiven (GivenEqCt  (co :| ct1@(TyVar a :~: ty)))
+              (GivenClsCt (tm :| ct2@(ClsCt _cls tys)))
+  -- EQDICT
+  | isCan (EqualityCt ct1), a `elem` ftyvsOf tys
+  , let (co', sub_cls) = coCt co a ty ct2 =
+  return [ GivenEqCt (co :| ct1)
+         , GivenClsCt (FcTmCast tm co' :| sub_cls)]
+interactGiven (GivenEqCt (co1 :| ct1@(fam1@(TyFam {}) :~: ty1)))
+              (GivenEqCt (co2 :|     (fam2@(TyFam {}) :~: ty2)))
+  -- FEQFEQ
+  | eqMonoTy fam1 fam2 =
+  return ( GivenEqCt <$> [co1 :| ct1
+         , FcCoTrans (FcCoSym co1) co2 :| (ty1 :~: ty2)])
+interactGiven (GivenClsCt ( tm1 :|  ct1@(ClsCt cls1 tys1)))
+              (GivenClsCt (_tm2 :| _ct2@(ClsCt cls2 tys2)))
+  -- DDICT
+  | cls1 == cls2, and (zipWithExact eqMonoTy tys1 tys2) =
+  return [GivenClsCt (tm1 :| ct1)] -- TODO tm1 right?
+interactGiven _ _ = error "TODO"
+
+-- TODO WantedCs or Maybe WantedCt because never more than 1 result
+simplify :: GivenCt -> WantedCt -> EntailM (WantedCs, EvSubst)
+simplify (GivenEqCt  (co :| ct1@(TyVar a :~: ty1)))
+         (WantedEqCt (c  :| ct2@(TyVar b :~: ty2)))
+  -- SEQSAME
+  | a == b, isCan (EqualityCt ct1), isCan (EqualityCt ct2) = do
+  c' <- freshFcCoVar
+  return ( [ WantedEqCt (c' :| (ty1 :~: ty2))]
+         , coToEvSubst (c |-> FcCoTrans co (FcCoVar c')))
+  -- SEQDIFF
+  | a `elem` ftyvsOf ty2, isCan (EqualityCt ct1), isCan (EqualityCt ct2)
+  , let (co', sub_ty2) = coTy co a ty1 ty2 = do
+  c' <- freshFcCoVar
+  return ( [WantedEqCt (c' :| (TyVar b :~: sub_ty2))]
+         , coToEvSubst (c |-> FcCoTrans (FcCoVar c') (FcCoSym co')))
+simplify (GivenEqCt  (co :| ct1@(TyVar a            :~: ty1)))
+         (WantedEqCt (c  :|     (fam@(TyFam _f tys) :~: ty2)))
+  -- SEQFEQ
+  | a `elem` ftyvsOf tys, isCanEq ct1
+  , let (co', sub_fam) = coTy co a ty1 fam = do
+  c' <- freshFcCoVar
+  return ( [ WantedEqCt (c' :| (sub_fam :~: ty2))]
+         , coToEvSubst ( c |-> FcCoTrans co' (FcCoVar c')))
+simplify (GivenEqCt   (co :| ct1@(TyVar a :~: ty1)))
+         (WantedClsCt (d  :| ct2@(ClsCt _cls  tys)))
+  -- SEQDICT
+  | a `elem` ftyvsOf tys, isCanEq ct1
+  , let (co', sub_cls) = coCt co a ty1 ct2 = do
+  d' <- freshDictVar
+  return ( [ WantedClsCt (d' :| sub_cls)]
+         , tmToEvSubst (d |-> FcTmCast (FcTmVar d') (FcCoSym co')))
+simplify (GivenEqCt   (co :| (fam1@(TyFam {}) :~: ty1)))
+         (WantedEqCt  (c  :| (fam2@(TyFam {}) :~: ty2)))
+  -- SFEQFEQ
+  | eqMonoTy fam1 fam2 = do
+  c' <- freshFcCoVar
+  return ( [WantedEqCt (c' :| (ty1 :~: ty2))]
+         , coToEvSubst (c |-> FcCoTrans co (FcCoVar c')))
+simplify (GivenClsCt  (tm :| (ClsCt cls1 tys1)))
+         (WantedClsCt (d  :| (ClsCt cls2 tys2)))
+  | cls1 == cls2, and (zipWithExact eqMonoTy tys1 tys2) =
+  return (mempty, tmToEvSubst (d |-> tm))
+simplify _ _ = error "TODO"

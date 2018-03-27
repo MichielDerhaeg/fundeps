@@ -13,6 +13,7 @@ import Utils.Unique
 import Utils.FreeVars
 --import Utils.SnocList -- TODO use instead of list
 import Utils.PrettyPrint
+import Utils.Utils
 
 import Data.List (nub, (\\))
 
@@ -299,6 +300,19 @@ constructPolyTy (as, cs, ty) = foldr PPoly (PQual (constructQualTy (cs,ty))) as
 -- | Inverse of destructQualTy: create a qualified type from parts
 constructQualTy :: (ClsCs a, MonoTy a) -> QualTy a
 constructQualTy (cs, ty) = foldr QQual (QMono ty) cs
+
+-- * Syntactic Type Equality
+-- ------------------------------------------------------------------------------
+
+-- | Check if two monotypes are syntactically the same
+eqMonoTy :: Eq a => MonoTy a -> MonoTy a -> Bool
+eqMonoTy (TyCon tc1) (TyCon tc2) = tc1 == tc2
+eqMonoTy (TyApp ty1 ty2) (TyApp ty1' ty2') =
+  eqMonoTy ty1 ty1' && eqMonoTy ty2 ty2'
+eqMonoTy (TyVar a) (TyVar b) = a == b
+eqMonoTy (TyFam f1 tys1) (TyFam f2 tys2) =
+  f1 == f2 && and (zipWithExact eqMonoTy tys1 tys2)
+eqMonoTy _ _ = False
 
 -- * Constraints
 -- ------------------------------------------------------------------------------
