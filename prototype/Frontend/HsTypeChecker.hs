@@ -192,6 +192,10 @@ lookupClsFDFams cls = cls_fd_fams <$> lookupTcEnvM tc_env_cls_info cls
 lookupTyFamInfo :: RnTyFam -> TcM HsTyFamInfo
 lookupTyFamInfo f = lookupTcEnvM tc_env_tf_info f
 
+-- | Get the type family return kind
+lookupTyFamKind :: RnTyFam -> TcM Kind
+lookupTyFamKind f = hs_tf_kind <$> lookupTyFamInfo f
+
 -- | Get the type arguments of the type constructor
 lookupTyConArgs :: RnTyCon -> TcM [RnTyVar]
 lookupTyConArgs tc = hs_tc_type_args <$> lookupTcEnvM tc_env_tc_info tc

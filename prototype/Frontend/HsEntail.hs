@@ -1,3 +1,5 @@
+{-# LANGUAGE LambdaCase #-}
+
 module Frontend.HsEntail where
 
 import           Backend.FcTypes
@@ -5,10 +7,15 @@ import           Frontend.HsTypeChecker
 import           Frontend.HsTypes
 
 import           Utils.Annotated
+import           Utils.Errors
 import           Utils.FreeVars
+import           Utils.PrettyPrint
 import           Utils.Substitution
-import           Utils.Var
 import           Utils.Utils
+import           Utils.Var
+
+import           Control.Applicative
+import           Control.Arrow       (first, (***))
 
 type WantedEqCt = Ann FcCoVar EqCt
 
@@ -228,3 +235,113 @@ simplify (GivenClsCt  (tm :| (ClsCt cls1 tys1)))
   | cls1 == cls2, and (zipWithExact eqMonoTy tys1 tys2) =
   return (mempty, tmToEvSubst (d |-> tm))
 simplify _ _ = error "TODO"
+
+canonicalizeWanted :: WantedCt -> EntailM (WantedCs, EvSubst)
+canonicalizeWanted (WantedEqCt (c :| ct)) =
+  (fmap WantedEqCt *** coToEvSubst) <$> go ct
+  where
+    go :: EqCt -> EntailM (AnnEqCs, FcCoSubst)
+    -- REFLW
+    go (ty1 :~: ty2)
+      | eqMonoTy ty1 ty2 = return (mempty, c |-> FcCoRefl (elabMonoTy ty1))
+    -- TYAPPW
+    go (TyApp ty1 ty2 :~: TyApp ty3 ty4) = do
+      [c1, c2] <- genFreshCoVars 2
+      return
+        ( [c1 :| (ty1 :~: ty3), c2 :| (ty2 :~: ty4)]
+        , c |-> FcCoApp (FcCoVar c1) (FcCoVar c2))
+    -- FAILDECW
+    go (TyCon tc1 :~: TyCon tc2)
+      | not (tc1 == tc2) = throwErrorM $ text "TODO"
+    -- OCCCHECKW
+    go (TyVar a :~: ty)
+      | a `elem` ftyvsOf ty
+      , not (eqMonoTy (TyVar a) ty) = throwErrorM $ text "TODO occurscheck"
+    -- ORIENTW
+    go (ty1 :~: ty2)
+      | ty2 `smallerThan` ty1 = do
+        c' <- freshFcCoVar
+        return ([c' :| (ty2 :~: ty1)], c |-> FcCoSym (FcCoVar c'))
+    -- FFLATWL
+    go (search_ty :~: ty)
+      | Just (ctx, fam_ty@(TyFam f _tys)) <- nestedFamFam search_ty = do
+        [c1, c2] <- genFreshCoVars 2
+        beta     <- lookupTyFamKind f >>= freshRnTyVar
+        let ctx_beta = applyFamCtx ctx (TyVar beta)
+        let (co, _ty) =
+              coTy (FcCoSym (FcCoVar c1)) beta fam_ty ctx_beta
+        return
+          ( [c1 :| (fam_ty :~: TyVar beta), c2 :| (ctx_beta :~: ty)]
+          , c |-> FcCoTrans (FcCoSym co) (FcCoVar c2))
+    -- FFLATWR
+    go (ty :~: search_ty)
+      | Just (ctx, fam_ty@(TyFam f1 _)) <- nestedFamTy search_ty
+      , TyFam {} <- ty = do
+        [c1, c2] <- genFreshCoVars 2
+        beta <- lookupTyFamKind f1 >>= freshRnTyVar
+        let ctx_beta = applyTyCtx ctx (TyVar beta)
+        let (co, _) = coTy (FcCoSym (FcCoVar c1)) beta fam_ty ctx_beta
+        return
+          ( [c1 :| (fam_ty :~: (TyVar beta)), c2 :| (ty :~: ctx_beta)]
+          , c |-> FcCoTrans (FcCoVar c2) co)
+    -- TODO merge with above somehow
+    go (ty@(TyVar {}) :~: search_ty)
+      | Just (ctx, fam_ty@(TyFam f1 _)) <- nestedFamTy search_ty = do
+        [c1, c2] <- genFreshCoVars 2
+        beta <- lookupTyFamKind f1 >>= freshRnTyVar
+        let ctx_beta = applyTyCtx ctx (TyVar beta)
+        let (co, _) = coTy (FcCoSym (FcCoVar c1)) beta fam_ty ctx_beta
+        return
+          ( [c1 :| (fam_ty :~: (TyVar beta)), c2 :| (ty :~: ctx_beta)]
+          , c |-> FcCoTrans (FcCoVar c2) co)
+    go _ = error "TODO"
+canonicalizeWanted (WantedClsCt (d :| cls_ct))
+  -- DFLATW
+  | Just (ctx, fam_ty@(TyFam f _tys)) <- nestedFamCls cls_ct = do
+    c' <- freshFcCoVar
+    d' <- freshDictVar
+    beta <- lookupTyFamKind f >>= freshRnTyVar
+    let ctx_beta    = applyClsCtx ctx (TyVar beta)
+    let (co, _ty) = coCt (FcCoSym (FcCoVar c')) beta fam_ty ctx_beta
+    return
+      ( [ WantedEqCt  (c' :| (fam_ty :~: (TyVar beta)))
+        , WantedClsCt (d' :| ctx_beta)
+        ]
+      , tmToEvSubst (d |-> FcTmCast (FcTmVar d') co))
+canonicalizeWanted _ = error "TODO"
+
+newtype FamCtx = FamCtx { applyFamCtx :: RnMonoTy -> RnMonoTy }
+newtype TyCtx  = TyCtx  { applyTyCtx  :: RnMonoTy -> RnMonoTy }
+newtype ClsCtx = ClsCtx { applyClsCtx :: RnMonoTy -> RnClsCt  }
+
+nestedFamFam :: RnMonoTy -> Maybe (FamCtx, RnMonoTy)
+nestedFamFam =
+  \case
+    (TyFam f tys) -> first FamCtx <$> ctxList (\tys' -> TyFam f tys') tys
+    _ -> Nothing
+
+nestedFamTy :: RnMonoTy -> Maybe (TyCtx, RnMonoTy)
+nestedFamTy ty = first TyCtx <$> ctxTy id ty
+
+nestedFamCls :: RnClsCt -> Maybe (ClsCtx, RnMonoTy)
+nestedFamCls (ClsCt cls tys) = first ClsCtx <$> ctxList (\tys' -> ClsCt cls tys') tys
+
+ctxTy :: (RnMonoTy -> t) -> RnMonoTy -> Maybe (RnMonoTy -> t, RnMonoTy)
+ctxTy func =
+  \case
+    TyApp ty1 ty2 ->
+      ctxTy (\ty -> func $ TyApp ty ty2) ty1 <|>
+      ctxTy (\ty -> func $ TyApp ty1 ty) ty2
+    TyFam f tys
+      | all isOrphan tys -> Just (func, TyFam f tys)
+      | otherwise -> ctxList (\tys' -> func $ TyFam f tys') tys
+    _ -> Nothing
+
+ctxList :: ([RnMonoTy] -> t) -> [RnMonoTy] -> Maybe (RnMonoTy -> t, RnMonoTy)
+ctxList func (ty:tys) =
+  ctxTy (\ty' -> func $ ty' : tys) ty <|>
+  ctxList (\tys' -> func $ ty : tys') tys
+ctxList _ [] = Nothing
+
+canonicalizeGiven :: GivenCt -> EntailM GivenCs
+canonicalizeGiven _ = error "TODO"
