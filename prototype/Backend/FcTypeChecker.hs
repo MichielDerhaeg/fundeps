@@ -358,11 +358,11 @@ tcCoercion (FcCoVar c) = lookupCtxM c
 tcCoercion (FcCoAx g tys) = do
   axiom <- lookupAxiomInfoM g
   let universal_vars = fc_ax_uv axiom
-  unless (length universal_vars == length tys) $
-    fcFail $ text "tcCoercion: incorrect amount of types applied to axiom variable (FcCoAx)"
+  ks <- mapM tcType tys
+  unless ((kindOf <$> universal_vars) == ks) $
+    fcFail $ text "tcCoercion: incorrect types applied to axiom variable (FcCoAx)"
           $$ text "g"   <+> colon <+> ppr g
           $$ text "tys" <+> colon <+> ppr tys
-  mapM_ tcType tys
   return $
     substFcTyInProp (buildSubst (zip universal_vars tys)) (axiomToProp axiom)
 tcCoercion (FcCoRefl ty) = do
