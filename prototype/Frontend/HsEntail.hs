@@ -55,7 +55,7 @@ data EntailState = EntailState
   }
 
 getUntchs :: EntailM [RnTyVar]
-getUntchs = untouchables <$> get
+getUntchs = gets untouchables
 
 addUntch :: RnTyVar -> EntailM ()
 addUntch a = modify $ \s -> s { untouchables = a : untouchables s }
@@ -89,7 +89,7 @@ coCt co a ty ct@(ClsCt cls tys) =
       crcs =  fst . coTy co a ty <$> tys
 
 fcCoApp :: FcCoercion -> [FcCoercion] -> FcCoercion -- TODO move to FcTypes
-fcCoApp co crcs = foldl FcCoApp co crcs
+fcCoApp = foldl FcCoApp
 
 isCan :: TypeCt -> Bool
 isCan (EqualityCt ct) = isCanEq  ct
@@ -97,7 +97,7 @@ isCan (ClassCt ct)    = isCanCls ct
 
 isCanEq :: EqCt -> Bool
 isCanEq (TyVar a :~: ty) =
-  isOrphan ty && not (a `elem` ftyvsOf ty) && ((TyVar a) `smallerThan` ty)
+  isOrphan ty && a `notElem` ftyvsOf ty && (TyVar a `smallerThan` ty)
 isCanEq (TyFam _f tys :~: ty) = all isOrphan (ty:tys)
 isCanEq _ = False
 
@@ -164,7 +164,7 @@ interactWanted (WantedEqCt (c1 :| ct1@(TyFam _f1 _tys1 :~: ty1)))
 interactWanted (WantedClsCt (d1 :| ClsCt cls1 tys1))
                (WantedClsCt (d2 :| ClsCt cls2 tys2))
   -- DDICT
-  | and (zipWithExact eqMonoTy tys1 tys2), cls1 == cls2 = do
+  | and (zipWithExact eqMonoTy tys1 tys2), cls1 == cls2 =
     return
       ( [WantedClsCt (d1 :| ClsCt cls1 tys1)]
       , tmToEvSubst (d2 |-> FcTmVar d1))
@@ -172,19 +172,19 @@ interactWanted _ _ = error "TODO"
 
 -- TODO always return first total constraint? order important?
 interactGiven :: GivenCt -> GivenCt -> EntailM GivenCs
-interactGiven (GivenEqCt (co1 :| ct1@((TyVar a) :~: ty1)))
-              (GivenEqCt (co2 :| ct2@((TyVar b) :~: ty2)))
+interactGiven (GivenEqCt (co1 :| ct1@(TyVar a :~: ty1)))
+              (GivenEqCt (co2 :| ct2@(TyVar b :~: ty2)))
   -- EQSAME
   | a == b, isCan (EqualityCt ct1), isCan (EqualityCt ct2) =
   return
     ( GivenEqCt <$> [co1 :| ct1
-    , (FcCoTrans (FcCoSym co1) co2) :| (ty1 :~: ty2)])
+    , FcCoTrans (FcCoSym co1) co2 :| (ty1 :~: ty2)])
   -- EQDIFF
   | a `elem` ftyvsOf ty2, isCan (EqualityCt ct1), isCan (EqualityCt ct2)
-  , let (co, sub_ty) = coTy co1 a ty1 ty2 = do
+  , let (co, sub_ty) = coTy co1 a ty1 ty2 =
   return
     ( GivenEqCt <$> [co1 :| ct1
-    , (FcCoTrans co2 co) :| (TyVar b :~: sub_ty)])
+    , FcCoTrans co2 co :| (TyVar b :~: sub_ty)])
 interactGiven (GivenEqCt (co1 :|  ct1@(TyVar a       :~: ty1)))
               (GivenEqCt (co2 :| (fam@(TyFam _f tys) :~: ty2)))
   -- EQFEQ
@@ -200,8 +200,8 @@ interactGiven (GivenEqCt  (co :| ct1@(TyVar a :~: ty)))
   , let (co', sub_cls) = coCt co a ty ct2 =
   return [ GivenEqCt (co :| ct1)
          , GivenClsCt (FcTmCast tm co' :| sub_cls)]
-interactGiven (GivenEqCt (co1 :| ct1@(fam1@(TyFam {}) :~: ty1)))
-              (GivenEqCt (co2 :|     (fam2@(TyFam {}) :~: ty2)))
+interactGiven (GivenEqCt (co1 :| ct1@(fam1@TyFam {} :~: ty1)))
+              (GivenEqCt (co2 :|     (fam2@TyFam {} :~: ty2)))
   -- FEQFEQ
   | eqMonoTy fam1 fam2 =
   return ( GivenEqCt <$> [co1 :| ct1
@@ -244,15 +244,15 @@ simplify (GivenEqCt   (co :| ct1@(TyVar a :~: ty1)))
   d' <- freshDictVar
   return ( [ WantedClsCt (d' :| sub_cls)]
          , tmToEvSubst (d |-> FcTmCast (FcTmVar d') (FcCoSym co')))
-simplify (GivenEqCt   (co :| (fam1@(TyFam {}) :~: ty1)))
-         (WantedEqCt  (c  :| (fam2@(TyFam {}) :~: ty2)))
+simplify (GivenEqCt   (co :| (fam1@TyFam {} :~: ty1)))
+         (WantedEqCt  (c  :| (fam2@TyFam {} :~: ty2)))
   -- SFEQFEQ
   | eqMonoTy fam1 fam2 = do
   c' <- freshFcCoVar
   return ( [WantedEqCt (c' :| (ty1 :~: ty2))]
          , coToEvSubst (c |-> FcCoTrans co (FcCoVar c')))
-simplify (GivenClsCt  (tm :| (ClsCt cls1 tys1)))
-         (WantedClsCt (d  :| (ClsCt cls2 tys2)))
+simplify (GivenClsCt  (tm :| ClsCt cls1 tys1))
+         (WantedClsCt (d  :| ClsCt cls2 tys2))
   | cls1 == cls2, and (zipWithExact eqMonoTy tys1 tys2) =
   return (mempty, tmToEvSubst (d |-> tm))
 simplify _ _ = error "TODO"
@@ -273,7 +273,7 @@ canonicalizeWanted (WantedEqCt (c :| ct)) =
         , c |-> FcCoApp (FcCoVar c1) (FcCoVar c2))
     -- FAILDECW
     go (TyCon tc1 :~: TyCon tc2)
-      | not (tc1 == tc2) = throwErrorM $ text "TODO"
+      | tc1 /= tc2 = throwErrorM $ text "TODO"
     -- OCCCHECKW
     go (TyVar a :~: ty)
       | a `elem` ftyvsOf ty
@@ -303,17 +303,17 @@ canonicalizeWanted (WantedEqCt (c :| ct)) =
         let ctx_beta = applyTyCtx ctx (TyVar beta)
         let (co, _) = coTy (FcCoSym (FcCoVar c1)) beta fam_ty ctx_beta
         return
-          ( [c1 :| (fam_ty :~: (TyVar beta)), c2 :| (ty :~: ctx_beta)]
+          ( [c1 :| (fam_ty :~: TyVar beta), c2 :| (ty :~: ctx_beta)]
           , c |-> FcCoTrans (FcCoVar c2) co)
     -- TODO merge with above somehow
-    go (ty@(TyVar {}) :~: search_ty)
+    go (ty@TyVar {} :~: search_ty)
       | Just (ctx, fam_ty@(TyFam f1 _)) <- nestedFamTy search_ty = do
         [c1, c2] <- genFreshCoVars 2
         beta <- lift $ lookupTyFamKind f1 >>= freshRnTyVar
         let ctx_beta = applyTyCtx ctx (TyVar beta)
         let (co, _) = coTy (FcCoSym (FcCoVar c1)) beta fam_ty ctx_beta
         return
-          ( [c1 :| (fam_ty :~: (TyVar beta)), c2 :| (ty :~: ctx_beta)]
+          ( [c1 :| (fam_ty :~: TyVar beta), c2 :| (ty :~: ctx_beta)]
           , c |-> FcCoTrans (FcCoVar c2) co)
     go _ = error "TODO"
 canonicalizeWanted (WantedClsCt (d :| cls_ct))
@@ -325,7 +325,7 @@ canonicalizeWanted (WantedClsCt (d :| cls_ct))
     let ctx_beta    = applyClsCtx ctx (TyVar beta)
     let (co, _ty) = coCt (FcCoSym (FcCoVar c')) beta fam_ty ctx_beta
     return
-      ( [ WantedEqCt  (c' :| (fam_ty :~: (TyVar beta)))
+      ( [ WantedEqCt  (c' :| (fam_ty :~: TyVar beta))
         , WantedClsCt (d' :| ctx_beta)
         ]
       , tmToEvSubst (d |-> FcTmCast (FcTmVar d') co))
@@ -338,24 +338,23 @@ newtype ClsCtx = ClsCtx { applyClsCtx :: RnMonoTy -> RnClsCt  }
 nestedFamFam :: RnMonoTy -> Maybe (FamCtx, RnMonoTy)
 nestedFamFam =
   \case
-    (TyFam f tys) -> first FamCtx <$> ctxList (\tys' -> TyFam f tys') tys
+    (TyFam f tys) -> first FamCtx <$> ctxList (TyFam f) tys
     _ -> Nothing
 
 nestedFamTy :: RnMonoTy -> Maybe (TyCtx, RnMonoTy)
 nestedFamTy ty = first TyCtx <$> ctxTy id ty
 
 nestedFamCls :: RnClsCt -> Maybe (ClsCtx, RnMonoTy)
-nestedFamCls (ClsCt cls tys) = first ClsCtx <$> ctxList (\tys' -> ClsCt cls tys') tys
+nestedFamCls (ClsCt cls tys) = first ClsCtx <$> ctxList (ClsCt cls) tys
 
 ctxTy :: (RnMonoTy -> t) -> RnMonoTy -> Maybe (RnMonoTy -> t, RnMonoTy)
 ctxTy func =
   \case
     TyApp ty1 ty2 ->
-      ctxTy (\ty -> func $ TyApp ty ty2) ty1 <|>
-      ctxTy (\ty -> func $ TyApp ty1 ty) ty2
+      ctxTy (func . flip TyApp ty2) ty1 <|> ctxTy (func . TyApp ty1) ty2
     TyFam f tys
       | all isOrphan tys -> Just (func, TyFam f tys)
-      | otherwise -> ctxList (\tys' -> func $ TyFam f tys') tys
+      | otherwise -> ctxList (func . TyFam f) tys
     _ -> Nothing
 
 ctxList :: ([RnMonoTy] -> t) -> [RnMonoTy] -> Maybe (RnMonoTy -> t, RnMonoTy)
@@ -379,5 +378,5 @@ canonicalizeGiven _ = error "TODO"
 topreactWanted :: WantedCt -> EntailM (WantedCs, EvSubst)
 topreactWanted _ = error "TODO"
 
-topreactGiven :: GivenCt -> EntailM (GivenCs)
+topreactGiven :: GivenCt -> EntailM GivenCs
 topreactGiven _ = error "TODO"
