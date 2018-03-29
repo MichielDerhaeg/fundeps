@@ -309,3 +309,6 @@ instance MonadWriter w m => MonadWriter w (UniqueSupplyT m) where
 
 instance MonadIO m => MonadIO (UniqueSupplyT m) where
   liftIO = lift . liftIO   -- liftIO :: IO a -> m a
+
+instance MonadUnique m => MonadUnique (StateT s m) where
+  getUniqueSupplyM = lift getUniqueSupplyM

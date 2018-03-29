@@ -1,4 +1,4 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase     #-}
 
 module Frontend.HsEntail where
 
@@ -16,6 +16,7 @@ import           Utils.Var
 
 import           Control.Applicative
 import           Control.Arrow       (first, (***))
+import           Control.Monad.State
 
 type WantedEqCt = Ann FcCoVar EqCt
 
@@ -37,7 +38,27 @@ data GivenCt
 
 type GivenCs = [GivenCt]
 
-type EntailM = TcM
+type EntailM = StateT EntailState TcM
+
+runEntailT :: [RnTyVar] -> EntailM a -> TcM (a, EntailState)
+runEntailT untchs = flip runStateT init_entail
+  where
+    init_entail = EntailState untchs mempty mempty mempty
+
+type FlatSubst = HsTySubst
+
+data EntailState = EntailState
+  { untouchables  :: [RnTyVar]
+  , flat_ty_subst :: FlatSubst
+  , flat_ev_subst :: EvSubst
+  , solv_ev_subst :: EvSubst
+  }
+
+getUntchs :: EntailM [RnTyVar]
+getUntchs = untouchables <$> get
+
+addUntch :: RnTyVar -> EntailM ()
+addUntch a = modify $ \s -> s { untouchables = a : untouchables s }
 
 -- | Substitute an equality within a type and generate a coercion.
 -- This is weird, type type signature could be more precise.
@@ -266,7 +287,7 @@ canonicalizeWanted (WantedEqCt (c :| ct)) =
     go (search_ty :~: ty)
       | Just (ctx, fam_ty@(TyFam f _tys)) <- nestedFamFam search_ty = do
         [c1, c2] <- genFreshCoVars 2
-        beta     <- lookupTyFamKind f >>= freshRnTyVar
+        beta     <- lift $ lookupTyFamKind f >>= freshRnTyVar
         let ctx_beta = applyFamCtx ctx (TyVar beta)
         let (co, _ty) =
               coTy (FcCoSym (FcCoVar c1)) beta fam_ty ctx_beta
@@ -278,7 +299,7 @@ canonicalizeWanted (WantedEqCt (c :| ct)) =
       | Just (ctx, fam_ty@(TyFam f1 _)) <- nestedFamTy search_ty
       , TyFam {} <- ty = do
         [c1, c2] <- genFreshCoVars 2
-        beta <- lookupTyFamKind f1 >>= freshRnTyVar
+        beta <- lift $ lookupTyFamKind f1 >>= freshRnTyVar
         let ctx_beta = applyTyCtx ctx (TyVar beta)
         let (co, _) = coTy (FcCoSym (FcCoVar c1)) beta fam_ty ctx_beta
         return
@@ -288,7 +309,7 @@ canonicalizeWanted (WantedEqCt (c :| ct)) =
     go (ty@(TyVar {}) :~: search_ty)
       | Just (ctx, fam_ty@(TyFam f1 _)) <- nestedFamTy search_ty = do
         [c1, c2] <- genFreshCoVars 2
-        beta <- lookupTyFamKind f1 >>= freshRnTyVar
+        beta <- lift $ lookupTyFamKind f1 >>= freshRnTyVar
         let ctx_beta = applyTyCtx ctx (TyVar beta)
         let (co, _) = coTy (FcCoSym (FcCoVar c1)) beta fam_ty ctx_beta
         return
@@ -300,7 +321,7 @@ canonicalizeWanted (WantedClsCt (d :| cls_ct))
   | Just (ctx, fam_ty@(TyFam f _tys)) <- nestedFamCls cls_ct = do
     c' <- freshFcCoVar
     d' <- freshDictVar
-    beta <- lookupTyFamKind f >>= freshRnTyVar
+    beta <- lift $ lookupTyFamKind f >>= freshRnTyVar
     let ctx_beta    = applyClsCtx ctx (TyVar beta)
     let (co, _ty) = coCt (FcCoSym (FcCoVar c')) beta fam_ty ctx_beta
     return
@@ -343,5 +364,20 @@ ctxList func (ty:tys) =
   ctxList (\tys' -> func $ ty : tys') tys
 ctxList _ [] = Nothing
 
+-- TODO cleanup
+unifyM :: EqCs -> EntailM (Maybe HsTySubst)
+unifyM eq_cs = do
+  untchs <- getUntchs
+  return $
+    case unify untchs eq_cs of
+      Right ty_subst -> Just ty_subst
+      Left {}        -> Nothing
+
 canonicalizeGiven :: GivenCt -> EntailM GivenCs
 canonicalizeGiven _ = error "TODO"
+
+topreactWanted :: WantedCt -> EntailM (WantedCs, EvSubst)
+topreactWanted _ = error "TODO"
+
+topreactGiven :: GivenCt -> EntailM (GivenCs)
+topreactGiven _ = error "TODO"
