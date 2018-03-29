@@ -1,4 +1,5 @@
-{-# LANGUAGE LambdaCase     #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase       #-}
 
 module Frontend.HsEntail where
 
@@ -9,7 +10,7 @@ import           Frontend.HsTypes
 import           Utils.Annotated
 import           Utils.Errors
 import           Utils.FreeVars
-import           Utils.PrettyPrint
+import           Utils.PrettyPrint  hiding ((<>))
 import           Utils.Substitution
 import           Utils.Utils
 import           Utils.Var
@@ -17,6 +18,7 @@ import           Utils.Var
 import           Control.Applicative
 import           Control.Arrow       (first, (***))
 import           Control.Monad.State
+import           Data.Monoid
 
 type WantedEqCt = Ann FcCoVar EqCt
 
@@ -45,11 +47,9 @@ runEntailT untchs = flip runStateT init_entail
   where
     init_entail = EntailState untchs mempty mempty mempty
 
-type FlatSubst = HsTySubst
-
 data EntailState = EntailState
   { untouchables  :: [RnTyVar]
-  , flat_ty_subst :: FlatSubst
+  , flat_ty_subst :: HsTySubst
   , flat_ev_subst :: EvSubst
   , solv_ev_subst :: EvSubst
   }
@@ -59,6 +59,14 @@ getUntchs = gets untouchables
 
 addUntch :: RnTyVar -> EntailM ()
 addUntch a = modify $ \s -> s { untouchables = a : untouchables s }
+
+addFlatTySubst :: HsTySubst -> EntailM ()
+addFlatTySubst subst =
+  modify $ \s -> s {flat_ty_subst = flat_ty_subst s <> subst}
+
+addFlatEvSubst :: EvSubst -> EntailM ()
+addFlatEvSubst subst =
+  modify $ \s -> s {flat_ev_subst = flat_ev_subst s <> subst}
 
 -- | Substitute an equality within a type and generate a coercion.
 -- This is weird, type type signature could be more precise.
@@ -331,6 +339,82 @@ canonicalizeWanted (WantedClsCt (d :| cls_ct))
       , tmToEvSubst (d |-> FcTmCast (FcTmVar d') co))
 canonicalizeWanted _ = error "TODO"
 
+canonicalizeGiven :: GivenCt -> EntailM GivenCs
+canonicalizeGiven (GivenEqCt (co :| ct)) = fmap GivenEqCt <$> go ct
+  where
+    -- REFLG
+    go (ty1 :~: ty2)
+      | eqMonoTy ty1 ty2 = return mempty
+    -- TYAPPG
+    go (TyApp ty1 ty2 :~: TyApp ty3 ty4) =
+      return [FcCoLeft co :| ty1 :~: ty3, FcCoRight co :| ty2 :~: ty4]
+    -- FAILDECG
+    go (TyCon tc1 :~: TyCon tc2)
+      | tc1 /= tc2 = throwErrorM $ text "TODO"
+    -- OCCCHECKG
+    go (TyVar a :~: ty)
+      | a `elem` ftyvsOf ty, not (eqMonoTy (TyVar a) ty) = throwErrorM $ text "TODO"
+    -- ORIENTG
+    go (ty1 :~: ty2)
+      | ty2 `smallerThan` ty1 = return [FcCoSym co :| ty2 :~: ty1]
+    -- FFLATGL
+    go (search_ty :~: ty)
+      | Just (ctx, fam_ty@(TyFam f _tys)) <- nestedFamFam search_ty = do
+        beta <- lift $ lookupTyFamKind f >>= freshRnTyVar
+        [c1, c2] <- genFreshCoVars 2
+        addUntch beta
+        addFlatTySubst $ beta |-> fam_ty
+        addFlatEvSubst . coToEvSubst $
+          c1 |-> co <> c2 |-> FcCoRefl (elabMonoTy fam_ty)
+        return
+          [ FcCoVar c1 :| applyFamCtx ctx (TyVar beta) :~: ty
+          , FcCoVar c2 :| fam_ty :~: TyVar beta
+          ]
+    -- FFLATGR
+    go (ty@(TyFam f' _) :~: search_ty)
+      | Just (ctx, fam_ty@(TyFam f _)) <- nestedFamTy search_ty
+      , f == f' = do
+        beta <- lift $ lookupTyFamKind f >>= freshRnTyVar
+        [c1, c2] <- genFreshCoVars 2
+        addUntch beta
+        addFlatTySubst $ beta |-> fam_ty
+        addFlatEvSubst . coToEvSubst $
+          c1 |-> co <> c2 |-> FcCoRefl (elabMonoTy fam_ty)
+        return
+          [ FcCoVar c1 :| ty :~: applyTyCtx ctx (TyVar beta)
+          , FcCoVar c2 :| fam_ty :~: TyVar beta
+          ]
+    -- TODO unduplicate
+    go (ty@(TyVar {}) :~: search_ty)
+      | Just (ctx, fam_ty@(TyFam f _tys)) <- nestedFamTy search_ty = do
+        beta <- lift $ lookupTyFamKind f >>= freshRnTyVar
+        [c1, c2] <- genFreshCoVars 2
+        addUntch beta
+        addFlatTySubst $ beta |-> fam_ty
+        addFlatEvSubst . coToEvSubst $
+          c1 |-> co <> c2 |-> FcCoRefl (elabMonoTy fam_ty)
+        return
+          [ FcCoVar c1 :| ty :~: applyTyCtx ctx (TyVar beta)
+          , FcCoVar c2 :| fam_ty :~: TyVar beta
+          ]
+    go _ = error "TODO"
+canonicalizeGiven (GivenClsCt (tm :| cls_ct))
+  -- DFLATG
+  | Just (ctx, fam_ty@(TyFam f _tys)) <- nestedFamCls cls_ct = do
+    beta <- lift $ lookupTyFamKind f >>= freshRnTyVar
+    c <- freshFcCoVar
+    d <- freshDictVar
+    addUntch beta
+    addFlatTySubst $ beta |-> fam_ty
+    addFlatEvSubst $
+      -- TODO ask should be refl?
+      coToEvSubst (c |-> FcCoRefl (elabMonoTy fam_ty)) <> tmToEvSubst (d |-> tm)
+    return
+      [ GivenClsCt (FcTmVar d :| applyClsCtx ctx (TyVar beta))
+      , GivenEqCt (FcCoVar c :| fam_ty :~: TyVar beta)
+      ]
+canonicalizeGiven _ = error "TODO"
+
 newtype FamCtx = FamCtx { applyFamCtx :: RnMonoTy -> RnMonoTy }
 newtype TyCtx  = TyCtx  { applyTyCtx  :: RnMonoTy -> RnMonoTy }
 newtype ClsCtx = ClsCtx { applyClsCtx :: RnMonoTy -> RnClsCt  }
@@ -365,15 +449,10 @@ ctxList _ [] = Nothing
 
 -- TODO cleanup
 unifyM :: EqCs -> EntailM (Maybe HsTySubst)
-unifyM eq_cs = do
-  untchs <- getUntchs
-  return $
-    case unify untchs eq_cs of
-      Right ty_subst -> Just ty_subst
-      Left {}        -> Nothing
-
-canonicalizeGiven :: GivenCt -> EntailM GivenCs
-canonicalizeGiven _ = error "TODO"
+unifyM eq_cs = eitherToMaybe . flip unify eq_cs <$> getUntchs
+  where
+    eitherToMaybe (Right x) = Just x
+    eitherToMaybe Left {}   = Nothing
 
 topreactWanted :: WantedCt -> EntailM (WantedCs, EvSubst)
 topreactWanted _ = error "TODO"

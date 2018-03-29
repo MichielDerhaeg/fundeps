@@ -406,6 +406,7 @@ type TypeCs = [TypeCt]
 -- | Equality constraint(s)
 data EqCt = RnMonoTy :~: RnMonoTy
 type EqCs = [EqCt]
+infix 9 :~:
 
 -- | Variable-annotated class constraints
 type AnnClsCt = Ann DictVar RnClsCt

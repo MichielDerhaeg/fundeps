@@ -11,6 +11,7 @@ import Utils.PrettyPrint
 import Utils.Utils
 
 data Ann a x = a :| x
+infix 8 :|
 
 instance Eq a => Eq (Ann a x) where
   (a1 :| _) == (a2 :| _) = a1 == a2
