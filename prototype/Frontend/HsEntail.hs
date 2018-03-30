@@ -99,22 +99,30 @@ coCt co a ty ct@(ClsCt cls tys) =
 fcCoApp :: FcCoercion -> [FcCoercion] -> FcCoercion -- TODO move to FcTypes
 fcCoApp = foldl FcCoApp
 
-isCanEq :: EqCt -> Bool
-isCanEq (TyVar a :~: ty) =
-  isOrphan ty && a `notElem` ftyvsOf ty && (TyVar a `smallerThan` ty)
-isCanEq (TyFam _f tys :~: ty) = all isOrphan (ty:tys)
-isCanEq _ = False
+--isCanEq :: EqCt -> Bool
+--isCanEq (TyVar a :~: ty) =
+--  isOrphan ty && a `notElem` ftyvsOf ty -- && (TyVar a `smallerThan` ty)
+--isCanEq (TyFam _f tys :~: ty) = all isOrphan (ty:tys)
+--isCanEq _ = False
+--
+--isCanCls :: RnClsCt -> Bool
+--isCanCls (ClsCt _cls tys) = all isOrphan tys
 
-isCanCls :: RnClsCt -> Bool
-isCanCls (ClsCt _cls tys) = all isOrphan tys
+smallerThan :: [RnTyVar] -> RnMonoTy -> RnMonoTy -> Bool
+smallerThan untchs = go
+  where
+    -- F tys < ty when ty /= G tys'
+    go TyFam {} TyVar {} = True
+    go TyFam {} TyApp {} = True
+    go TyFam {} TyCon {} = True
 
-smallerThan :: RnMonoTy -> RnMonoTy -> Bool
-smallerThan (TyVar a) (TyVar b) = isUniVar a || a <= b
-smallerThan TyVar {} ty = isOrphan ty
-smallerThan TyFam {} TyVar {} = True
-smallerThan TyFam {} TyApp {} = True
-smallerThan TyFam {} TyCon {} = True
-smallerThan _ _ = False
+    -- alpha < b
+    go (TyVar a) (TyVar b) = a `notElem` untchs || a <= b
+
+    -- tv < Xi
+    go TyVar {} ty = isOrphan ty
+
+    go _ _ = False
 
 -- | Checks if the type contains no type families
 isOrphan :: RnMonoTy -> Bool
@@ -261,32 +269,33 @@ simplify (GivenClsCt  (tm :| ClsCt cls1 tys1))
 simplify _ _ = error "TODO"
 
 canonicalizeWanted :: WantedCt -> EntailM (WantedCs, EvSubst)
-canonicalizeWanted (WantedEqCt (c :| ct)) =
-  (fmap WantedEqCt *** coToEvSubst) <$> go ct
+canonicalizeWanted (WantedEqCt (c :| ct)) = do
+  untchs <- getUntchs
+  (fmap WantedEqCt *** coToEvSubst) <$> go untchs ct
   where
     -- REFLW
-    go (ty1 :~: ty2)
+    go _ (ty1 :~: ty2)
       | eqMonoTy ty1 ty2 = return (mempty, c |-> FcCoRefl (elabMonoTy ty1))
     -- TYAPPW
-    go (TyApp ty1 ty2 :~: TyApp ty3 ty4) = do
+    go _ (TyApp ty1 ty2 :~: TyApp ty3 ty4) = do
       [c1, c2] <- genFreshCoVars 2
       return
         ( [c1 :| (ty1 :~: ty3), c2 :| (ty2 :~: ty4)]
         , c |-> FcCoApp (FcCoVar c1) (FcCoVar c2))
     -- FAILDECW
-    go (TyCon tc1 :~: TyCon tc2)
+    go _ (TyCon tc1 :~: TyCon tc2)
       | tc1 /= tc2 = throwErrorM $ text "TODO"
     -- OCCCHECKW
-    go (TyVar a :~: ty)
+    go _ (TyVar a :~: ty)
       | a `elem` ftyvsOf ty
       , not (eqMonoTy (TyVar a) ty) = throwErrorM $ text "TODO occurscheck"
     -- ORIENTW
-    go (ty1 :~: ty2)
-      | ty2 `smallerThan` ty1 = do
+    go untchs (ty1 :~: ty2)
+      | smallerThan untchs ty2 ty1 = do
         c' <- freshFcCoVar
         return ([c' :| (ty2 :~: ty1)], c |-> FcCoSym (FcCoVar c'))
     -- FFLATWL
-    go (search_ty :~: ty)
+    go _ (search_ty :~: ty)
       | Just (ctx, fam_ty@(TyFam f _tys)) <- nestedFamFam search_ty = do
         [c1, c2] <- genFreshCoVars 2
         beta     <- lift $ lookupTyFamKind f >>= freshRnTyVar
@@ -297,7 +306,7 @@ canonicalizeWanted (WantedEqCt (c :| ct)) =
           ( [c1 :| (fam_ty :~: TyVar beta), c2 :| (ctx_beta :~: ty)]
           , c |-> FcCoTrans (FcCoSym co) (FcCoVar c2))
     -- FFLATWR
-    go (ty :~: search_ty)
+    go _ (ty :~: search_ty)
       | Just (ctx, fam_ty@(TyFam f1 _)) <- nestedFamTy search_ty
       , TyFam {} <- ty = do
         [c1, c2] <- genFreshCoVars 2
@@ -308,7 +317,7 @@ canonicalizeWanted (WantedEqCt (c :| ct)) =
           ( [c1 :| (fam_ty :~: TyVar beta), c2 :| (ty :~: ctx_beta)]
           , c |-> FcCoTrans (FcCoVar c2) co)
     -- TODO merge with above somehow
-    go (ty@TyVar {} :~: search_ty)
+    go _ (ty@TyVar {} :~: search_ty)
       | Just (ctx, fam_ty@(TyFam f1 _)) <- nestedFamTy search_ty = do
         [c1, c2] <- genFreshCoVars 2
         beta <- lift $ lookupTyFamKind f1 >>= freshRnTyVar
@@ -317,7 +326,7 @@ canonicalizeWanted (WantedEqCt (c :| ct)) =
         return
           ( [c1 :| (fam_ty :~: TyVar beta), c2 :| (ty :~: ctx_beta)]
           , c |-> FcCoTrans (FcCoVar c2) co)
-    go _ = error "TODO"
+    go _ _ = error "TODO"
 canonicalizeWanted (WantedClsCt (d :| cls_ct))
   -- DFLATW
   | Just (ctx, fam_ty@(TyFam f _tys)) <- nestedFamCls cls_ct = do
@@ -334,25 +343,27 @@ canonicalizeWanted (WantedClsCt (d :| cls_ct))
 canonicalizeWanted _ = error "TODO"
 
 canonicalizeGiven :: GivenCt -> EntailM GivenCs
-canonicalizeGiven (GivenEqCt (co :| ct)) = fmap GivenEqCt <$> go ct
+canonicalizeGiven (GivenEqCt (co :| ct)) = do
+  untchs <- getUntchs
+  fmap GivenEqCt <$> go untchs ct
   where
     -- REFLG
-    go (ty1 :~: ty2)
+    go _ (ty1 :~: ty2)
       | eqMonoTy ty1 ty2 = return mempty
     -- TYAPPG
-    go (TyApp ty1 ty2 :~: TyApp ty3 ty4) =
+    go _ (TyApp ty1 ty2 :~: TyApp ty3 ty4) =
       return [FcCoLeft co :| ty1 :~: ty3, FcCoRight co :| ty2 :~: ty4]
     -- FAILDECG
-    go (TyCon tc1 :~: TyCon tc2)
+    go _ (TyCon tc1 :~: TyCon tc2)
       | tc1 /= tc2 = throwErrorM $ text "TODO"
     -- OCCCHECKG
-    go (TyVar a :~: ty)
+    go _ (TyVar a :~: ty)
       | a `elem` ftyvsOf ty, not (eqMonoTy (TyVar a) ty) = throwErrorM $ text "TODO"
     -- ORIENTG
-    go (ty1 :~: ty2)
-      | ty2 `smallerThan` ty1 = return [FcCoSym co :| ty2 :~: ty1]
+    go untchs (ty1 :~: ty2)
+      | smallerThan untchs ty2 ty1 = return [FcCoSym co :| ty2 :~: ty1]
     -- FFLATGL
-    go (search_ty :~: ty)
+    go _ (search_ty :~: ty)
       | Just (ctx, fam_ty@(TyFam f _tys)) <- nestedFamFam search_ty = do
         beta <- lift $ lookupTyFamKind f >>= freshRnTyVar
         [c1, c2] <- genFreshCoVars 2
@@ -365,7 +376,7 @@ canonicalizeGiven (GivenEqCt (co :| ct)) = fmap GivenEqCt <$> go ct
           , FcCoVar c2 :| fam_ty :~: TyVar beta
           ]
     -- FFLATGR
-    go (ty@(TyFam f' _) :~: search_ty)
+    go _ (ty@(TyFam f' _) :~: search_ty)
       | Just (ctx, fam_ty@(TyFam f _)) <- nestedFamTy search_ty
       , f == f' = do
         beta <- lift $ lookupTyFamKind f >>= freshRnTyVar
@@ -379,7 +390,7 @@ canonicalizeGiven (GivenEqCt (co :| ct)) = fmap GivenEqCt <$> go ct
           , FcCoVar c2 :| fam_ty :~: TyVar beta
           ]
     -- TODO unduplicate
-    go (ty@(TyVar {}) :~: search_ty)
+    go _ (ty@(TyVar {}) :~: search_ty)
       | Just (ctx, fam_ty@(TyFam f _tys)) <- nestedFamTy search_ty = do
         beta <- lift $ lookupTyFamKind f >>= freshRnTyVar
         [c1, c2] <- genFreshCoVars 2
@@ -391,7 +402,7 @@ canonicalizeGiven (GivenEqCt (co :| ct)) = fmap GivenEqCt <$> go ct
           [ FcCoVar c1 :| ty :~: applyTyCtx ctx (TyVar beta)
           , FcCoVar c2 :| fam_ty :~: TyVar beta
           ]
-    go _ = error "TODO"
+    go _ _ = error "TODO"
 canonicalizeGiven (GivenClsCt (tm :| cls_ct))
   -- DFLATG
   | Just (ctx, fam_ty@(TyFam f _tys)) <- nestedFamCls cls_ct = do
