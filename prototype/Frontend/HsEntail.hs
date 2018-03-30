@@ -453,14 +453,57 @@ ctxList func (ty:tys) =
   ctxList (\tys' -> func $ ty : tys') tys
 ctxList _ [] = Nothing
 
-unifyM :: EqCs -> EntailM (Maybe HsTySubst)
-unifyM eq_cs = eitherToMaybe . flip unify eq_cs <$> getUntchs
+-- TODO split up rules to defer DINSTW
+-- TODO split up local and instance schemes
+topreactWanted :: Theory -> WantedCt -> MaybeT EntailM (WantedCs, EvSubst)
+topreactWanted theory (WantedClsCt (d :| ClsCt cls tys)) = do
+  untchs <- getUntchs
+  (fmap WantedClsCt *** tmToEvSubst) <$> go untchs (theory_schemes theory)
   where
-    eitherToMaybe (Right x) = Just x
-    eitherToMaybe Left {}   = Nothing
+    go _ [] = empty
+    go untchs ((d' :| CtrScheme bs cls_cs (ClsCt cls' tys')):schemes)
+      | cls == cls'
+      , Right ty_subst <- unify untchs (zipWithExact (:~:) tys tys') = do
+        (ds, ann_cls_cs) <- annotateClsCs $ substInClsCs ty_subst cls_cs
+        -- TODO freshen existentials
+        let fc_subbed_bs = map elabMonoTy . substInTyVars ty_subst $ labelOf bs
+        let ev_subst =
+              d |->
+               foldl
+                 FcTmApp
+                 (foldl FcTmTyApp (FcTmVar d') fc_subbed_bs)
+                 (FcTmVar <$> ds)
+        return (ann_cls_cs, ev_subst)
+      | otherwise = go untchs schemes
+topreactWanted theory (WantedEqCt (c :| TyFam f tys :~: ty)) = do
+  untchs <- getUntchs
+  (fmap WantedEqCt *** coToEvSubst) <$> go untchs (theory_axioms theory)
+  where
+    go _ [] = empty
+    go untchs ((Axiom g as f' tys' ty'):axioms)
+      | f == f'
+      , Right ty_subst <- unify untchs (zipWithExact (:~:) tys tys') = do
+        c' <- freshFcCoVar
+        let sub_as = elabMonoTy . substInMonoTy ty_subst . TyVar <$> as
+        return
+          ( [c' :| substInMonoTy ty_subst ty' :~: ty]
+          , c |-> FcCoTrans (FcCoAx g sub_as) (FcCoVar c'))
+      | otherwise = go untchs axioms
+topreactWanted _ _ = empty
 
-topreactWanted :: WantedCt -> EntailM (WantedCs, EvSubst)
-topreactWanted _ = error "TODO"
+topreactGiven :: Theory -> GivenCt -> MaybeT EntailM GivenCs
+topreactGiven theory (GivenEqCt (co :| TyFam f tys :~: ty)) = do
+  untchs <- getUntchs
+  fmap GivenEqCt <$> go untchs (theory_axioms theory)
+  where
+    go _ [] = empty
+    go untchs ((Axiom g as f' tys' ty'):axioms)
+      | f == f'
+      , Right ty_subst <- unify untchs (zipWithExact (:~:) tys tys') = do
+        let sub_as = elabMonoTy . substInMonoTy ty_subst . TyVar <$> as
+        let sub_ty' = substInMonoTy ty_subst ty'
+        return [FcCoTrans (FcCoSym (FcCoAx g sub_as)) co :| sub_ty' :~: ty]
+      | otherwise = go untchs axioms
 
-topreactGiven :: GivenCt -> EntailM GivenCs
-topreactGiven _ = error "TODO"
+-- We don't need a class case here
+topreactGiven _ _ = empty

@@ -391,7 +391,7 @@ genFreshDictVars :: MonadUnique m => Int -> m [DictVar]
 genFreshDictVars n = replicateM n freshDictVar
 
 -- | Annotate a list of constraints with a fresh dictionary variables
-annotateClsCs :: RnClsCs -> TcM ([DictVar], AnnClsCs)
+annotateClsCs :: MonadUnique m => RnClsCs -> m ([DictVar], AnnClsCs)
 annotateClsCs cs = do
   ds <- genFreshDictVars (length cs)
   return (ds, (ds) |: (cs))
