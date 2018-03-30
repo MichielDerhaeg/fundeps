@@ -10,14 +10,15 @@ import           Frontend.HsTypes
 import           Utils.Annotated
 import           Utils.Errors
 import           Utils.FreeVars
-import           Utils.PrettyPrint  hiding ((<>))
+import           Utils.PrettyPrint  hiding ((<>), empty)
 import           Utils.Substitution
 import           Utils.Utils
 import           Utils.Var
 
 import           Control.Applicative
-import           Control.Arrow       (first, (***))
+import           Control.Arrow             (first, (***))
 import           Control.Monad.State
+import           Control.Monad.Trans.Maybe
 import           Data.Monoid
 
 type WantedEqCt = Ann FcCoVar EqCt
@@ -54,17 +55,17 @@ data EntailState = EntailState
   , solv_ev_subst :: EvSubst
   }
 
-getUntchs :: EntailM [RnTyVar]
+getUntchs :: MonadState EntailState m => m [RnTyVar]
 getUntchs = gets untouchables
 
-addUntch :: RnTyVar -> EntailM ()
+addUntch :: MonadState EntailState m => RnTyVar -> m ()
 addUntch a = modify $ \s -> s { untouchables = a : untouchables s }
 
-addFlatTySubst :: HsTySubst -> EntailM ()
+addFlatTySubst :: MonadState EntailState m => HsTySubst -> m ()
 addFlatTySubst subst =
   modify $ \s -> s {flat_ty_subst = flat_ty_subst s <> subst}
 
-addFlatEvSubst :: EvSubst -> EntailM ()
+addFlatEvSubst :: MonadState EntailState m => EvSubst -> m ()
 addFlatEvSubst subst =
   modify $ \s -> s {flat_ev_subst = flat_ev_subst s <> subst}
 
@@ -131,7 +132,7 @@ isOrphan (TyApp ty1 ty2) = isOrphan ty1 && isOrphan ty2
 isOrphan TyVar {} = True
 isOrphan TyFam {} = False
 
-interactWanted :: WantedCt -> WantedCt -> EntailM (WantedCs, EvSubst)
+interactWanted :: WantedCt -> WantedCt -> MaybeT EntailM (WantedCs, EvSubst)
 interactWanted (WantedEqCt (c1 :| ct1@(TyVar a :~: ty1)))
                (WantedEqCt (c2 :|      TyVar b :~: ty2))
   -- EQSAME
@@ -180,10 +181,10 @@ interactWanted (WantedClsCt (d1 :| ClsCt cls1 tys1))
     return
       ( [WantedClsCt (d1 :| ClsCt cls1 tys1)]
       , tmToEvSubst (d2 |-> FcTmVar d1))
-interactWanted _ _ = error "TODO"
+interactWanted _ _ = empty
 
 -- TODO always return first total constraint? order important?
-interactGiven :: GivenCt -> GivenCt -> EntailM GivenCs
+interactGiven :: GivenCt -> GivenCt -> MaybeT EntailM GivenCs
 interactGiven (GivenEqCt (co1 :| ct1@(TyVar a :~: ty1)))
               (GivenEqCt (co2 :|      TyVar b :~: ty2))
   -- EQSAME
@@ -223,9 +224,9 @@ interactGiven (GivenClsCt ( tm1 :|  ct1@(ClsCt cls1 tys1)))
   -- DDICT
   | cls1 == cls2, and (zipWithExact eqMonoTy tys1 tys2) =
   return [GivenClsCt (tm1 :| ct1)] -- TODO tm1 right?
-interactGiven _ _ = error "TODO"
+interactGiven _ _ = empty
 
-simplify :: GivenCt -> WantedCt -> EntailM (WantedCs, EvSubst)
+simplify :: GivenCt -> WantedCt -> MaybeT EntailM (WantedCs, EvSubst)
 simplify (GivenEqCt  (co :| TyVar a :~: ty1))
          (WantedEqCt (c  :| TyVar b :~: ty2))
   -- SEQSAME
@@ -266,9 +267,9 @@ simplify (GivenClsCt  (tm :| ClsCt cls1 tys1))
          (WantedClsCt (d  :| ClsCt cls2 tys2))
   | cls1 == cls2, and (zipWithExact eqMonoTy tys1 tys2) =
   return (mempty, tmToEvSubst (d |-> tm))
-simplify _ _ = error "TODO"
+simplify _ _ = empty
 
-canonicalizeWanted :: WantedCt -> EntailM (WantedCs, EvSubst)
+canonicalizeWanted :: WantedCt -> MaybeT EntailM (WantedCs, EvSubst)
 canonicalizeWanted (WantedEqCt (c :| ct)) = do
   untchs <- getUntchs
   (fmap WantedEqCt *** coToEvSubst) <$> go untchs ct
@@ -298,7 +299,7 @@ canonicalizeWanted (WantedEqCt (c :| ct)) = do
     go _ (search_ty :~: ty)
       | Just (ctx, fam_ty@(TyFam f _tys)) <- nestedFamFam search_ty = do
         [c1, c2] <- genFreshCoVars 2
-        beta     <- lift $ lookupTyFamKind f >>= freshRnTyVar
+        beta     <- lift . lift $ lookupTyFamKind f >>= freshRnTyVar
         let ctx_beta = applyFamCtx ctx (TyVar beta)
         let (co, _ty) =
               coTy (FcCoSym (FcCoVar c1)) beta fam_ty ctx_beta
@@ -310,7 +311,7 @@ canonicalizeWanted (WantedEqCt (c :| ct)) = do
       | Just (ctx, fam_ty@(TyFam f1 _)) <- nestedFamTy search_ty
       , TyFam {} <- ty = do
         [c1, c2] <- genFreshCoVars 2
-        beta <- lift $ lookupTyFamKind f1 >>= freshRnTyVar
+        beta <- lift . lift $ lookupTyFamKind f1 >>= freshRnTyVar
         let ctx_beta = applyTyCtx ctx (TyVar beta)
         let (co, _) = coTy (FcCoSym (FcCoVar c1)) beta fam_ty ctx_beta
         return
@@ -320,19 +321,19 @@ canonicalizeWanted (WantedEqCt (c :| ct)) = do
     go _ (ty@TyVar {} :~: search_ty)
       | Just (ctx, fam_ty@(TyFam f1 _)) <- nestedFamTy search_ty = do
         [c1, c2] <- genFreshCoVars 2
-        beta <- lift $ lookupTyFamKind f1 >>= freshRnTyVar
+        beta <- lift . lift $ lookupTyFamKind f1 >>= freshRnTyVar
         let ctx_beta = applyTyCtx ctx (TyVar beta)
         let (co, _) = coTy (FcCoSym (FcCoVar c1)) beta fam_ty ctx_beta
         return
           ( [c1 :| (fam_ty :~: TyVar beta), c2 :| (ty :~: ctx_beta)]
           , c |-> FcCoTrans (FcCoVar c2) co)
-    go _ _ = error "TODO"
+    go _ _ = empty
 canonicalizeWanted (WantedClsCt (d :| cls_ct))
   -- DFLATW
   | Just (ctx, fam_ty@(TyFam f _tys)) <- nestedFamCls cls_ct = do
     c' <- freshFcCoVar
     d' <- freshDictVar
-    beta <- lift $ lookupTyFamKind f >>= freshRnTyVar
+    beta <- lift . lift $ lookupTyFamKind f >>= freshRnTyVar
     let ctx_beta    = applyClsCtx ctx (TyVar beta)
     let (co, _ty) = coCt (FcCoSym (FcCoVar c')) beta fam_ty ctx_beta
     return
@@ -340,9 +341,9 @@ canonicalizeWanted (WantedClsCt (d :| cls_ct))
         , WantedClsCt (d' :| ctx_beta)
         ]
       , tmToEvSubst (d |-> FcTmCast (FcTmVar d') co))
-canonicalizeWanted _ = error "TODO"
+canonicalizeWanted _ = empty
 
-canonicalizeGiven :: GivenCt -> EntailM GivenCs
+canonicalizeGiven :: GivenCt -> MaybeT EntailM GivenCs
 canonicalizeGiven (GivenEqCt (co :| ct)) = do
   untchs <- getUntchs
   fmap GivenEqCt <$> go untchs ct
@@ -365,7 +366,7 @@ canonicalizeGiven (GivenEqCt (co :| ct)) = do
     -- FFLATGL
     go _ (search_ty :~: ty)
       | Just (ctx, fam_ty@(TyFam f _tys)) <- nestedFamFam search_ty = do
-        beta <- lift $ lookupTyFamKind f >>= freshRnTyVar
+        beta <- lift . lift $ lookupTyFamKind f >>= freshRnTyVar
         [c1, c2] <- genFreshCoVars 2
         addUntch beta
         addFlatTySubst $ beta |-> fam_ty
@@ -379,7 +380,7 @@ canonicalizeGiven (GivenEqCt (co :| ct)) = do
     go _ (ty@(TyFam f' _) :~: search_ty)
       | Just (ctx, fam_ty@(TyFam f _)) <- nestedFamTy search_ty
       , f == f' = do
-        beta <- lift $ lookupTyFamKind f >>= freshRnTyVar
+        beta <- lift . lift $ lookupTyFamKind f >>= freshRnTyVar
         [c1, c2] <- genFreshCoVars 2
         addUntch beta
         addFlatTySubst $ beta |-> fam_ty
@@ -392,7 +393,7 @@ canonicalizeGiven (GivenEqCt (co :| ct)) = do
     -- TODO unduplicate
     go _ (ty@(TyVar {}) :~: search_ty)
       | Just (ctx, fam_ty@(TyFam f _tys)) <- nestedFamTy search_ty = do
-        beta <- lift $ lookupTyFamKind f >>= freshRnTyVar
+        beta <- lift . lift $ lookupTyFamKind f >>= freshRnTyVar
         [c1, c2] <- genFreshCoVars 2
         addUntch beta
         addFlatTySubst $ beta |-> fam_ty
@@ -402,11 +403,11 @@ canonicalizeGiven (GivenEqCt (co :| ct)) = do
           [ FcCoVar c1 :| ty :~: applyTyCtx ctx (TyVar beta)
           , FcCoVar c2 :| fam_ty :~: TyVar beta
           ]
-    go _ _ = error "TODO"
+    go _ _ = empty
 canonicalizeGiven (GivenClsCt (tm :| cls_ct))
   -- DFLATG
   | Just (ctx, fam_ty@(TyFam f _tys)) <- nestedFamCls cls_ct = do
-    beta <- lift $ lookupTyFamKind f >>= freshRnTyVar
+    beta <- lift . lift $ lookupTyFamKind f >>= freshRnTyVar
     c <- freshFcCoVar
     d <- freshDictVar
     addUntch beta
@@ -418,7 +419,7 @@ canonicalizeGiven (GivenClsCt (tm :| cls_ct))
       [ GivenClsCt (FcTmVar d :| applyClsCtx ctx (TyVar beta))
       , GivenEqCt (FcCoVar c :| fam_ty :~: TyVar beta)
       ]
-canonicalizeGiven _ = error "TODO"
+canonicalizeGiven _ = empty
 
 newtype FamCtx = FamCtx { applyFamCtx :: RnMonoTy -> RnMonoTy }
 newtype TyCtx  = TyCtx  { applyTyCtx  :: RnMonoTy -> RnMonoTy }

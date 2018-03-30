@@ -189,11 +189,13 @@ lookupClsFDFams :: RnClass -> TcM [RnTyFam]
 lookupClsFDFams cls = cls_fd_fams <$> lookupTcEnvM tc_env_cls_info cls
 
 -- | Get the type family information
-lookupTyFamInfo :: RnTyFam -> TcM HsTyFamInfo
+lookupTyFamInfo ::
+     (MonadState TcEnv m, MonadError CompileError m) => RnTyFam -> m HsTyFamInfo
 lookupTyFamInfo f = lookupTcEnvM tc_env_tf_info f
 
 -- | Get the type family return kind
-lookupTyFamKind :: RnTyFam -> TcM Kind
+lookupTyFamKind ::
+     (MonadError CompileError f, MonadState TcEnv f) => RnTyFam -> f Kind
 lookupTyFamKind f = hs_tf_kind <$> lookupTyFamInfo f
 
 -- | Get the type arguments of the type constructor

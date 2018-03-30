@@ -67,6 +67,7 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Except
 import Control.Monad.Writer
+import Control.Monad.Trans.Maybe
 
 -- ----------------------------------------------------------------------------
 --                            Arrow TyCon Unique
@@ -311,4 +312,7 @@ instance MonadIO m => MonadIO (UniqueSupplyT m) where
   liftIO = lift . liftIO   -- liftIO :: IO a -> m a
 
 instance MonadUnique m => MonadUnique (StateT s m) where
+  getUniqueSupplyM = lift getUniqueSupplyM
+
+instance MonadUnique m => MonadUnique (MaybeT m) where
   getUniqueSupplyM = lift getUniqueSupplyM
