@@ -17,6 +17,7 @@ import           Utils.Var
 
 import           Control.Applicative
 import           Control.Arrow             (first, (***))
+import           Control.Monad.Except
 import           Control.Monad.State
 import           Control.Monad.Trans.Maybe
 import           Data.Monoid
@@ -88,14 +89,18 @@ coTy co a ty tyfam@(TyFam f tys) =
   where
     crcs = fst . coTy co a ty <$> tys
 
--- TODO getting type class dict tycon is monadic and Fc only
--- just rewrap the name or reuse the unique?
-coCt :: FcCoercion -> RnTyVar -> RnMonoTy -> RnClsCt -> (FcCoercion, RnClsCt)
-coCt co a ty ct@(ClsCt cls tys) =
-  (fcCoApp (FcCoRefl (FcTyCon cls_tc)) crcs, substVar a ty ct)
-    where
-      cls_tc = undefined cls
-      crcs =  fst . coTy co a ty <$> tys
+coCt ::
+     (MonadState TcEnv m, MonadError CompileError m)
+  => FcCoercion
+  -> RnTyVar
+  -> RnMonoTy
+  -> RnClsCt
+  -> m (FcCoercion, RnClsCt)
+coCt co a ty ct@(ClsCt cls tys) = do
+  cls_tc <- lookupClsTyCon cls
+  return (fcCoApp (FcCoRefl (FcTyCon cls_tc)) crcs, substVar a ty ct)
+  where
+    crcs = fst . coTy co a ty <$> tys
 
 fcCoApp :: FcCoercion -> [FcCoercion] -> FcCoercion -- TODO move to FcTypes
 fcCoApp = foldl FcCoApp
@@ -161,8 +166,8 @@ interactWanted (WantedEqCt (c1 :| ct1@(TyVar     a :~:  ty1)))
 interactWanted (WantedEqCt  (c :| ct1@(TyVar a :~: ty)))
                (WantedClsCt (d :| ct2@(ClsCt _cls tys)))
   -- EQDICT
-  | a `elem` ftyvsOf tys
-  , let (co, sub_cls) = coCt (FcCoVar c) a ty ct2 = do
+  | a `elem` ftyvsOf tys = do
+    (co, sub_cls) <- lift . lift $ coCt (FcCoVar c) a ty ct2
     d' <- freshDictVar
     return
       ( [WantedEqCt (c :| ct1), WantedClsCt (d' :| sub_cls)]
@@ -209,8 +214,8 @@ interactGiven (GivenEqCt (co1 :|  ct1@(TyVar a       :~: ty1)))
 interactGiven (GivenEqCt  (co :| ct1@(TyVar a :~: ty)))
               (GivenClsCt (tm :| ct2@(ClsCt _cls tys)))
   -- EQDICT
-  | a `elem` ftyvsOf tys
-  , let (co', sub_cls) = coCt co a ty ct2 =
+  | a `elem` ftyvsOf tys = do
+  (co', sub_cls) <- lift . lift $ coCt co a ty ct2
   return [ GivenEqCt (co :| ct1)
          , GivenClsCt (FcTmCast tm co' :| sub_cls)]
 interactGiven (GivenEqCt (co1 :| ct1@(fam1@TyFam {} :~: ty1)))
@@ -251,8 +256,8 @@ simplify (GivenEqCt  (co :| TyVar a            :~: ty1))
 simplify (GivenEqCt   (co :|     (TyVar a :~: ty1)))
          (WantedClsCt (d  :| ct2@(ClsCt _cls  tys)))
   -- SEQDICT
-  | a `elem` ftyvsOf tys
-  , let (co', sub_cls) = coCt co a ty1 ct2 = do
+  | a `elem` ftyvsOf tys = do
+  (co', sub_cls) <- lift . lift $ coCt co a ty1 ct2
   d' <- freshDictVar
   return ( [ WantedClsCt (d' :| sub_cls)]
          , tmToEvSubst (d |-> FcTmCast (FcTmVar d') (FcCoSym co')))
@@ -335,7 +340,7 @@ canonicalizeWanted (WantedClsCt (d :| cls_ct))
     d' <- freshDictVar
     beta <- lift . lift $ lookupTyFamKind f >>= freshRnTyVar
     let ctx_beta    = applyClsCtx ctx (TyVar beta)
-    let (co, _ty) = coCt (FcCoSym (FcCoVar c')) beta fam_ty ctx_beta
+    (co, _ty) <- lift . lift $ coCt (FcCoSym (FcCoVar c')) beta fam_ty ctx_beta
     return
       ( [ WantedEqCt  (c' :| (fam_ty :~: TyVar beta))
         , WantedClsCt (d' :| ctx_beta)

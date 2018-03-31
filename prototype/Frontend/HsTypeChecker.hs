@@ -158,7 +158,8 @@ clsArgKinds :: RnClass -> TcM [Kind]
 clsArgKinds cls = map kindOf . cls_type_args <$> lookupTcEnvM tc_env_cls_info cls
 
 -- | Lookup the System Fc type constructor for a class
-lookupClsTyCon :: RnClass -> TcM FcTyCon
+lookupClsTyCon ::
+     (MonadState TcEnv m, MonadError CompileError m) => RnClass -> m FcTyCon
 lookupClsTyCon cls = cls_tycon <$> lookupTcEnvM tc_env_cls_info cls
 
 -- | Lookup the System Fc data constructor for a class
