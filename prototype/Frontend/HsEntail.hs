@@ -16,7 +16,7 @@ import           Utils.Utils
 import           Utils.Var
 
 import           Control.Applicative
-import           Control.Arrow             (first, (***))
+import           Control.Arrow             (first, second, (***))
 import           Control.Monad.Except
 import           Control.Monad.State
 import           Control.Monad.Trans.Maybe
@@ -70,6 +70,10 @@ addFlatEvSubst :: MonadState EntailState m => EvSubst -> m ()
 addFlatEvSubst subst =
   modify $ \s -> s {flat_ev_subst = flat_ev_subst s <> subst}
 
+addSolvEvSubst :: MonadState EntailState m => EvSubst -> m ()
+addSolvEvSubst subst =
+  modify $ \s -> s {solv_ev_subst = solv_ev_subst s <> subst}
+
 -- | Substitute an equality within a type and generate a coercion.
 -- This is weird, type type signature could be more precise.
 -- Instead of returning what we passed and throwing it away.
@@ -105,14 +109,35 @@ coCt co a ty ct@(ClsCt cls tys) = do
 fcCoApp :: FcCoercion -> [FcCoercion] -> FcCoercion -- TODO move to FcTypes
 fcCoApp = foldl FcCoApp
 
---isCanEq :: EqCt -> Bool
---isCanEq (TyVar a :~: ty) =
---  isOrphan ty && a `notElem` ftyvsOf ty -- && (TyVar a `smallerThan` ty)
---isCanEq (TyFam _f tys :~: ty) = all isOrphan (ty:tys)
---isCanEq _ = False
---
---isCanCls :: RnClsCt -> Bool
---isCanCls (ClsCt _cls tys) = all isOrphan tys
+canCheckGivens :: (MonadError CompileError m, MonadState EntailState m) => GivenCs -> m ()
+canCheckGivens = mapM_ canCheckGiven
+  where
+    canCheckGiven (GivenEqCt  (_ :| ct)) = canCheckEqCt  ct
+    canCheckGiven (GivenClsCt (_ :| ct)) = canCheckClsCt ct
+
+canCheckWanteds :: (MonadError CompileError m, MonadState EntailState m) => WantedCs -> m ()
+canCheckWanteds = mapM_ canCheckWanted
+  where
+    canCheckWanted (WantedEqCt  (_ :| ct)) = canCheckEqCt  ct
+    canCheckWanted (WantedClsCt (_ :| ct)) = canCheckClsCt ct
+
+canCheckEqCt :: (MonadError CompileError m, MonadState EntailState m) => EqCt -> m ()
+canCheckEqCt ct@(TyVar a :~: ty) = do
+  untchs <- getUntchs
+  unless
+    (isOrphan ty && a `notElem` ftyvsOf ty && smallerThan untchs (TyVar a) ty) $
+    canonFail ct
+canCheckEqCt ct@(TyFam _f tys :~: ty) =
+  unless (all isOrphan (ty : tys)) $ canonFail ct
+canCheckEqCt ct = canonFail ct
+
+canCheckClsCt :: (MonadError CompileError m, MonadState EntailState m) => RnClsCt -> m ()
+canCheckClsCt ct@(ClsCt _cls tys) = unless (all isOrphan tys) $ canonFail ct
+
+canonFail :: (PrettyPrint ct, MonadError CompileError m) => ct -> m ()
+canonFail ct =
+  throwErrorM $
+  text "Canonicity check failed on constraint" <+> colon <+> ppr ct
 
 smallerThan :: [RnTyVar] -> RnMonoTy -> RnMonoTy -> Bool
 smallerThan untchs = go
@@ -396,7 +421,7 @@ canonicalizeGiven (GivenEqCt (co :| ct)) = do
           , FcCoVar c2 :| fam_ty :~: TyVar beta
           ]
     -- TODO unduplicate
-    go _ (ty@(TyVar {}) :~: search_ty)
+    go _ (ty@TyVar {} :~: search_ty)
       | Just (ctx, fam_ty@(TyFam f _tys)) <- nestedFamTy search_ty = do
         beta <- lift . lift $ lookupTyFamKind f >>= freshRnTyVar
         [c1, c2] <- genFreshCoVars 2
@@ -485,7 +510,7 @@ topreactWanted theory (WantedEqCt (c :| TyFam f tys :~: ty)) = do
   (fmap WantedEqCt *** coToEvSubst) <$> go untchs (theory_axioms theory)
   where
     go _ [] = empty
-    go untchs ((Axiom g as f' tys' ty'):axioms)
+    go untchs (Axiom g as f' tys' ty':axioms)
       | f == f'
       , Right ty_subst <- unify untchs (zipWithExact (:~:) tys tys') = do
         c' <- freshFcCoVar
@@ -502,7 +527,7 @@ topreactGiven theory (GivenEqCt (co :| TyFam f tys :~: ty)) = do
   fmap GivenEqCt <$> go untchs (theory_axioms theory)
   where
     go _ [] = empty
-    go untchs ((Axiom g as f' tys' ty'):axioms)
+    go untchs (Axiom g as f' tys' ty':axioms)
       | f == f'
       , Right ty_subst <- unify untchs (zipWithExact (:~:) tys tys') = do
         let sub_as = elabMonoTy . substInMonoTy ty_subst . TyVar <$> as
@@ -512,3 +537,40 @@ topreactGiven theory (GivenEqCt (co :| TyFam f tys :~: ty)) = do
 
 -- We don't need a class case here
 topreactGiven _ _ = empty
+
+exhaust :: (Alternative m, Monad m) => (a -> m [a]) -> [a] -> m [a]
+exhaust f xs = do
+  (output, rest) <- tryRule f xs
+  let new_xs = output <> rest
+  exhaust f new_xs <|> pure new_xs
+
+tryRule :: Alternative f => (a -> f b) -> [a] -> f (b, [a])
+tryRule _f []     =  empty
+tryRule f (x:xs)  =  flip (,) xs  <$>         f x
+                 <|> second (x :) <$> tryRule f xs
+
+exhaustSquared :: (Monad m, Alternative m) => (a -> a -> m [a]) -> [a] -> m [a]
+exhaustSquared f xs = do
+  (output, rest) <- tryRuleSquared f xs
+  let new_xs = output <> rest
+  exhaustSquared f new_xs <|> pure new_xs
+
+-- order matters in interaction rules, hence the `flip`
+tryRuleSquared :: Alternative f => (a -> a -> f b) -> [a] -> f (b, [a])
+tryRuleSquared _ []      = empty
+tryRuleSquared f (x:xs)  =  tryRule ( f  x) xs
+                        <|> tryRule (`f` x) xs
+                        <|> second (x :) <$> tryRuleSquared f xs
+
+exhaustProduct ::
+     (Monad m, Alternative m) => (g -> w -> m [w]) -> [g] -> [w] -> m [w]
+exhaustProduct f xs ys = do
+  (output_ys, rest_ys) <- tryRuleProduct f xs ys
+  let new_ys = output_ys <> rest_ys
+  exhaustProduct f xs new_ys <|> pure new_ys
+
+-- we don't consume givens with `simplify`
+tryRuleProduct :: Alternative f => (g -> w -> f o) -> [g] -> [w] -> f (o, [w])
+tryRuleProduct _ []     _   = empty
+tryRuleProduct f (x:xs) ys  =  tryRule (f x) ys
+                           <|> tryRuleProduct f xs ys
