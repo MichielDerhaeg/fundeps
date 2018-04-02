@@ -22,7 +22,7 @@ simplifyFcProgram :: FcProgram -> Maybe FcProgram
 simplifyFcProgram pgm = flip evalStateT (SimplEnv mempty)
                       $ flip runReaderT mempty
                       $ do buildSimplEnv pgm
-                           go pgm
+                           keep go pgm
   where
     go (FcPgmTerm tm)            = FcPgmTerm           <$> simplifyFcTerm tm
     go (FcPgmDataDecl  decl pgm) = FcPgmDataDecl  decl <$> go pgm
@@ -163,12 +163,10 @@ doAltList :: Alternative f => (a -> f a) -> [a] -> f ([a])
 doAltList _f []     = empty
 doAltList  f (x:xs) = doAlt2 (:) f x (doAltList f) xs
 
-keep :: (a -> Maybe a) -> a -> Maybe a
-keep f x = case f x of
-  Nothing -> Nothing
-  Just x' -> case keep f x' of
-    Nothing  -> Just x'
-    result   -> result
+keep :: (Alternative m, Monad m) => (a -> m a) -> a -> m a
+keep f x = do
+  x' <- f x
+  keep f x' <|> pure x'
 
 newtype SimplEnv = SimplEnv { unSimplEnv :: AssocList FcAxVar FcAxiomInfo }
 
