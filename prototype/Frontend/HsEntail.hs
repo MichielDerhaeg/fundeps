@@ -16,7 +16,7 @@ import           Utils.Utils
 import           Utils.Var
 
 import           Control.Applicative
-import           Control.Arrow             (first, second, (***))
+import           Control.Arrow             (first, second)
 import           Control.Monad.Except
 import           Control.Monad.State
 import           Control.Monad.Trans.Maybe
@@ -307,20 +307,21 @@ simplify (GivenClsCt  (tm :| ClsCt cls1 tys1))
   return mempty
 simplify _ _ = empty
 
-canonicalizeWanted :: WantedCt -> MaybeT EntailM (WantedCs, EvSubst)
+canonicalizeWanted :: WantedCt -> MaybeT EntailM WantedCs
 canonicalizeWanted (WantedEqCt (c :| ct)) = do
   untchs <- getUntchs
-  (fmap WantedEqCt *** coToEvSubst) <$> go untchs ct
+  fmap WantedEqCt <$> go untchs ct
   where
     -- REFLW
     go _ (ty1 :~: ty2)
-      | eqMonoTy ty1 ty2 = return (mempty, c |-> FcCoRefl (elabMonoTy ty1))
+      | eqMonoTy ty1 ty2 = do
+        addSolvCoSubst $ c |-> FcCoRefl (elabMonoTy ty1)
+        return mempty
     -- TYAPPW
     go _ (TyApp ty1 ty2 :~: TyApp ty3 ty4) = do
       [c1, c2] <- genFreshCoVars 2
-      return
-        ( [c1 :| (ty1 :~: ty3), c2 :| (ty2 :~: ty4)]
-        , c |-> FcCoApp (FcCoVar c1) (FcCoVar c2))
+      addSolvCoSubst $ c |-> FcCoApp (FcCoVar c1) (FcCoVar c2)
+      return [c1 :| (ty1 :~: ty3), c2 :| (ty2 :~: ty4)]
     -- FAILDECW
     go _ (TyCon tc1 :~: TyCon tc2)
       | tc1 /= tc2 = throwErrorM $ text "TODO"
@@ -332,7 +333,8 @@ canonicalizeWanted (WantedEqCt (c :| ct)) = do
     go untchs (ty1 :~: ty2)
       | smallerThan untchs ty2 ty1 = do
         c' <- freshFcCoVar
-        return ([c' :| (ty2 :~: ty1)], c |-> FcCoSym (FcCoVar c'))
+        addSolvCoSubst $ c |-> FcCoSym (FcCoVar c')
+        return [c' :| (ty2 :~: ty1)]
     -- FFLATWL
     go _ (search_ty :~: ty)
       | Just (ctx, fam_ty@(TyFam f _tys)) <- nestedFamFam search_ty = do
@@ -341,9 +343,8 @@ canonicalizeWanted (WantedEqCt (c :| ct)) = do
         let ctx_beta = applyFamCtx ctx (TyVar beta)
         let (co, _ty) =
               coTy (FcCoSym (FcCoVar c1)) beta fam_ty ctx_beta
-        return
-          ( [c1 :| (fam_ty :~: TyVar beta), c2 :| (ctx_beta :~: ty)]
-          , c |-> FcCoTrans (FcCoSym co) (FcCoVar c2))
+        addSolvCoSubst $ c |-> FcCoTrans (FcCoSym co) (FcCoVar c2)
+        return [c1 :| (fam_ty :~: TyVar beta), c2 :| (ctx_beta :~: ty)]
     -- FFLATWR
     go _ (ty :~: search_ty)
       | Just (ctx, fam_ty@(TyFam f1 _)) <- nestedFamTy search_ty
@@ -352,9 +353,8 @@ canonicalizeWanted (WantedEqCt (c :| ct)) = do
         beta <- lift . lift $ lookupTyFamKind f1 >>= freshRnTyVar
         let ctx_beta = applyTyCtx ctx (TyVar beta)
         let (co, _) = coTy (FcCoSym (FcCoVar c1)) beta fam_ty ctx_beta
-        return
-          ( [c1 :| (fam_ty :~: TyVar beta), c2 :| (ty :~: ctx_beta)]
-          , c |-> FcCoTrans (FcCoVar c2) co)
+        addSolvCoSubst $ c |-> FcCoTrans (FcCoVar c2) co
+        return [c1 :| (fam_ty :~: TyVar beta), c2 :| (ty :~: ctx_beta)]
     -- TODO merge with above somehow
     go _ (ty@TyVar {} :~: search_ty)
       | Just (ctx, fam_ty@(TyFam f1 _)) <- nestedFamTy search_ty = do
@@ -362,9 +362,8 @@ canonicalizeWanted (WantedEqCt (c :| ct)) = do
         beta <- lift . lift $ lookupTyFamKind f1 >>= freshRnTyVar
         let ctx_beta = applyTyCtx ctx (TyVar beta)
         let (co, _) = coTy (FcCoSym (FcCoVar c1)) beta fam_ty ctx_beta
-        return
-          ( [c1 :| (fam_ty :~: TyVar beta), c2 :| (ty :~: ctx_beta)]
-          , c |-> FcCoTrans (FcCoVar c2) co)
+        addSolvCoSubst $ c |-> FcCoTrans (FcCoVar c2) co
+        return [c1 :| (fam_ty :~: TyVar beta), c2 :| (ty :~: ctx_beta)]
     go _ _ = empty
 canonicalizeWanted (WantedClsCt (d :| cls_ct))
   -- DFLATW
@@ -374,11 +373,9 @@ canonicalizeWanted (WantedClsCt (d :| cls_ct))
     beta <- lift . lift $ lookupTyFamKind f >>= freshRnTyVar
     let ctx_beta    = applyClsCtx ctx (TyVar beta)
     (co, _ty) <- lift . lift $ coCt (FcCoSym (FcCoVar c')) beta fam_ty ctx_beta
+    addSolvTmSubst (d |-> FcTmCast (FcTmVar d') co)
     return
-      ( [ WantedEqCt  (c' :| (fam_ty :~: TyVar beta))
-        , WantedClsCt (d' :| ctx_beta)
-        ]
-      , tmToEvSubst (d |-> FcTmCast (FcTmVar d') co))
+      [WantedEqCt (c' :| (fam_ty :~: TyVar beta)), WantedClsCt (d' :| ctx_beta)]
 canonicalizeWanted _ = empty
 
 canonicalizeGiven :: GivenCt -> MaybeT EntailM GivenCs
@@ -493,10 +490,10 @@ ctxList _ [] = Nothing
 
 -- TODO split up rules to defer DINSTW
 -- TODO split up local and instance schemes
-topreactWanted :: Theory -> WantedCt -> MaybeT EntailM (WantedCs, EvSubst)
+topreactWanted :: Theory -> WantedCt -> MaybeT EntailM WantedCs
 topreactWanted theory (WantedClsCt (d :| ClsCt cls tys)) = do
   untchs <- getUntchs
-  (fmap WantedClsCt *** tmToEvSubst) <$> go untchs (theory_schemes theory)
+  fmap WantedClsCt <$> go untchs (theory_schemes theory)
   where
     go _ [] = empty
     go untchs ((d' :| CtrScheme bs cls_cs (ClsCt cls' tys')):schemes)
@@ -511,11 +508,12 @@ topreactWanted theory (WantedClsCt (d :| ClsCt cls tys)) = do
                  FcTmApp
                  (foldl FcTmTyApp (FcTmVar d') fc_subbed_bs)
                  (FcTmVar <$> ds)
-        return (ann_cls_cs, ev_subst)
+        addSolvTmSubst ev_subst
+        return ann_cls_cs
       | otherwise = go untchs schemes
 topreactWanted theory (WantedEqCt (c :| TyFam f tys :~: ty)) = do
   untchs <- getUntchs
-  (fmap WantedEqCt *** coToEvSubst) <$> go untchs (theory_axioms theory)
+  fmap WantedEqCt <$> go untchs (theory_axioms theory)
   where
     go _ [] = empty
     go untchs (Axiom g as f' tys' ty':axioms)
@@ -523,9 +521,8 @@ topreactWanted theory (WantedEqCt (c :| TyFam f tys :~: ty)) = do
       , Right ty_subst <- unify untchs (zipWithExact (:~:) tys tys') = do
         c' <- freshFcCoVar
         let sub_as = elabMonoTy . substInMonoTy ty_subst . TyVar <$> as
-        return
-          ( [c' :| substInMonoTy ty_subst ty' :~: ty]
-          , c |-> FcCoTrans (FcCoAx g sub_as) (FcCoVar c'))
+        addSolvCoSubst $ c |-> FcCoTrans (FcCoAx g sub_as) (FcCoVar c')
+        return [c' :| substInMonoTy ty_subst ty' :~: ty]
       | otherwise = go untchs axioms
 topreactWanted _ _ = empty
 
