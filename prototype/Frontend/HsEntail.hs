@@ -74,6 +74,12 @@ addSolvEvSubst :: MonadState EntailState m => EvSubst -> m ()
 addSolvEvSubst subst =
   modify $ \s -> s {solv_ev_subst = solv_ev_subst s <> subst}
 
+addSolvCoSubst :: MonadState EntailState m => FcCoSubst -> m ()
+addSolvCoSubst = addSolvEvSubst . coToEvSubst
+
+addSolvTmSubst :: MonadState EntailState m => FcTmSubst -> m ()
+addSolvTmSubst = addSolvEvSubst . tmToEvSubst
+
 -- | Substitute an equality within a type and generate a coercion.
 -- This is weird, type type signature could be more precise.
 -- Instead of returning what we passed and throwing it away.
@@ -162,22 +168,22 @@ isOrphan (TyApp ty1 ty2) = isOrphan ty1 && isOrphan ty2
 isOrphan TyVar {} = True
 isOrphan TyFam {} = False
 
-interactWanted :: WantedCt -> WantedCt -> MaybeT EntailM (WantedCs, EvSubst)
+interactWanted :: WantedCt -> WantedCt -> MaybeT EntailM WantedCs
 interactWanted (WantedEqCt (c1 :| ct1@(TyVar a :~: ty1)))
                (WantedEqCt (c2 :|      TyVar b :~: ty2))
   -- EQSAME
   | a == b = do
     c2' <- freshFcCoVar
+    addSolvCoSubst (c2 |-> FcCoTrans (FcCoVar c1) (FcCoVar c2'))
     return
-      ( WantedEqCt <$> [c1 :| ct1, c2' :| (ty1 :~: ty2)]
-      , coToEvSubst (c2 |-> FcCoTrans (FcCoVar c1) (FcCoVar c2')))
+      ( WantedEqCt <$> [c1 :| ct1, c2' :| ty1 :~: ty2] )
   -- EQDIFF
   | a `elem` ftyvsOf ty2
   , let (co, sub_ty2) = coTy (FcCoVar c1) a ty1 ty2 = do
     c2' <- freshFcCoVar
+    addSolvCoSubst (c2 |-> FcCoTrans (FcCoVar c2') (FcCoSym co))
     return
-      ( WantedEqCt <$> [c1 :| ct1, c2' :| (TyVar b :~: sub_ty2)]
-      , coToEvSubst (c2 |-> FcCoTrans (FcCoVar c2') (FcCoSym co)))
+      ( WantedEqCt <$> [c1 :| ct1, c2' :| TyVar b :~: sub_ty2] )
 interactWanted (WantedEqCt (c1 :| ct1@(TyVar     a :~:  ty1)))
                (WantedEqCt (c2 :|     (TyFam f tys :~:  ty2)))
   -- EQFEQ
@@ -185,32 +191,32 @@ interactWanted (WantedEqCt (c1 :| ct1@(TyVar     a :~:  ty1)))
   , let (co1, sub_tyfam) = coTy (FcCoVar c1) a ty1 (TyFam f tys)
   , let (co2, sub_ty2)   = coTy (FcCoVar c1) a ty1 ty2 = do
     c2' <- freshFcCoVar
+    addSolvCoSubst (c2 |-> FcCoTrans co1 (FcCoTrans (FcCoVar c2') (FcCoSym co2)))
     return
-      ( WantedEqCt <$> [ c1 :| ct1, c2' :| (sub_tyfam :~: sub_ty2)]
-      , coToEvSubst (c2 |-> FcCoTrans co1 (FcCoTrans (FcCoVar c2') (FcCoSym co2))))
+      ( WantedEqCt <$> [ c1 :| ct1, c2' :| sub_tyfam :~: sub_ty2] )
 interactWanted (WantedEqCt  (c :| ct1@(TyVar a :~: ty)))
                (WantedClsCt (d :| ct2@(ClsCt _cls tys)))
   -- EQDICT
   | a `elem` ftyvsOf tys = do
     (co, sub_cls) <- lift . lift $ coCt (FcCoVar c) a ty ct2
     d' <- freshDictVar
+    addSolvTmSubst (d |-> FcTmCast (FcTmVar d') (FcCoSym co))
     return
-      ( [WantedEqCt (c :| ct1), WantedClsCt (d' :| sub_cls)]
-      , tmToEvSubst (d |-> FcTmCast (FcTmVar d') (FcCoSym co)))
+      [WantedEqCt (c :| ct1), WantedClsCt (d' :| sub_cls)]
 interactWanted (WantedEqCt (c1 :| ct1@(TyFam _f1 _tys1 :~: ty1)))
                (WantedEqCt (c2 :|     (TyFam _f2 _tys2 :~: ty2))) = do
   -- FEQFEQ
     c2' <- freshFcCoVar
+    addSolvCoSubst (c2 |-> FcCoTrans (FcCoVar c1) (FcCoVar c2'))
     return
-      ( WantedEqCt <$> [c1 :| ct1, c2' :| (ty1 :~: ty2)]
-      , coToEvSubst (c2 |-> FcCoTrans (FcCoVar c1) (FcCoVar c2')))
+      ( WantedEqCt <$> [c1 :| ct1, c2' :| ty1 :~: ty2] )
 interactWanted (WantedClsCt (d1 :| ClsCt cls1 tys1))
                (WantedClsCt (d2 :| ClsCt cls2 tys2))
   -- DDICT
-  | and (zipWithExact eqMonoTy tys1 tys2), cls1 == cls2 =
+  | and (zipWithExact eqMonoTy tys1 tys2), cls1 == cls2 = do
+    addSolvTmSubst (d2 |-> FcTmVar d1)
     return
-      ( [WantedClsCt (d1 :| ClsCt cls1 tys1)]
-      , tmToEvSubst (d2 |-> FcTmVar d1))
+      [WantedClsCt (d1 :| ClsCt cls1 tys1)]
 interactWanted _ _ = empty
 
 -- TODO always return first total constraint? order important?
@@ -256,47 +262,49 @@ interactGiven (GivenClsCt ( tm1 :|  ct1@(ClsCt cls1 tys1)))
   return [GivenClsCt (tm1 :| ct1)] -- TODO tm1 right?
 interactGiven _ _ = empty
 
-simplify :: GivenCt -> WantedCt -> MaybeT EntailM (WantedCs, EvSubst)
+-- TODO shouls not consume Given input?
+simplify :: GivenCt -> WantedCt -> MaybeT EntailM WantedCs
 simplify (GivenEqCt  (co :| TyVar a :~: ty1))
          (WantedEqCt (c  :| TyVar b :~: ty2))
   -- SEQSAME
   | a == b = do
   c' <- freshFcCoVar
-  return ( [ WantedEqCt (c' :| (ty1 :~: ty2))]
-         , coToEvSubst (c |-> FcCoTrans co (FcCoVar c')))
+  addSolvCoSubst (c |-> FcCoTrans co (FcCoVar c'))
+  return [WantedEqCt (c' :| (ty1 :~: ty2))]
   -- SEQDIFF
   | a `elem` ftyvsOf ty2
   , let (co', sub_ty2) = coTy co a ty1 ty2 = do
   c' <- freshFcCoVar
-  return ( [WantedEqCt (c' :| (TyVar b :~: sub_ty2))]
-         , coToEvSubst (c |-> FcCoTrans (FcCoVar c') (FcCoSym co')))
+  addSolvCoSubst (c |-> FcCoTrans (FcCoVar c') (FcCoSym co'))
+  return [WantedEqCt (c' :| (TyVar b :~: sub_ty2))]
 simplify (GivenEqCt  (co :| TyVar a            :~: ty1))
          (WantedEqCt (c  :| fam@(TyFam _f tys) :~: ty2))
   -- SEQFEQ
   | a `elem` ftyvsOf tys
   , let (co', sub_fam) = coTy co a ty1 fam = do
   c' <- freshFcCoVar
-  return ( [ WantedEqCt (c' :| (sub_fam :~: ty2))]
-         , coToEvSubst ( c |-> FcCoTrans co' (FcCoVar c')))
+  addSolvCoSubst (c |-> FcCoTrans co' (FcCoVar c'))
+  return [WantedEqCt (c' :| (sub_fam :~: ty2))]
 simplify (GivenEqCt   (co :|     (TyVar a :~: ty1)))
          (WantedClsCt (d  :| ct2@(ClsCt _cls  tys)))
   -- SEQDICT
   | a `elem` ftyvsOf tys = do
   (co', sub_cls) <- lift . lift $ coCt co a ty1 ct2
   d' <- freshDictVar
-  return ( [ WantedClsCt (d' :| sub_cls)]
-         , tmToEvSubst (d |-> FcTmCast (FcTmVar d') (FcCoSym co')))
+  addSolvTmSubst (d |-> FcTmCast (FcTmVar d') (FcCoSym co'))
+  return [WantedClsCt (d' :| sub_cls)]
 simplify (GivenEqCt   (co :| (fam1@TyFam {} :~: ty1)))
          (WantedEqCt  (c  :| (fam2@TyFam {} :~: ty2)))
   -- SFEQFEQ
   | eqMonoTy fam1 fam2 = do
   c' <- freshFcCoVar
-  return ( [WantedEqCt (c' :| (ty1 :~: ty2))]
-         , coToEvSubst (c |-> FcCoTrans co (FcCoVar c')))
+  addSolvCoSubst (c |-> FcCoTrans co (FcCoVar c'))
+  return [WantedEqCt (c' :| (ty1 :~: ty2))]
 simplify (GivenClsCt  (tm :| ClsCt cls1 tys1))
          (WantedClsCt (d  :| ClsCt cls2 tys2))
-  | cls1 == cls2, and (zipWithExact eqMonoTy tys1 tys2) =
-  return (mempty, tmToEvSubst (d |-> tm))
+  | cls1 == cls2, and (zipWithExact eqMonoTy tys1 tys2) = do
+  addSolvTmSubst (d |-> tm)
+  return mempty
 simplify _ _ = empty
 
 canonicalizeWanted :: WantedCt -> MaybeT EntailM (WantedCs, EvSubst)
