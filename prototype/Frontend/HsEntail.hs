@@ -567,20 +567,22 @@ tryRuleProduct _ []     _   = empty
 tryRuleProduct f (x:xs) ys  =  tryRule (f x) ys
                            <|> tryRuleProduct f xs ys
 
-fullCanonGivens :: GivenCs -> MaybeT EntailM GivenCs
+fullCanonGivens :: GivenCs -> EntailM GivenCs
 fullCanonGivens givens = do
-  canon_givens <- exhaust canonicalizeGiven givens <|> pure givens
+  Just canon_givens <-
+    runMaybeT $ exhaust canonicalizeGiven givens <|> pure givens
   canCheckGivens canon_givens
   return canon_givens
 
-fullCanonWanteds :: WantedCs -> MaybeT EntailM WantedCs
+fullCanonWanteds :: WantedCs -> EntailM WantedCs
 fullCanonWanteds wanteds = do
-  canon_wanteds <- exhaust canonicalizeWanted wanteds <|> pure wanteds
+  Just canon_wanteds <-
+    runMaybeT $ exhaust canonicalizeWanted wanteds <|> pure wanteds
   canCheckWanteds canon_wanteds
   return canon_wanteds
 
 solver :: Theory -> GivenCs -> WantedCs -> EntailM WantedCs
-solver theory g w = runMaybeT (canonPhase g w) >>= maybe somethingWentWrong return
+solver theory = canonPhase
   where
     canonPhase givens wanteds = do
       canon_givens <- fullCanonGivens givens
@@ -588,24 +590,24 @@ solver theory g w = runMaybeT (canonPhase g w) >>= maybe somethingWentWrong retu
       givensPhase canon_givens canon_wanteds
 
     givensPhase givens wanteds =
-      (tryGivens givens >>= flip givensPhase wanteds) <|>
-      wantedsPhase givens wanteds
+      runMaybeT (tryGivens givens) >>= \case
+        Just givens' -> givensPhase givens' wanteds
+        Nothing -> wantedsPhase givens wanteds
 
     tryGivens givens = do
       (new_givens, residuals) <-
         tryRuleSquared interactGiven givens <|>
         tryRule (topreactGiven theory) givens
-      (<> residuals) <$> fullCanonGivens new_givens
+      (<> residuals) <$> lift (fullCanonGivens new_givens)
 
     wantedsPhase givens wanteds =
-      (tryWanteds givens wanteds >>= wantedsPhase givens) <|>
-      return wanteds
+      runMaybeT (tryWanteds givens wanteds) >>= \case
+        Just wanteds' -> wantedsPhase givens wanteds'
+        Nothing -> return wanteds
 
     tryWanteds givens wanteds = do
-      (new_wanteds, residuals) <- tryRuleSquared interactWanted wanteds <|>
+      (new_wanteds, residuals) <-
+        tryRuleSquared interactWanted wanteds <|>
         tryRuleProduct simplify givens wanteds <|>
         tryRule (topreactWanted theory) wanteds
-      (<> residuals) <$> fullCanonWanteds new_wanteds
-
-    somethingWentWrong =
-      throwErrorM $ text "The impossible happened, the solver returned Nothing"
+      (<> residuals) <$> lift (fullCanonWanteds new_wanteds)
