@@ -554,12 +554,6 @@ tryRule _f []     =  empty
 tryRule f (x:xs)  =  flip (,) xs  <$>         f x
                  <|> second (x :) <$> tryRule f xs
 
-exhaustSquared :: (Monad m, Alternative m) => (a -> a -> m [a]) -> [a] -> m [a]
-exhaustSquared f xs = do
-  (output, rest) <- tryRuleSquared f xs
-  let new_xs = output <> rest
-  exhaustSquared f new_xs <|> pure new_xs
-
 -- order matters in interaction rules, hence the `flip`
 tryRuleSquared :: Alternative f => (a -> a -> f b) -> [a] -> f (b, [a])
 tryRuleSquared _ []      = empty
@@ -567,15 +561,51 @@ tryRuleSquared f (x:xs)  =  tryRule ( f  x) xs
                         <|> tryRule (`f` x) xs
                         <|> second (x :) <$> tryRuleSquared f xs
 
-exhaustProduct ::
-     (Monad m, Alternative m) => (g -> w -> m [w]) -> [g] -> [w] -> m [w]
-exhaustProduct f xs ys = do
-  (output_ys, rest_ys) <- tryRuleProduct f xs ys
-  let new_ys = output_ys <> rest_ys
-  exhaustProduct f xs new_ys <|> pure new_ys
-
 -- we don't consume givens with `simplify`
 tryRuleProduct :: Alternative f => (g -> w -> f o) -> [g] -> [w] -> f (o, [w])
 tryRuleProduct _ []     _   = empty
 tryRuleProduct f (x:xs) ys  =  tryRule (f x) ys
                            <|> tryRuleProduct f xs ys
+
+fullCanonGivens :: GivenCs -> MaybeT EntailM GivenCs
+fullCanonGivens givens = do
+  canon_givens <- exhaust canonicalizeGiven givens <|> pure givens
+  canCheckGivens canon_givens
+  return canon_givens
+
+fullCanonWanteds :: WantedCs -> MaybeT EntailM WantedCs
+fullCanonWanteds wanteds = do
+  canon_wanteds <- exhaust canonicalizeWanted wanteds <|> pure wanteds
+  canCheckWanteds canon_wanteds
+  return canon_wanteds
+
+solver :: Theory -> GivenCs -> WantedCs -> EntailM WantedCs
+solver theory g w = runMaybeT (canonPhase g w) >>= maybe somethingWentWrong return
+  where
+    canonPhase givens wanteds = do
+      canon_givens <- fullCanonGivens givens
+      canon_wanteds <- fullCanonWanteds wanteds
+      givensPhase canon_givens canon_wanteds
+
+    givensPhase givens wanteds =
+      (tryGivens givens >>= flip givensPhase wanteds) <|>
+      wantedsPhase givens wanteds
+
+    tryGivens givens = do
+      (new_givens, residuals) <-
+        tryRuleSquared interactGiven givens <|>
+        tryRule (topreactGiven theory) givens
+      (<> residuals) <$> fullCanonGivens new_givens
+
+    wantedsPhase givens wanteds =
+      (tryWanteds givens wanteds >>= wantedsPhase givens) <|>
+      return wanteds
+
+    tryWanteds givens wanteds = do
+      (new_wanteds, residuals) <- tryRuleSquared interactWanted wanteds <|>
+        tryRuleProduct simplify givens wanteds <|>
+        tryRule (topreactWanted theory) wanteds
+      (<> residuals) <$> fullCanonWanteds new_wanteds
+
+    somethingWentWrong =
+      throwErrorM $ text "The impossible happened, the solver returned Nothing"
