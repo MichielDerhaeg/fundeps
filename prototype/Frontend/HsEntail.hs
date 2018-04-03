@@ -591,23 +591,21 @@ solver theory = canonPhase
 
     givensPhase givens wanteds =
       runMaybeT (tryGivens givens) >>= \case
-        Just givens' -> givensPhase givens' wanteds
+        Just (new_givens, rest) -> do
+          givens' <- (<> rest) <$> fullCanonGivens new_givens
+          givensPhase givens' wanteds
         Nothing -> wantedsPhase givens wanteds
 
-    tryGivens givens = do
-      (new_givens, residuals) <-
-        tryRuleSquared interactGiven givens <|>
-        tryRule (topreactGiven theory) givens
-      (<> residuals) <$> lift (fullCanonGivens new_givens)
+    tryGivens givens  =  tryRuleSquared interactGiven givens
+                     <|> tryRule (topreactGiven theory) givens
 
     wantedsPhase givens wanteds =
       runMaybeT (tryWanteds givens wanteds) >>= \case
-        Just wanteds' -> wantedsPhase givens wanteds'
+        Just (new_wanteds, rest) -> do
+          wanteds' <- (<> rest) <$> fullCanonWanteds new_wanteds
+          wantedsPhase givens wanteds'
         Nothing -> return wanteds
 
-    tryWanteds givens wanteds = do
-      (new_wanteds, residuals) <-
-        tryRuleSquared interactWanted wanteds <|>
-        tryRuleProduct simplify givens wanteds <|>
-        tryRule (topreactWanted theory) wanteds
-      (<> residuals) <$> lift (fullCanonWanteds new_wanteds)
+    tryWanteds givens wanteds  =  tryRuleSquared interactWanted wanteds
+                              <|> tryRuleProduct simplify givens wanteds
+                              <|> tryRule (topreactWanted theory) wanteds
