@@ -44,3 +44,9 @@ markErrorPhase :: MonadError CompileError m => CompilePhase -> m a -> m a
 markErrorPhase phase f =
   f `catchError`
   (\(CompileError _phase err) -> throwError (CompileError phase err))
+
+tcFail :: MonadError CompileError m => Doc -> m a
+tcFail = throwError . CompileError HsTypeChecker
+
+markTcError :: MonadError CompileError m => m a -> m a
+markTcError = markErrorPhase HsTypeChecker
