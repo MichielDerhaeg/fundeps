@@ -4,11 +4,11 @@
 module Frontend.HsEntail
   ( entail
   , WantedCs
-  , WantedCt
+  , WantedCt (..)
   , WantedEqCt
   , WantedClsCt
   , GivenCs
-  , GivenCt
+  , GivenCt (..)
   , GivenEqCt
   , GivenClsCt
   , unify
@@ -56,6 +56,16 @@ data GivenCt
 
 type GivenCs = [GivenCt]
 
+instance PrettyPrint WantedCt where
+  ppr (WantedEqCt  ct) = ppr ct
+  ppr (WantedClsCt ct) = ppr ct
+  needsParens _ = False
+
+instance PrettyPrint GivenCt where
+  ppr (GivenEqCt  ct) = ppr ct
+  ppr (GivenClsCt ct) = ppr ct
+  needsParens _ = False
+
 partitionWantedCs :: WantedCs -> ([WantedEqCt], [WantedClsCt])
 partitionWantedCs (WantedEqCt ct:cs) = first (ct :) $ partitionWantedCs cs
 partitionWantedCs (WantedClsCt ct:cs) = second (ct :) $ partitionWantedCs cs
@@ -83,15 +93,15 @@ addUntch a = modify $ \s -> s { untouchables = a : untouchables s }
 
 addFlatTySubst :: MonadState EntailState m => HsTySubst -> m ()
 addFlatTySubst subst =
-  modify $ \s -> s {flat_ty_subst = flat_ty_subst s <> subst}
+  modify $ \s -> s {flat_ty_subst = subst <> flat_ty_subst s}
 
 addFlatEvSubst :: MonadState EntailState m => EvSubst -> m ()
 addFlatEvSubst subst =
-  modify $ \s -> s {flat_ev_subst = flat_ev_subst s <> subst}
+  modify $ \s -> s {flat_ev_subst = subst <> flat_ev_subst s}
 
 addSolvEvSubst :: MonadState EntailState m => EvSubst -> m ()
 addSolvEvSubst subst =
-  modify $ \s -> s {solv_ev_subst = solv_ev_subst s <> subst}
+  modify $ \s -> s {solv_ev_subst = subst <> solv_ev_subst s}
 
 addSolvCoSubst :: MonadState EntailState m => FcCoSubst -> m ()
 addSolvCoSubst = addSolvEvSubst . coToEvSubst
@@ -106,7 +116,7 @@ addSolvTmSubst = addSolvEvSubst . tmToEvSubst
 unify :: MonadError CompileError m => [RnTyVar] -> EqCs -> m HsTySubst
 unify _untchs [] = return mempty
 unify  untchs eqs
-  | Just ((subst1, eqs'), eqs'') <- go one_step eqs
+  | Just ((subst1, eqs'), eqs'') <- tryRule one_step eqs
   = do subst2 <- unify untchs (substInEqCs subst1 (eqs' ++ eqs''))
        return (subst2 <> subst1)
   | otherwise = tcFail $ vcat [ text "Unification failed."
@@ -131,11 +141,6 @@ unify  untchs eqs
     one_step (TyApp {} :~: TyCon {}) = Nothing
     one_step (TyFam {} :~: _) = Nothing
     one_step (_ :~: TyFam {}) = Nothing
-
-    go :: (a -> Maybe b) -> [a] -> Maybe (b, [a])
-    go _p []     = Nothing
-    go  p (x:xs) | Just y <- p x = Just (y, xs)
-                 | otherwise     = second (x:) <$> go p xs
 
 -- | Occurs check.
 --   Returns `True` if the given variable does not occur in the given type.
@@ -218,7 +223,10 @@ smallerThan untchs = go
     go TyFam {} TyCon {} = True
 
     -- alpha < b
-    go (TyVar a) (TyVar b) = a `notElem` untchs || a <= b
+    go (TyVar a) (TyVar b)
+      | a `notElem` untchs, b `elem` untchs = True
+      | a `elem` untchs, b `notElem` untchs = False
+      | otherwise = a < b
 
     -- tv < Xi
     go TyVar {} ty = isOrphan ty
@@ -688,8 +696,29 @@ entail untchs theory givens wanteds = do
   -- TODO unification evidence? should all be refls?
   -- eq_cs should never be in a state where evidence is needed from unification
   -- TODO distinct will be enforced by `unify` i think
-  ty_subst <- unify untchs (dropLabel eq_cs)
+  (ty_subst, co_subst) <- eqCsToSubst untchs eq_cs
   let flat_solv_ev =
         substTyInEvidence (elabHsTySubst flat_ty) $
         substEvInEvidence flat_ev solv_ev
-  return (cls_cs, ty_subst, flat_solv_ev)
+  return (cls_cs, ty_subst, coToEvSubst co_subst <> flat_solv_ev)
+
+eqCsToSubst :: MonadError CompileError m => [RnTyVar] -> AnnEqCs -> m (HsTySubst, FcCoSubst)
+eqCsToSubst _untchs [] = return mempty
+eqCsToSubst untchs eqs
+  | Just ((ty_subst, co_subst), eqs') <- tryRule step eqs = do
+    (ty_subst', co_subst') <- eqCsToSubst untchs (substInAnnEqCs ty_subst eqs')
+    return (ty_subst' <> ty_subst, co_subst' <> co_subst)
+  | otherwise = throwErrorM $ text "TODO failed with: " <+> ppr eqs
+  where
+    step (c :| TyVar v1 :~: TyVar v2)
+      | v1 == v2 = Just (mempty, c |-> FcCoRefl (elabMonoTy (TyVar v1)))
+    step (c :| TyVar v :~: ty)
+      | v `notElem` untchs = Just (v |-> ty, c |-> FcCoRefl (elabMonoTy ty))
+    step (c :| ty :~: TyVar v)
+      | v `notElem` untchs = Just (v |-> ty, c |-> FcCoRefl (elabMonoTy ty))
+    step (_ :| _ :~: TyVar _) = Nothing
+    step (_ :| TyVar _ :~: _) = Nothing
+    step (c :| TyCon tc1 :~: TyCon tc2)
+      | tc1 == tc2 = Just (mempty, c |-> FcCoRefl (elabMonoTy (TyCon tc1)))
+      | otherwise = Nothing
+    step (_ :| _ :~: _) = Nothing
