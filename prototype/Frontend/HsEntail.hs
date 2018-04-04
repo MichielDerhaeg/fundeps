@@ -16,7 +16,7 @@ import           Utils.Utils
 import           Utils.Var
 
 import           Control.Applicative
-import           Control.Arrow             (first, second)
+import           Control.Arrow             (first, second, (***))
 import           Control.Monad.Except
 import           Control.Monad.State
 import           Control.Monad.Trans.Maybe
@@ -41,6 +41,11 @@ data GivenCt
   | GivenClsCt GivenClsCt
 
 type GivenCs = [GivenCt]
+
+partitionWantedCs :: WantedCs -> ([WantedEqCt], [WantedClsCt])
+partitionWantedCs (WantedEqCt ct:cs) = first (ct :) $ partitionWantedCs cs
+partitionWantedCs (WantedClsCt ct:cs) = second (ct :) $ partitionWantedCs cs
+partitionWantedCs [] = ([], [])
 
 type EntailM = StateT EntailState TcM
 
@@ -488,10 +493,9 @@ ctxList func (ty:tys) =
   ctxList (\tys' -> func $ ty : tys') tys
 ctxList _ [] = Nothing
 
--- TODO split up rules to defer DINSTW
--- TODO split up local and instance schemes
-topreactWanted :: Theory -> WantedCt -> MaybeT EntailM WantedCs
-topreactWanted theory (WantedClsCt (d :| ClsCt cls tys)) = do
+-- split up from Eq case because this need to happen last
+topreactWantedCls :: Theory -> WantedCt -> MaybeT EntailM WantedCs
+topreactWantedCls theory (WantedClsCt (d :| ClsCt cls tys)) = do
   untchs <- getUntchs
   fmap WantedClsCt <$> go untchs (theory_schemes theory)
   where
@@ -511,7 +515,10 @@ topreactWanted theory (WantedClsCt (d :| ClsCt cls tys)) = do
         addSolvTmSubst ev_subst
         return ann_cls_cs
       | otherwise = go untchs schemes
-topreactWanted theory (WantedEqCt (c :| TyFam f tys :~: ty)) = do
+topreactWantedCls _ _ = empty
+
+topreactWantedEq :: Theory -> WantedCt -> MaybeT EntailM WantedCs
+topreactWantedEq theory (WantedEqCt (c :| TyFam f tys :~: ty)) = do
   untchs <- getUntchs
   fmap WantedEqCt <$> go untchs (theory_axioms theory)
   where
@@ -524,7 +531,7 @@ topreactWanted theory (WantedEqCt (c :| TyFam f tys :~: ty)) = do
         addSolvCoSubst $ c |-> FcCoTrans (FcCoAx g sub_as) (FcCoVar c')
         return [c' :| substInMonoTy ty_subst ty' :~: ty]
       | otherwise = go untchs axioms
-topreactWanted _ _ = empty
+topreactWantedEq _ _ = empty
 
 topreactGiven :: Theory -> GivenCt -> MaybeT EntailM GivenCs
 topreactGiven theory (GivenEqCt (co :| TyFam f tys :~: ty)) = do
@@ -608,4 +615,22 @@ solver theory = canonPhase
 
     tryWanteds givens wanteds  =  tryRuleSquared interactWanted wanteds
                               <|> tryRuleProduct simplify givens wanteds
-                              <|> tryRule (topreactWanted theory) wanteds
+                              <|> tryRule (topreactWantedEq theory) wanteds
+                              <|> tryRule (topreactWantedCls theory) wanteds
+
+-- SIMPLES rule
+entail :: [RnTyVar] -> Theory -> GivenCs -> WantedCs -> TcM (AnnClsCs, HsTySubst, EvSubst)
+entail untchs theory givens wanteds = do
+  (residuals, EntailState _ flat_ty flat_ev solv_ev) <-
+    runEntailT untchs (solver theory givens wanteds)
+  let (eq_cs, cls_cs) =
+        (substInAnnEqCs flat_ty *** substInAnnClsCs flat_ty) $
+        partitionWantedCs residuals
+  -- TODO unification evidence? should all be refls?
+  -- eq_cs should never be in a state where evidence is needed from unification
+  -- TODO distinct will be enforced by `unify` i think
+  ty_subst <- unify untchs (dropLabel eq_cs)
+  let flat_solv_ev =
+        substTyInEvidence (elabHsTySubst flat_ty) $
+        substEvInEvidence flat_ev solv_ev
+  return (cls_cs, ty_subst, flat_solv_ev)

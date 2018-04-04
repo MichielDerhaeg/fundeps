@@ -377,6 +377,9 @@ substFcTyInAlt :: FcTySubst -> FcAlt -> FcAlt
 substFcTyInAlt = sub_rec -- XXX: subst (FcAlt p tm) = FcAlt p (substFcTyInTm subst tm)
   -- GEORGE: Now the patterns do not bind type variables so we don't have to check for shadowing here.
 
+substFcTyInCo :: FcTySubst -> FcCoercion -> FcCoercion
+substFcTyInCo = sub_rec
+
 -- * System F Term Substitution
 -- ------------------------------------------------------------------------------
 
@@ -444,6 +447,22 @@ coToEvSubst co_subst = EvSubst mempty co_subst
 -- | Convert a term substitution to a evidence substitution
 tmToEvSubst :: FcTmSubst -> EvSubst
 tmToEvSubst tm_subst = EvSubst tm_subst mempty
+
+-- | Apply a type substitution to image of an evidence substitution
+substTyInEvidence :: FcTySubst -> EvSubst -> EvSubst
+substTyInEvidence subst (EvSubst tm_subst co_subst) =
+  EvSubst sub_tm_subst sub_co_subst
+  where
+    sub_tm_subst = mapSub id (substFcTyInTm subst) tm_subst
+    sub_co_subst = mapSub id (substFcTyInCo subst) co_subst
+
+-- | Apply evidence substitution to image of another evidence substitution
+substEvInEvidence :: EvSubst -> EvSubst -> EvSubst
+substEvInEvidence subst (EvSubst tm_subst co_subst) =
+  EvSubst sub_tm_subst sub_co_subst
+  where
+    sub_tm_subst = mapSub id (substEvInTm subst) tm_subst
+    sub_co_subst = mapSub id (substEvInCo subst) co_subst
 
 -- | Pretty print an evidence substitution
 -- TODO more pretty
