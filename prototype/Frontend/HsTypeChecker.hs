@@ -174,11 +174,9 @@ generateAxioms scheme@(CtrScheme _as cs (ClsCt cls tys)) = do
     let free_uis = ftyvsOf uis
     subst <- determinacy free_uis cs
     let subbed_ui0 = substInMonoTy subst ui0
-    if (null (ftyvsOf subbed_ui0 \\ free_uis))
-      then gen_ax_fail
-      else do
-        g <- freshFcAxVar
-        return $ Axiom g free_uis f uis subbed_ui0
+    unless (null (ftyvsOf subbed_ui0 \\ free_uis)) gen_ax_fail
+    g <- freshFcAxVar
+    return $ Axiom g free_uis f uis subbed_ui0
   where
     gen_ax_fail =
       tcFail $
@@ -277,6 +275,7 @@ elabClsDecl (ClsD ab_s rn_cs cls as fundeps method method_ty) = do
   -- Construct the extended typing environment
   ty_ctx <- extendCtxM method hs_method_ty ask
 
+  -- TODO wtf is this
   return (fc_fam_decls, fc_data_decl, fc_val_bind:[], [], ty_ctx)
 
 -- | Check if an instance/class context is ambiguous
