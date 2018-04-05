@@ -36,36 +36,6 @@ import           Control.Monad.State
 import           Control.Monad.Trans.Maybe
 import           Data.Monoid
 
-type WantedEqCt = Ann FcCoVar EqCt
-
-type WantedClsCt = Ann DictVar RnClsCt
-
-data WantedCt
-  = WantedEqCt WantedEqCt
-  | WantedClsCt WantedClsCt
-
-type WantedCs = [WantedCt]
-
-type GivenEqCt = Ann FcCoercion EqCt
-
-type GivenClsCt = Ann FcTerm RnClsCt
-
-data GivenCt
-  = GivenEqCt GivenEqCt
-  | GivenClsCt GivenClsCt
-
-type GivenCs = [GivenCt]
-
-instance PrettyPrint WantedCt where
-  ppr (WantedEqCt  ct) = ppr ct
-  ppr (WantedClsCt ct) = ppr ct
-  needsParens _ = False
-
-instance PrettyPrint GivenCt where
-  ppr (GivenEqCt  ct) = ppr ct
-  ppr (GivenClsCt ct) = ppr ct
-  needsParens _ = False
-
 partitionWantedCs :: WantedCs -> ([WantedEqCt], [WantedClsCt])
 partitionWantedCs (WantedEqCt ct:cs) = first (ct :) $ partitionWantedCs cs
 partitionWantedCs (WantedClsCt ct:cs) = second (ct :) $ partitionWantedCs cs
@@ -655,11 +625,11 @@ fullCanonWanteds wanteds = do
   canCheckWanteds canon_wanteds
   return canon_wanteds
 
-solver :: Theory -> GivenCs -> WantedCs -> EntailM WantedCs
+solver :: Theory -> WantedCs -> EntailM WantedCs
 solver theory = canonPhase
   where
-    canonPhase givens wanteds = do
-      canon_givens <- fullCanonGivens givens
+    canonPhase wanteds = do
+      canon_givens <- fullCanonGivens (theory_givens theory)
       canon_wanteds <- fullCanonWanteds wanteds
       givensPhase canon_givens canon_wanteds
 
@@ -686,15 +656,13 @@ solver theory = canonPhase
                               <|> tryRule (topreactWantedCls theory) wanteds
 
 -- SIMPLES rule
-entail :: [RnTyVar] -> Theory -> GivenCs -> WantedCs -> TcM (AnnClsCs, HsTySubst, EvSubst)
-entail untchs theory givens wanteds = do
+entail :: [RnTyVar] -> Theory -> WantedCs -> TcM (AnnClsCs, HsTySubst, EvSubst)
+entail untchs theory wanteds = do
   (residuals, EntailState _ flat_ty flat_ev solv_ev) <-
-    runEntailT untchs (solver theory givens wanteds)
+    runEntailT untchs (solver theory wanteds)
   let (eq_cs, cls_cs) =
         (substInAnnEqCs flat_ty *** substInAnnClsCs flat_ty) $
         partitionWantedCs residuals
-  -- TODO unification evidence? should all be refls?
-  -- eq_cs should never be in a state where evidence is needed from unification
   -- TODO distinct will be enforced by `unify` i think
   (ty_subst, co_subst) <- eqCsToSubst untchs eq_cs
   let flat_solv_ev =

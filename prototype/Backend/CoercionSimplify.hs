@@ -2,7 +2,7 @@
 {-# LANGUAGE LambdaCase       #-}
 
 module Backend.CoercionSimplify
-  ( simplifyFcProgram
+  ( fcSimplify
   ) where
 
 import           Backend.FcTypes
@@ -15,6 +15,12 @@ import           Utils.Utils
 import           Control.Applicative
 import           Control.Monad.Reader
 import           Control.Monad.State
+
+
+fcSimplify :: FcProgram -> FcProgram
+fcSimplify pgm = case simplifyFcProgram pgm of
+  Nothing -> pgm
+  Just pgm' -> pgm'
 
 -- | Repeatedly simplify a System Fc program until no rules apply.
 -- Returns `Nothing` if it can't be simplified anymore.

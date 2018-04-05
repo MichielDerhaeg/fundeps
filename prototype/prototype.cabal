@@ -7,7 +7,7 @@ license:             BSD3
 executable prototype
   main-is:             Main.hs
   build-depends:       base
-                     , megaparsec
+                     , megaparsec >= 6.4
                      , pretty
                      , mtl
                      , transformers

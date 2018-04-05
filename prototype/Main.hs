@@ -5,16 +5,18 @@ module Main
   , runTest
   ) where
 
-import           Backend.FcTypeChecker  (fcTypeCheck)
-import           Frontend.HsParser      (hsParse)
-import           Frontend.HsRenamer     (hsRename)
-import           Frontend.HsTypeChecker (hsElaborate)
+import           Frontend.HsParser        (hsParse)
+import           Frontend.HsRenamer       (hsRename)
+import           Frontend.HsTypeChecker   (hsElaborate)
+
+import           Backend.CoercionSimplify (fcSimplify)
+import           Backend.FcTypeChecker    (fcTypeCheck)
 
 import           Utils.Errors
 import           Utils.PrettyPrint
-import           Utils.Unique           (newUniqueSupply)
+import           Utils.Unique             (newUniqueSupply)
 
-import           System.Environment     (getArgs, getProgName)
+import           System.Environment       (getArgs, getProgName)
 
 main :: IO ()
 main =
@@ -35,7 +37,8 @@ runTest filePath = do
         (((fc_pgm, tc_ty, theory), us2), _tc_env) <-
           hsElaborate rn_env us1 rn_pgm
         ((fc_ty, _us3), _fc_env) <- fcTypeCheck us2 fc_pgm
-        return (fc_pgm, tc_ty, theory, fc_ty)
+        let simpl_pgm = fcSimplify fc_pgm
+        return (simpl_pgm, tc_ty, theory, fc_ty)
   case result of
     Left err -> throwMainError err
     Right (fc_pgm, tc_ty, theory, fc_ty) -> do

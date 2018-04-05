@@ -428,6 +428,27 @@ type AnnTypeCs = [AnnTypeCt]
 type ProgramTheory = AnnSchemes
 
 -- | TODO doc
+type WantedEqCt = Ann FcCoVar EqCt
+
+type WantedClsCt = Ann DictVar RnClsCt
+
+data WantedCt
+  = WantedEqCt WantedEqCt
+  | WantedClsCt WantedClsCt
+
+type WantedCs = [WantedCt]
+
+type GivenEqCt = Ann FcCoercion EqCt
+
+type GivenClsCt = Ann FcTerm RnClsCt
+
+data GivenCt
+  = GivenEqCt GivenEqCt
+  | GivenClsCt GivenClsCt
+
+type GivenCs = [GivenCt]
+
+-- | TODO doc
 data Axiom = Axiom
   { ax_fc_var :: FcAxVar
   , ax_uv     :: [RnTyVar]
@@ -441,6 +462,7 @@ type Axioms = [Axiom]
 data Theory = Theory
   { theory_schemes :: AnnSchemes
   , theory_axioms  :: Axioms
+  , theory_givens  :: GivenCs
   }
 
 tExtendAxioms :: Theory -> Axioms -> Theory
@@ -450,6 +472,20 @@ tExtendAxioms theory axioms =
 tExtendSchemes :: Theory -> AnnSchemes -> Theory
 tExtendSchemes theory schemes =
   theory { theory_schemes = schemes `mappend` theory_schemes theory }
+
+tExtendGivens :: Theory -> GivenCs -> Theory
+tExtendGivens theory givens =
+  theory { theory_givens = givens `mappend` theory_givens theory}
+
+tExtendGivenCls :: Theory -> AnnClsCs -> Theory
+tExtendGivenCls theory cls_cs =
+  theory `tExtendGivens`
+  (GivenClsCt <$> ((FcTmVar <$> labelOf cls_cs) |: dropLabel cls_cs))
+
+tExtendGivenEq  :: Theory -> AnnEqCs -> Theory
+tExtendGivenEq theory eq_cs =
+  theory `tExtendGivens`
+  (GivenEqCt <$> ((FcCoVar <$> labelOf eq_cs) |: dropLabel eq_cs))
 
 -- * Collecting Free Variables Out Of Objects
 -- ------------------------------------------------------------------------------
@@ -746,10 +782,11 @@ instance PrettyPrint Axiom where
 
 -- | Pretty print the theory
 instance PrettyPrint Theory where
-  ppr (Theory schemes axioms)
+  ppr (Theory schemes axioms givens)
     = braces $ vcat $ punctuate comma
     $ [ text "theory_schemes" <+> colon <+> ppr schemes
       , text "theory_axioms"  <+> colon <+> ppr axioms
+      , text "theory_givens"  <+> colon <+> ppr givens
       ]
   needsParens _ = False
 
@@ -759,3 +796,14 @@ instance PrettyPrint AnnTypeCt where
   ppr (AnnClsCt ct) = ppr ct
 
   needsParens _     = False
+
+-- | TODO doc
+instance PrettyPrint WantedCt where
+  ppr (WantedEqCt  ct) = ppr ct
+  ppr (WantedClsCt ct) = ppr ct
+  needsParens _ = False
+
+instance PrettyPrint GivenCt where
+  ppr (GivenEqCt  ct) = ppr ct
+  ppr (GivenClsCt ct) = ppr ct
+  needsParens _ = False
