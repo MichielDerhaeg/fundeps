@@ -124,7 +124,7 @@ entailSuperClass untchs theory (ClsCt cls tys) = do
     , substEvInCo ev_subst . FcCoVar <$> cs)
 
 -- TODO abstract over duplicated code
-dictDestruction :: AnnClsCs -> TcM (MatchCtx, AnnClsCs, TcCtx)
+dictDestruction :: AnnClsCs -> TcM (MatchCtx, GivenCs, TcCtx)
 dictDestruction [] = (,,) MCtxHole mempty <$> ask
 dictDestruction ((d :| ClsCt cls tys):cs) = do
   ClassInfo ab_s sc _cls as fds fams _m mty _tc dc <-
@@ -135,13 +135,14 @@ dictDestruction ((d :| ClsCt cls tys):cs) = do
   let subst = bs_subst <> (buildSubst $ zipExact as tys)
 
   cvs <- genFreshCoVars $ length fds
-  let fc_props = substFcTyInProp (elabHsTySubst subst) <$>
+  let eq_cs =
+        substInEqCs subst $
         map
-          (\(fam, Fundep ais ai0) ->
-              FcProp
-                 (FcTyFam (rnTyFamToFcFam fam) (rnTyVarsToFcTypes ais))
-                 (rnTyVarToFcType ai0))
+          (\(fam, Fundep ais ai0) -> TyFam fam (TyVar <$> ais) :~: TyVar ai0)
           (zipExact fams fds)
+  let given_eq_cs = GivenEqCt <$> ((FcCoVar <$> cvs) |: eq_cs)
+
+  let fc_props = elabEqCt <$> eq_cs
 
   ds <- genFreshDictVars $ length sc
   fc_tys <- elabClsCs $ substInClsCs subst sc
@@ -154,13 +155,15 @@ dictDestruction ((d :| ClsCt cls tys):cs) = do
   env <- extendCtxM f subbed_mty $ extendCtxM (bs) (kindOf <$> bs) ask
   (mctx, new_cs', env') <- setCtxM env $ dictDestruction $ new_cs ++ cs
 
+  let given_cls_cs = GivenClsCt <$> ((FcTmVar <$> ds) |: substInClsCs subst sc)
+
   let pat =
         FcConPat
           dc
           (rnTyVarToFcTyVar <$> bs')
           (cvs |: fc_props)
           (ds  |: fc_tys ++ [rnTmVarToFcTmVar f :| fc_mty])
-  return (MCtxCase d pat mctx, new_cs <> new_cs', env')
+  return (MCtxCase d pat mctx, given_eq_cs <> given_cls_cs <> new_cs', env')
 
 -- TODO cleanup
 generateAxioms :: CtrScheme -> TcM Axioms
@@ -371,7 +374,7 @@ elabInsDecl theory (InsD as ins_cs cls typats method method_tm) = do
   axioms <- generateAxioms ins_scheme
   let i_theory = theory `tExtendAxioms`   axioms
                         `tExtendGivenCls` ann_ins_cs
-                        `tExtendGivenCls` match_cs
+                        `tExtendGivens`   match_cs
 
   (fc_exis_tys, fc_tms, fc_cos) <- entailSuperClass (labelOf as) i_theory head_ct
 
@@ -441,7 +444,8 @@ elabTermWithSig untchs theory tm poly_ty = do
 
   (mctx, match_ccs, _) <- dictDestruction given_ccs
 
-  let theory' = theory `tExtendGivenCls` (match_ccs <> given_ccs)
+  let theory' = theory `tExtendGivens`  match_ccs
+                       `tExtendGivenCls` given_ccs
   let untouchables = untchs <> labelOf as
   let wanted_cs =
         (WantedEqCt <$> (c :| (ty1 :~: ty2)) : wanted_eqs) <> (WantedClsCt <$> wanted_ccs)

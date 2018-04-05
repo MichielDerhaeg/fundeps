@@ -523,7 +523,7 @@ instance PrettyPrint FcCoercion where
   ppr (FcCoAx g tys) = ppr g <+> sep (map ppr tys)
   ppr (FcCoRefl ty) = text "<" <> ppr ty <> text ">"
   ppr (FcCoSym co) = text "sym" <+> ppr co
-  ppr (FcCoTrans co1 co2) = ppr co1 <> text ";" <+> ppr co2
+  ppr (FcCoTrans co1 co2) = parens $ ppr co1 <> text ";" <+> ppr co2
   ppr (FcCoApp co1 co2) = ppr co1 <+> ppr co2
   ppr (FcCoLeft co) = text "left" <+> ppr co
   ppr (FcCoRight co) = text "right" <+> ppr co

@@ -304,7 +304,6 @@ interactGiven (GivenClsCt ( tm1 :|  ct1@(ClsCt cls1 tys1)))
   return [GivenClsCt (tm1 :| ct1)] -- TODO tm1 right?
 interactGiven _ _ = empty
 
--- TODO shouls not consume Given input?
 simplify :: GivenCt -> WantedCt -> MaybeT EntailM WantedCs
 simplify (GivenEqCt  (co :| TyVar a :~: ty1))
          (WantedEqCt (c  :| TyVar b :~: ty2))
