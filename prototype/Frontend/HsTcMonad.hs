@@ -123,6 +123,10 @@ lookupClsParams cls = cls_type_args <$> lookupTcEnvM tc_env_cls_info cls
 lookupClsFundeps :: RnClass -> TcM [RnFundep]
 lookupClsFundeps cls = cls_fundeps <$> lookupTcEnvM tc_env_cls_info cls
 
+-- | Get the super classes of the class
+lookupClsSuper :: RnClass -> TcM RnClsCs
+lookupClsSuper cls = cls_super <$> lookupTcEnvM tc_env_cls_info cls
+
 -- | Get the projection type families of the type constructor
 lookupTyConProj :: RnTyCon -> TcM [RnTyFam]
 lookupTyConProj tc = hs_tc_projs <$> lookupTcEnvM tc_env_tc_info tc

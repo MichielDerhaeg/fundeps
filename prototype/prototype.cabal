@@ -19,6 +19,9 @@ executable prototype
                      , Frontend.HsTypeChecker
                      , Frontend.HsTypes
                      , Frontend.HsEntail
+                     , Frontend.HsTcMonad
+                     , Frontend.HsConstraintGen
+                     , Frontend.Conditions
                      , Utils.Annotated
                      , Utils.AssocList
                      , Utils.Ctx
