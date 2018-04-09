@@ -5,6 +5,7 @@
 
 module Frontend.HsTypeChecker where
 
+import           Frontend.Conditions
 import           Frontend.HsConstraintGen
 import           Frontend.HsEntail
 import           Frontend.HsRenamer
@@ -30,7 +31,6 @@ import           Control.Monad.Reader
 import           Control.Monad.State
 import           Control.Monad.Writer
 import           Data.List                ((\\))
-import           Data.Maybe               (catMaybes)
 
 -- * Create the typechecking environment from the renaming one
 -- ------------------------------------------------------------------------------
@@ -82,21 +82,6 @@ buildInitTcEnv pgm (RnEnv _rn_cls_infos dc_infos tc_infos) = do -- GEORGE: Assum
         -- Continue with the rest
         buildStoreClsInfos p
 
--- * Overlap Checking
--- ------------------------------------------------------------------------------
-
-overlapCheck :: MonadError CompileError m => Theory -> RnClsCt -> m ()
-overlapCheck theory cls_ct@(ClsCt cls1 tys1) =
-  case catMaybes (fmap overlaps (theory_schemes theory)) of
-    msg:_ -> tcFail msg
-    []    -> return ()
-  where
-    overlaps (_ :| scheme@(CtrScheme _ _ (ClsCt cls2 tys2)))
-      | cls1 == cls2
-      , Right {} <- unify [] (zipWithExact (:~:) tys1 tys2) =
-        Just (text "overlapCheck:" $$ ppr cls_ct $$ ppr scheme)
-      | otherwise = Nothing
-
 -- * Constraint Entailment TODO
 -- ------------------------------------------------------------------------------
 
@@ -123,7 +108,6 @@ entailSuperClass untchs theory (ClsCt cls tys) = do
     , substEvInTm ev_subst . FcTmVar <$> ds
     , substEvInCo ev_subst . FcCoVar <$> cs)
 
--- TODO abstract over duplicated code
 dictDestruction :: AnnClsCs -> TcM (MatchCtx, GivenCs, TcCtx)
 dictDestruction [] = (,,) MCtxHole mempty <$> ask
 dictDestruction ((d :| ClsCt cls tys):cs) = do
@@ -280,17 +264,6 @@ elabClsDecl (ClsD ab_s rn_cs cls as fundeps method method_ty) = do
 
   -- TODO wtf is this
   return (fc_fam_decls, fc_data_decl, fc_val_bind:[], [], ty_ctx)
-
--- | Check if an instance/class context is ambiguous
-unambiguousCheck :: [RnTyVar] -> [RnTyVar] -> RnClsCs -> TcM ()
-unambiguousCheck bs as cs = do
-  subst <- determinacy as cs
-  unless (bs \\ substDom subst == mempty) $
-    tcFail $ text "unambiguousCheck" <+> colon <+> vcat (punctuate comma
-       [ text "bs" <+> colon <+> ppr bs
-       , text "as" <+> colon <+> ppr as
-       , text "class constraints" <+> colon <+> ppr cs
-       ])
 
 -- | Elaborate a list of annotated dictionary variables to a list of System F term binders.
 elabAnnClsCs :: AnnClsCs -> TcM [(FcTmVar, FcType)]

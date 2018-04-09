@@ -18,7 +18,8 @@ import           Utils.Utils
 import           Utils.Var
 
 import           Control.Monad (forM_, unless, when)
-import           Data.List     ((\\))
+import           Data.Foldable (asum)
+import           Data.List     (nub, (\\))
 import           Data.Monoid
 
 
@@ -27,10 +28,11 @@ class SizeOf a where
   sizeOf :: a -> Int
 
 instance SizeOf (MonoTy a) where
-  sizeOf (TyCon {})      = 1
+  sizeOf TyCon {}        = 1
   sizeOf (TyApp ty1 ty2) = sizeOf ty1 + sizeOf ty2
-  sizeOf (TyVar {})      = 1
-  sizeOf (TyFam {})   = error "TODO"
+  sizeOf TyVar {}        = 1
+  -- Should not occur, only with user-defined type families
+  sizeOf TyFam {}        = error "Conditions: type family found"
 
 instance SizeOf (ClsCt a) where
   sizeOf (ClsCt _ tys) = sum $ sizeOf <$> tys
@@ -43,39 +45,50 @@ class OccOf a t | t -> a where
   occOf :: a -> t -> Int
 
 instance Eq a => OccOf (HsTyVar a) (MonoTy a) where
-  occOf _ (TyCon {})      = 0
+  occOf _ TyCon {}        = 0
   occOf a (TyApp ty1 ty2) = occOf a ty1 + occOf a ty2
   occOf a (TyVar b)       = if a == b then 1 else 0
-  occOf a (TyFam _ tys)  = sum $ occOf a <$> tys
+  occOf a (TyFam _ tys)   = sum $ occOf a <$> tys
 
 instance Eq a => OccOf (HsTyVar a) (ClsCt a) where
   occOf a (ClsCt _cls tys) = sum $ occOf a <$> tys
 
 instance OccOf (HsTyVar Name) CtrScheme where
   occOf a (CtrScheme as cs ct)
-    | a `elem` (labelOf as) = error "TODO"
+    | a `elem` labelOf as = error "Conditions: shadowing (occOf)"
     | otherwise = occOf a ct + sum (occOf a <$> cs)
 
 -- * Termination of Type Inference
 -- ------------------------------------------------------------------------------
 
--- | TODO check superclass relation forms acyclic graph
+-- | Checks if the superclass relation of a class forms an acyclic graph
 cycleCheck :: RnClass -> TcM ()
 cycleCheck = go []
   where
     go checked cls = do
-      when (cls `elem` checked) $ throwErrorM $ text "TODO"
-      super_cs <- (fmap cls_ct_to_cls) <$> lookupClsSuper cls
-      mapM_ (go (cls:checked)) super_cs
+      when (cls `elem` checked) $
+        throwErrorM $
+        ppr cls <+>
+        colon <+>
+        text "The superclass relation of the class does not form an acyclic graph"
+      super_cs <- fmap cls_ct_to_cls <$> lookupClsSuper cls
+      mapM_ (go (cls : checked)) super_cs
     cls_ct_to_cls (ClsCt cls _) = cls
 
--- TODO sizeCheck: sum of all cs?
-termCheckInstance :: CtrScheme -> Bool
-termCheckInstance (CtrScheme as cs ins_head) = occCheck && sizeCheck
+-- | Termination check for a class instance
+termCheckInstance :: CtrScheme -> TcM ()
+termCheckInstance scheme@(CtrScheme as cs ins_head) =
+  unless (occCheck && sizeCheck) $
+  throwErrorM $
+  ppr scheme <+>
+  colon <+>
+  text "The instance declaration does not satisfy the termination conditions"
   where
     occCheck = and [occOf a ct <= occOf a ins_head | a <- labelOf as, ct <- cs]
-    sizeCheck = and [sizeOf ct < sizeOf ins_head | ct <- cs]
+    sizeCheck = sum (sizeOf <$> cs) < sizeOf ins_head
 
+-- | Termination check of a generated axiom
+-- not enforcing this one, will be replaced
 termCheckAxiom :: Axiom -> Bool
 termCheckAxiom (Axiom _g as _f tys ty) = all go (findTyFams ty)
   where
@@ -88,12 +101,34 @@ termCheckAxiom (Axiom _g as _f tys ty) = all go (findTyFams ty)
     findTyFams (TyFam _f tys') = [tys']
     findTyFams TyCon {} = mempty
 
-terminationCheck :: CtrScheme -> Axioms -> TcM ()
-terminationCheck scheme@(CtrScheme _as _cs (ClsCt cls _tys)) axioms = do
-  unless (termCheckInstance scheme) $ throwErrorM $ text "TODO"
-  -- maybe better to put in `generateAxioms`
-  unless (termCheckAxiom `all` axioms) $ throwErrorM $ text "TODO"
-  cycleCheck cls
+-- * Unambiguous instance/class context check
+-- ------------------------------------------------------------------------------
+
+-- | Check if an instance/class context is ambiguous
+unambiguousCheck :: [RnTyVar] -> [RnTyVar] -> RnClsCs -> TcM ()
+unambiguousCheck bs as cs = do
+  subst <- determinacy as cs
+  unless (bs \\ substDom subst == mempty) $
+    throwErrorM $ text "Ambigiuous context" <+> colon <+> vcat (punctuate comma
+         [ text "bs" <+> colon <+> ppr bs
+         , text "as" <+> colon <+> ppr as
+         , text "class constraints" <+> colon <+> ppr cs
+         ])
+
+-- * Overlap Checking
+-- ------------------------------------------------------------------------------
+
+overlapCheck :: Theory -> RnClsCt -> TcM ()
+overlapCheck theory cls_ct@(ClsCt cls1 tys1) =
+  case asum (overlaps <$> theory_schemes theory) of
+    Just msg -> throwErrorM msg
+    Nothing  -> return ()
+  where
+    overlaps (_ :| scheme@(CtrScheme _ _ (ClsCt cls2 tys2)))
+      | cls1 == cls2
+      , Right {} <- unify [] (zipWithExact (:~:) tys1 tys2) =
+        Just $ text "Overlapping instances" <+> colon $$ ppr cls_ct $$ ppr scheme
+      | otherwise = Nothing
 
 -- * Functional Dependency Property
 -- ------------------------------------------------------------------------------
@@ -122,11 +157,10 @@ checkCompat theory (CtrScheme _bs cs (ClsCt cls tys)) = do
                 (substInMonoTy ty_subst (substInMonoTy substi ui0) `eqMonoTy`
                  substInMonoTy ty_subst (substInMonoTy substi' ui0')) $
               throwErrorM $ text "TODO"
-            _ -> return () -- dunno
+            _ -> return ()
       | otherwise = return ()
 
 -- | Check the unambiguous witness condition
--- TODO how to check subst(ui0) independent on order
 checkUnambWitness :: CtrScheme -> TcM ()
 checkUnambWitness (CtrScheme _bs cs (ClsCt cls tys)) = do
   as <- lookupClsParams cls
@@ -135,5 +169,8 @@ checkUnambWitness (CtrScheme _bs cs (ClsCt cls tys)) = do
     let subst = buildSubst (zipExact as tys)
     let ui0:uis = substInMonoTy subst . TyVar <$> ai0 : ais
     det_subst <- determinacy (ftyvsOf uis) cs
-    unless (null (ftyvsOf ui0 \\ substDom det_subst)) $
+    let det_subst_dom = substDom det_subst
+    unless (null (ftyvsOf ui0 \\ det_subst_dom)) $
+      throwErrorM $ text "TODO"
+    unless (length det_subst_dom == length (nub det_subst_dom)) $
       throwErrorM $ text "TODO"

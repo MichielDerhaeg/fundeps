@@ -667,6 +667,7 @@ entail untchs theory wanteds = do
   let flat_solv_ev =
         substTyInEvidence (elabHsTySubst flat_ty) $
         substEvInEvidence flat_ev solv_ev
+  -- TODO apply ty_subst to cls_cs for safety
   return (cls_cs, ty_subst, coToEvSubst co_subst <> flat_solv_ev)
 
 eqCsToSubst :: MonadError CompileError m => [RnTyVar] -> AnnEqCs -> m (HsTySubst, FcCoSubst)
