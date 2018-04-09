@@ -58,6 +58,13 @@ instance OccOf (HsTyVar Name) CtrScheme where
     | a `elem` labelOf as = error "Conditions: shadowing (occOf)"
     | otherwise = occOf a ct + sum (occOf a <$> cs)
 
+-- | Fixed set of variables of a monotype
+fixed :: RnMonoTy -> [RnTyVar]
+fixed (TyVar a)       = [a]
+fixed (TyApp ty1 ty2) = fixed ty1 <> fixed ty2
+fixed TyCon {}        = mempty
+fixed TyFam {}        = mempty
+
 -- * Termination of Type Inference
 -- ------------------------------------------------------------------------------
 
@@ -174,3 +181,14 @@ checkUnambWitness (CtrScheme _bs cs (ClsCt cls tys)) = do
       throwErrorM $ text "TODO"
     unless (length det_subst_dom == length (nub det_subst_dom)) $
       throwErrorM $ text "TODO"
+
+-- * Ambiguous type checking
+-- ------------------------------------------------------------------------------
+
+checkUnambType :: RnPolyTy -> TcM ()
+checkUnambType poly_ty = do
+  let (_, cs, ty) = destructPolyTy poly_ty
+  let fixed_ty_vars = fixed ty
+  det_subst <- determinacy fixed_ty_vars cs
+  unless (null $ ftyvsOf cs \\ substDom det_subst <> fixed_ty_vars) $
+    throwErrorM $ text "Ambiguous type" <+> colon <+> ppr poly_ty
