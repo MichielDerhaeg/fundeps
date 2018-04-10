@@ -56,13 +56,19 @@ buildInitTcEnv pgm (RnEnv _rn_cls_infos dc_infos tc_infos) = do -- GEORGE: Assum
     buildStoreClsInfos (PgmCls  c p) = case c of
       ClsD rn_abs rn_cs rn_cls rn_as rn_fundeps rn_method method_ty -> do
         -- Generate And Store The TyCon Info
-        fc_tc <- FcTC . mkName (mkSym ("T" ++ (show $ symOf rn_cls))) <$> getUniqueM
+        fc_tc <-
+          FcTC . mkName (mkSym ("T" ++ (show $ symOf rn_cls))) <$> getUniqueM
 
         -- Generate And Store The DataCon Info
-        fc_dc  <- FcDC . mkName (mkSym ("K" ++ (show $ symOf rn_cls))) <$> getUniqueM
+        fc_dc  <-
+          FcDC . mkName (mkSym ("K" ++ (show $ symOf rn_cls))) <$> getUniqueM
 
-        fd_fams <- forM (zip [0..] rn_fundeps) $ \(i,_fd) ->
-          HsTF . mkName (mkSym ("F" ++ show (symOf rn_cls) ++ show (i :: Word))) <$> getUniqueM
+        fd_fams <- forM (zip [0..] rn_fundeps) $ \(i,Fundep ais ai0) -> do
+          fd_fam <- HsTF .
+            mkName (mkSym ("F" ++ show (symOf rn_cls) ++ show (i :: Word)))
+            <$> getUniqueM
+          addTyFamInfoTcM fd_fam $ HsTFInfo fd_fam ais (kindOf ai0)
+          return fd_fam
 
         -- Generate And Store The Class Info
         let cls_info =
@@ -420,17 +426,29 @@ elabTermWithSig untchs theory tm poly_ty = do
   let theory' = theory `tExtendGivens`  match_ccs
                        `tExtendGivenCls` given_ccs
   let untouchables = untchs <> labelOf as
-  let wanted_cs =
-        (WantedEqCt <$> (c :| (ty1 :~: ty2)) : wanted_eqs) <> (WantedClsCt <$> wanted_ccs)
-  (residual_cs, ty_subst, ev_subst) <-
-    entail untouchables theory' wanted_cs
+
+  (_, eq_ty_subst, eq_ev_subst) <-
+    entail untouchables theory'
+      (WantedEqCt <$> (c :| ty1 :~: ty2) : wanted_eqs)
+
+  let refined_ccs = substInAnnClsCs eq_ty_subst wanted_ccs
+  det_subst <- determinacy
+    (ftyvsOf ty2)
+    (dropLabel refined_ccs)
+  let det_refined_ccs = substInAnnClsCs det_subst refined_ccs
+
+  (residual_cs, cls_ty_subst, cls_ev_subst) <-
+    entail untouchables theory' (WantedClsCt <$> det_refined_ccs)
+
+  let ty_subst = cls_ty_subst <> det_subst <> eq_ty_subst
+  let ev_subst = cls_ev_subst <> eq_ev_subst
 
   unless (null residual_cs) $
     tcFail
       (text "Failed to resolve constraints" <+>
        colon <+>
        ppr residual_cs $$ text "From" <+>
-       colon <+> ppr theory $$ text "Wanted" <+> colon <+> ppr wanted_cs)
+       colon <+> ppr theory' $$ text "Wanted" <+> colon <+> ppr det_refined_ccs)
 
   dbinds <- elabAnnClsCs given_ccs
   let fc_ty_subst = elabHsTySubst ty_subst
