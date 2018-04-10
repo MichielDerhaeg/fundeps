@@ -182,7 +182,7 @@ generateAxioms scheme@(CtrScheme _as cs (ClsCt cls tys)) = do
 --   b) The method implementation
 --   c) The extended typing environment
 elabClsDecl :: RnClsDecl
-            -> TcM ([FcFamDecl], FcDataDecl, [FcValBind], ProgramTheory, TcCtx)
+            -> TcM ([FcFamDecl], FcDataDecl, FcValBind, TcCtx)
 elabClsDecl (ClsD ab_s rn_cs cls as fundeps method method_ty) = do
   tc <- lookupClsTyCon   cls
   dc <- lookupClsDataCon cls
@@ -269,7 +269,7 @@ elabClsDecl (ClsD ab_s rn_cs cls as fundeps method method_ty) = do
   ty_ctx <- extendCtxM method hs_method_ty ask
 
   -- TODO wtf is this
-  return (fc_fam_decls, fc_data_decl, fc_val_bind:[], [], ty_ctx)
+  return (fc_fam_decls, fc_data_decl, fc_val_bind, ty_ctx)
 
 -- | Elaborate a list of annotated dictionary variables to a list of System F term binders.
 elabAnnClsCs :: AnnClsCs -> TcM [(FcTmVar, FcType)]
@@ -536,15 +536,15 @@ elabProgram theory (PgmExp tm) = do
 
 -- Elaborate a class declaration
 elabProgram theory (PgmCls cls_decl pgm) = do
-  (fc_fam_decls, fc_data_decl, fc_val_binds, ext_theory, ext_ty_env) <-
+  (fc_fam_decls, fc_data_decl, fc_val_bind, ext_ty_env) <-
     elabClsDecl cls_decl
   (fc_pgm, ty, final_theory) <-
-    setCtxM ext_ty_env (elabProgram (theory `tExtendSchemes` ext_theory) pgm)
-  let fc_pgm_data_val_decls =
-        FcPgmDataDecl
-          fc_data_decl
-             (foldl (flip FcPgmValDecl) fc_pgm fc_val_binds)
-  let fc_program = foldr FcPgmFamDecl fc_pgm_data_val_decls fc_fam_decls
+    setCtxM ext_ty_env (elabProgram theory pgm)
+  let fc_program =
+        foldr
+          FcPgmFamDecl
+          (FcPgmDataDecl fc_data_decl (FcPgmValDecl fc_val_bind fc_pgm))
+          fc_fam_decls
   return (fc_program, ty, final_theory)
 
 -- | Elaborate a class instance
