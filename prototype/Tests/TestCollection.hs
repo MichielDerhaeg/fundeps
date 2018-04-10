@@ -9,4 +9,6 @@ instance forall (a :: *). Collection (List a) a where
 singleton2 :: forall (e :: *). forall (c1 :: *). forall (c2 :: *). Collection c2 c1 => Collection c1 e => e -> c2
            = \x. singleton (singleton x)
 
+singleton2NoSig = \x. singleton (singleton x)
+
 \x. x

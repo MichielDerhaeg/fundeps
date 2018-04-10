@@ -30,7 +30,7 @@ import           Control.Monad.Except
 import           Control.Monad.Reader
 import           Control.Monad.State
 import           Control.Monad.Writer
-import           Data.List                ((\\))
+import           Data.List                ((\\), nub)
 
 -- * Create the typechecking environment from the renaming one
 -- ------------------------------------------------------------------------------
@@ -463,31 +463,45 @@ annClsCsToGivenCs :: AnnClsCs -> GivenCs
 annClsCsToGivenCs ann_cs =
   GivenClsCt <$> ((FcTmVar <$> labelOf ann_cs) |: dropLabel ann_cs)
 
--- * Type Inference With Constraint Simplification
+-- * Type Inference Without Signature
 -- ------------------------------------------------------------------------------
 
--- TODO probably wrong
 elabTermSimpl :: Theory -> RnTerm -> TcM (RnPolyTy, FcTerm)
 elabTermSimpl theory tm = do
   -- Infer the type of the expression and the wanted constraints
   ((mono_ty, fc_tm), wanted_eqs, wanted_ccs) <- runGenM $ elabTerm tm
 
-  let wanted_cs = (WantedEqCt <$> wanted_eqs) <> (WantedClsCt <$> wanted_ccs)
-  (residual_cs, ty_subst, ev_subst) <- entail [] theory wanted_cs
+  (_, eq_ty_subst, eq_ev_subst) <-
+    entail mempty theory (WantedEqCt <$> wanted_eqs)
+
+  let refined_ccs = substInAnnClsCs eq_ty_subst wanted_ccs
+  let refined_monoty = substInMonoTy eq_ty_subst mono_ty
+
+  let untchs = nub $ ftyvsOf refined_monoty <> ftyvsOf refined_ccs
+
+  (residual_cs, cls_ty_subst, cls_ev_subst) <-
+    entail untchs theory (WantedClsCt <$> refined_ccs)
+
+  let ty_subst = eq_ty_subst <> cls_ty_subst
+  let ev_subst = eq_ev_subst <> cls_ev_subst
 
   -- Generalize the type
-  let new_mono_ty = substInMonoTy ty_subst mono_ty
+  let new_mono_ty = substInMonoTy cls_ty_subst refined_monoty
   let new_cs      = map dropLabel residual_cs
-  let new_as      = ftyvsOf new_mono_ty
-  let gen_ty      = constructPolyTy (map (\a -> a :| kindOf a) new_as, new_cs, new_mono_ty)
+  let new_as      = untchs
+  let gen_ty      = constructPolyTy ( new_as |: (kindOf <$> new_as)
+                                    , new_cs
+                                    , new_mono_ty
+                                    )
 
   -- Elaborate the term
   let fc_as = map rnTyVarToFcTyVar new_as
-  let refined_fc_tm = substFcTyInTm (elabHsTySubst ty_subst) fc_tm
   dbinds   <- elabAnnClsCs residual_cs
   let full_fc_tm = fcTmTyAbs fc_as $
                      fcTmAbs dbinds $
-                       substEvInTm ev_subst refined_fc_tm
+                       substFcTyInTm (elabHsTySubst ty_subst) $
+                         substEvInTm ev_subst
+                          fc_tm
 
   return (gen_ty, full_fc_tm)
 
