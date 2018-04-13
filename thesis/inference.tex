@@ -1,1 +1,161 @@
 \section{Inference and Elaboration}
+
+\subsection{Source Syntax}
+\begin{figure}[h]
+\begin{align*}
+    a, b &::= \; \langle type \; variable \rangle \\
+    x, f &::= \; \langle term \; variable \rangle \\
+    T    &::= \; \langle type \; constructor \rangle \\
+    K    &::= \; \langle data \; constructor \rangle \\
+    TC   &::= \; \langle class \; constructor \rangle \\
+    \\
+    pgm &::= \overline{decl} &program\\
+    decl &::= cls \mid inst \mid data \mid val &declaration\\
+    cls &::= \textbf{class} \; \forall \overline{a} \overline{b}. \overline{\pi}
+    \Rightarrow TC \mid \overline{fd}^m \textbf{where} \; f :: \sigma &class\\
+    inst &::= \textbf{instance} \; \forall \overline{a} \overline{b}.
+    \overline{\pi} \Rightarrow TC \; \overline{u} \; \textbf{where} \; f = e
+    &instance\\
+    data &::= \textbf{data} \; T \; \overline{a} = \overline{K \; \overline{a}
+    \;} &data\\
+    val &::= x = e \mid x :: \sigma = e &value \; binding\\
+    fd &::= a_1 \mathellipsis a_n \rightarrow a_0 &fundep\\
+    \\
+    e &::= x \mid K \mid e_1 \; e_2 \mid \lambda x. e \mid \textbf{let} \; x =
+    e_2 \; \textbf{in} \; e_2 \\
+    &\quad \mid \textbf{case} \; e_{scr} \; \textbf{of} \; \overline{K \; \overline{x}
+    \rightarrow e} &term \\
+    \\
+    \sigma &::= \rho \mid \forall a. \sigma &polytype \\
+    \rho &::= \tau \mid Q \Rightarrow \rho &qualified \; type \\
+    \tau &::= a \mid T \mid \tau_1 \; \tau_2 \mid F(\overline{\tau})
+         &monotype \\
+    u &::= a \mid T \mid u_1 \; u_2 &type \; pattern \\
+    \\
+    \phi &::= \tau_1 \sim \tau_2 &equality \; constraint \\
+    \pi &::= TC \; \overline{\tau} &class \; constraint \\
+    \\
+    S &::= \forall \overline{a}. \overline{\pi} \Rightarrow \pi &constraint \;
+    scheme
+\end{align*}
+%TODO put scheme and equality constraint with inference syntax?
+\caption{Source syntax}
+\label{source-syntax}
+\end{figure}
+
+\subsection{Constraint Generation}
+\begin{figure}[h]
+% TmVar
+% TODO fix and define P and E
+% TODO include \notin dom
+$$
+\inferrule*[right=TmVar]
+{
+    (x : \forall \overline{a} \overline{b}. \overline{\pi} \Rightarrow \tau) \in
+    \Gamma
+    \\
+    \overline{\alpha},\overline{d} \; \text{fresh}
+    \\
+    \theta = [ \overline{\alpha} \mapsto \overline{a}] \; \dot{} \; det(\overline{\pi},
+    \overline{a})
+}
+{
+    \Gamma \vdash_{tm} x : \theta(\tau) \rightsquigarrow x \; \overline{\alpha}
+    \; \theta(\overline{b}) \; \overline{d} \; | \; \overline{d : \theta(\pi)}; \bullet
+}
+$$
+% TmAbs
+$$
+\inferrule*[right=TmAbs]
+{
+    \Gamma, x : \alpha \vdash_{tm} e : \tau \rightsquigarrow t \; | \; P ; E
+    \\
+    \alpha \; \text{fresh}
+}
+{
+    \Gamma \vdash_{tm} \lambda x. e : ( \alpha \rightarrow \tau) \rightsquigarrow
+    \lambda (x : \alpha) . t \; | \; P ; E
+}
+$$
+% TmApp
+$$
+\inferrule*[right=TmApp]
+{
+    \Gamma \vdash_{tm} e_1 : \tau_1 \; | \; P_1; E_1
+    \\
+    \Gamma \vdash_{tm} e_2 : \tau_2 \; | \; P_2; E_2
+    \\
+    \alpha, c \; \text{fresh}
+    \\
+    P = P_1, P_2
+    \\
+    E = E_1, E_2, c : \tau_1 \sim (\tau_1 \rightarrow \alpha)
+}
+{
+    \Gamma \vdash_{tm} e_1 \; e_2 : a \rightsquigarrow (t_1 \triangleright c) \; t_2
+    \; | \; P ; E
+}
+$$
+% TmLet
+$$
+\inferrule*[right=TmLet]
+{
+    \Gamma, x : \alpha \vdash_{tm} e_1: \tau_1 \rightsquigarrow t_1 \; | \;
+    P_1; E_1
+    \\
+    \Gamma, x : \alpha \vdash_{tm} e_2: \tau_2 \rightsquigarrow t_2 \; | \;
+    P_2; E_2
+    \\
+    \alpha, c \; \text{fresh}
+    \\
+    P = P_1, P_2
+    \\
+    E = E_1, E_2, c : \alpha \sim \tau_1
+}
+{
+    \Gamma \vdash_{tm} (\textbf{let} \; x = e_1 \; \textbf{in} \; e_2) : \tau_2
+    \rightsquigarrow (\textbf{let} \; x : \tau_1 = t_1 \; \textbf{in} \; t_2) \;
+    | \; P ; E
+}
+$$
+% TmCon
+$$
+\inferrule*[right=TmCon]
+{
+    (K : \forall \overline{a} . \tau) \in \Gamma
+    \\
+    \overline{\beta} \; \text{fresh}
+}
+{
+    \Gamma \vdash_{tm} K : [ \overline{\alpha \mapsto \beta}] \tau
+    \rightsquigarrow K \; \overline{\beta} \; | \; \bullet ; \bullet
+}
+$$
+% TmCase
+%TODO split up
+$$
+\inferrule*[right=TmCase]
+{
+    \Gamma \vdash_{tm} e_{scr} : \tau_{scr} \rightsquigarrow t_{scr} \mid P_{scr}; E_{scr}
+    \\
+    TODO(\overline{K}) \rightsquigarrow T \; \overline{b}
+    \\
+    \alpha, c, \overline{c'} \; \text{fresh}
+    \\
+    \overline{(K : \forall \overline{a}. \overline{\tau} \rightarrow T \; \overline{a})}
+    \in \Gamma
+    \\
+    \overline{\Gamma, \overline{x : [\overline{a \mapsto b}]\tau} \vdash_{tm} e
+    : \tau_e \rightsquigarrow t_e \mid P_e; E_e}
+}
+{
+    \Gamma \vdash_{tm} \textbf{case} \; e_{scr} \; \textbf{of} \; \overline{K \;
+    \overline{x} \rightarrow e} : \alpha \\\rightsquigarrow \textbf{case} \;
+    t_{scr} \triangleright c \; \textbf{of} \; \overline{K \; \overline{x} \rightarrow t
+    \triangleright c'} \mid P_{scr}, \overline{P_e}; E_{scr}, \overline{E_e}, c :
+    \tau_{scr} \sim T \; \overline{b}
+}
+$$
+\caption{Term Elaboration and Constraint Generation}
+\end{figure}
+
