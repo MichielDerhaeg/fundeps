@@ -43,6 +43,8 @@
 \label{source-syntax}
 \end{figure}
 
+\include{infer-fundeps}
+
 \subsection{Constraint Generation}
 \begin{figure}[h]
 % TmVar
@@ -56,7 +58,7 @@ $$
     \\
     \overline{\alpha},\overline{d} \; \text{fresh}
     \\
-    \theta = [ \overline{\alpha} \mapsto \overline{a}] \; \dot{} \; det(\overline{\pi},
+    \theta = [ \overline{\alpha} \mapsto \overline{a}] \; \cdot \; det(\overline{\pi},
     \overline{a})
 }
 {
@@ -132,30 +134,161 @@ $$
 }
 $$
 % TmCase
-%TODO split up
 $$
 \inferrule*[right=TmCase]
 {
     \Gamma \vdash_{tm} e_{scr} : \tau_{scr} \rightsquigarrow t_{scr} \mid P_{scr}; E_{scr}
     \\
-    TODO(\overline{K}) \rightsquigarrow T \; \overline{b}
+    \alpha, \overline{\beta}, c, \overline{c'} \; \text{fresh}
     \\
-    \alpha, c, \overline{c'} \; \text{fresh}
-    \\
-    \overline{(K : \forall \overline{a}. \overline{\tau} \rightarrow T \; \overline{a})}
+    (K_i : \forall \overline{a}. \overline{\tau}^i \rightarrow T \; \overline{a})
     \in \Gamma
     \\
-    \overline{\Gamma, \overline{x : [\overline{a \mapsto b}]\tau} \vdash_{tm} e
-    : \tau_e \rightsquigarrow t_e \mid P_e; E_e}
+    \Gamma, \overline{x_i : [\overline{a \mapsto \beta}]\tau_e_i} \vdash_{tm} e_i
+    : \tau_{e_i} \rightsquigarrow t_{e_i} \mid P_{e_i}; E_{e_i}
 }
 {
     \Gamma \vdash_{tm} \textbf{case} \; e_{scr} \; \textbf{of} \; \overline{K \;
-    \overline{x} \rightarrow e} : \alpha \\\rightsquigarrow \textbf{case} \;
+    \overline{x} \rightarrow e} : \alpha \rightsquigarrow \textbf{case} \;
     t_{scr} \triangleright c \; \textbf{of} \; \overline{K \; \overline{x} \rightarrow t
-    \triangleright c'} \mid P_{scr}, \overline{P_e}; E_{scr}, \overline{E_e}, c :
-    \tau_{scr} \sim T \; \overline{b}
+    \triangleright c'} \\
+    \mid P_{scr}, \overline{P_e}; E_{scr}, \overline{E_e}, c : \tau_{scr} \sim T
+    \; \overline{\beta}, \overline{c' : \tau_e \sim \alpha}
 }
 $$
 \caption{Term Elaboration and Constraint Generation}
 \end{figure}
 
+\begin{figure}
+\begin{mathpar}
+% TODO kinds
+% TODO too huge
+\inferrule*[right=Class]
+{
+    unambig(\overline{b}, \overline{a}, \overline{\pi}) % TODO conditions seperately?
+    \\
+    \overline{c}, \overline{d}, x \; \text{fresh}
+    \\
+    \Gamma, \overline{a} \vdash_{ty} \sigma \rightsquigarrow v
+    \\
+    \overline{\Gamma, \overline{a}, \overline{b} \vdash_{cc} \pi
+    \rightsquigarrow \tau}
+    \\
+    fd_i \equiv \overline{a}^{i_n} \rightarrow a_{i_0}
+    \\
+    \psi_i = F_{TC_i}(\overline{a}^{i_n}) \sim a_{i_0}
+    \\
+    \sigma \equiv \forall \overline{a'}. \overline{\pi'} \Rightarrow \tau'
+    \\
+    \sigma_{real} = \forall \overline{a} \overline{a'}. \; TC \; \overline{a} \Rightarrow
+    \overline{\pi'} \Rightarrow \tau'
+    \\
+    \Gamma \vdash_{ty} \sigma_{real} \rightsquigarrow v_{real}
+    \\
+    t_f = \Lambda \overline{a} \overline{a'}. \lambda(d : T_{TC} \; \overline{a}). \textbf{case}
+    \; d \; \textbf{of} \; K_{TC} \; \overline{b} \; (\overline{c : \psi}) \;
+    (\overline{d : \pi}) \; (x : v) \rightarrow x \; \overline{a'}
+    \\
+    \overline{decl_c} =
+    [\textbf{data} \; T_{TC} \; \overline{a} \;
+    \textbf{where} \lbrace K_{TC} \colon \forall \overline{a} \overline{b}. \;
+    \overline{\psi} \Rightarrow \overline{\tau} \rightarrow v \rightarrow T_{TC}
+    \; \overline{a} \rbrace
+    , \overline{\textbf{type} \, F_{TC_i} \; \overline{a}^{i_n}}^m
+    , \textbf{let} \; f : v_{real} = t_f
+    ]
+}
+{
+    \Gamma \vdash_{cls} \textbf{class} \; \forall \overline{a} \overline{b} .
+    \overline{\pi} \rightarrow TC \; \overline{a} \mid \overline{fd}^m
+    \textbf{where} \; f :: \sigma \rightsquigarrow \overline{decl_c} \mid [ f :
+    \sigma_{real} ]
+}
+\end{mathpar}
+\caption{Class Elaboration}
+\end{figure}
+
+\begin{figure}
+\begin{mathpar}
+% TODO match contexts
+\inferrule*[right=Instance]
+{
+    d_I, \overline{d} \; \text{fresh}
+    \\
+    P_I = P, P_{ax}, \overline{d : \pi}, P_E
+    \\
+    \Gamma_I = \Gamma, \overline{a}, \overline{b}, \Gamma_E
+    \\
+    S_I = \forall \overline{a} \overline{b}. \; \overline{\pi} \Rightarrow TC \;
+    \overline{u}
+    \\
+    \overline{\Gamma, \overline{a}, \overline{b} \vdash_{cc} \pi
+    \rightsquigarrow \tau}
+    \\
+    (f : \forall \overline{a'} \overline{b'}. \; TC \; \overline{a'}
+    \Rightarrow \overline{\pi'} \Rightarrow \tau) \in \Gamma
+    \\
+    P_I, d_I : S_I, \Gamma_I \vdash_{tm} e : [\overline{a'} \mapsto % TODO subsumption
+    \overline{u}] \forall \overline{b'}. \; \overline{\pi'} \Rightarrow \tau
+    \rightsquigarrow t
+    \\
+    S_I \hookrightarrow P_{ax}
+    \\
+    P_I \vdash_{sc} TC \; \overline{u} \rightsquigarrow
+    (\overline{\tau_b}, \overline{\gamma_c}, \overline{t_d})
+}
+{
+    P; \Gamma \vdash_{inst} \textbf{instance} \; \forall \overline{a}
+    \overline{b}. \overline{\pi} \Rightarrow TC \; \overline{u} \;
+    \textbf{where} \; f = e \rightsquigarrow TODO
+}
+\end{mathpar}
+\caption{Instance Elaboration}
+\end{figure}
+
+\begin{figure}
+\begin{mathpar}
+\inferrule*[right=SC]
+{
+    \textbf{class} \; \forall \overline{a} \overline{b} \Rightarrow TC \;
+    \overline{a} \mid \overline{fd}^m
+    \\
+    \overline{c}, \overline{d} \; \text{fresh}
+    \\
+    \theta = [\overline{a} \mapsto \overline{u}] \cdot det(\overline{a},
+    \overline{\pi})
+    \\
+    P_{int} \vdash_{E} (\overline{d : \theta(\pi)}), (\overline{c :
+    \theta(F_{TC_i}(\overline{a}^{i_n}) \sim a_{i_0})}) \rightsquigarrow
+    \bullet, \theta_s, \eta_s
+}
+{
+    P_{int} \vdash_{SC} (TC \; \overline{u}) \rightsquigarrow
+    (\theta_s(\theta(\overline{b})), \eta_s(\overline{c}), \eta_s(\overline{d}))
+}
+\end{mathpar}
+\caption{Superclass Entailment}
+\end{figure}
+
+\begin{figure}
+% TODO mention or put in rule how to get instatiated fundep types
+\begin{mathpar}
+\inferrule*[right=AxiomGen]
+{
+    (fd_i \equiv \overline{a}^{i_n} \rightarrow a_{i_0}) \in (\overline{fd}^m
+    \in TC)
+    \\
+    \overline{g} \; \text{fresh}
+    \\
+    \theta_i = det(fv(\overline{u}^{i_n}), \overline{\pi})
+    \\
+    fv(\theta_i(u_{i_0})) \subseteq fv(\overline{u}^{i_n})
+}
+{
+    (\forall \overline{a} \overline{b}. \; \overline{\pi} \Rightarrow TC \;
+    \overline{u}) \hookrightarrow \overline{g_i(fv(\overline{u}^{i_n})) :
+    F_{TC_i}(\overline{u}^{i_n}) \sim \theta_i(u_{i_0})}^m
+}
+\end{mathpar}
+\caption{Axiom Generation}
+\end{figure}

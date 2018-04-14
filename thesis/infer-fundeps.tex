@@ -1,0 +1,41 @@
+\subsection{Inference with Functional Dependencies}
+\begin{figure}
+\begin{mathpar}
+\inferrule*[right=$\text{Step}_D$]
+{
+    TC \; \overline{u} \in \overline {\pi}
+    \\
+    (fd_i \equiv \overline{a}^{i_n} \rightarrow a_{i_0}) \in (\overline{fd}^m
+    \in TC)
+    \\
+    fv(u_{i_0}) \nsubseteq \overline{a} \cup dom(\theta)
+    \\
+    fv(\overline{u}^{i_n}) \subseteq \overline{a} \cup dom(\theta)
+    \\
+    \overline{b; f_{proj}} = project(u_{i_0})
+}
+{
+    \overline{a}; \overline{\pi} \vdash_{D} \theta \rightsquigarrow
+    [b_j \mapsto f_{proj_j}(F_{TC_i}(\theta(\overline{u}^{i_n})))] \cdot \theta
+}
+\end{mathpar}
+\caption{Determinacy Relation}
+\end{figure}
+
+\begin{figure}
+\begin{mathpar}
+\inferrule*[right=ProjVar]
+{
+}
+{
+    project(a) = a;\bullet
+}
+\inferrule*[right=ProjApp]
+{
+}
+{
+    project(T \; \overline{u}) = Proj^T_i(project(u_i))
+}
+\end{mathpar}
+\caption{Type Constructor Projection Functions}
+\end{figure}
