@@ -160,6 +160,57 @@ $$
 \end{figure}
 
 \begin{figure}
+$$
+\mathbb{E} ::= \square \mid \textbf{case} \; d \; \textbf{of} \; K \;
+\overline{a} \rightarrow \mathbb{E}
+$$
+\begin{mathpar}
+\inferrule*[right=Hole]
+{
+}
+{
+    \Gamma \vdash_{\mathbb{E}} \bullet \rightsquigarrow \square \mid \bullet
+    \mid \Gamma
+}
+% TODO kind b'
+\inferrule*[right=MCtx]
+{
+    \textbf{class} \; \forall \overline{a} \overline{b}. \overline{\pi}
+    \Rightarrow TC \; \overline{a} \mid \overline{fd} \; \textbf{where} \; f ::
+    \sigma
+    \\
+    fd_i \equiv \overline{a}^{i_n} \rightarrow a_{i_0}
+    \\
+    \overline{d}, \overline{c}, \overline{b'}, f' \; \text{fresh}
+    \\
+    \overline{\Gamma \vdash_{cc} \pi \rightsquigarrow \tau}
+    \\
+    \Gamma \vdash_{ty} \sigma \rightsquigarrow v
+    \\
+    \phi_i = F_{TC_i}(\overline{a}^{i_n}) \sim a_{i_0}
+    \\
+    \overline{\Gamma \vdash_{eq} \phi \rightsquigarrow \psi}
+    \\
+    \theta = [ \overline{a} \mapsto \overline{u}, \overline{b} \mapsto
+    \overline{b'}]
+    \\
+    \Gamma,f': \theta(\sigma), \overline{b'} \vdash_{\mathbb{E}} \overline{d : \theta(\pi)}, \mathcal{P}
+    \rightsquigarrow \mathbb{E}' \mid \mathcal{C}_g' \mid \Gamma'
+    \\
+    \mathbb{E} = \textbf{case} \; d \; \textbf{of} \; K_{TC} \; \overline{b'} \;
+    (\overline{c : \theta(\psi)}) \; (\overline{d : \theta(\tau)}) \; (f' :
+    \theta(v)) \rightarrow \mathbb{E}'
+}
+{
+    \Gamma \vdash_{\mathbb{E}} (d : TC \; \overline{u}),\mathcal{P}
+    \rightsquigarrow \mathbb{E} \mid \overline{c : \theta(\phi)}, \overline{d :
+    \theta(\pi)}, \mathcal{C}_g' \mid \Gamma'
+}
+\end{mathpar}
+\caption{Match Contexts}
+\end{figure}
+
+\begin{figure}
 \begin{mathpar}
 % TODO kinds
 % TODO too huge
