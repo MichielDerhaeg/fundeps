@@ -261,14 +261,16 @@ $$
 
 \begin{figure}
 \begin{mathpar}
-% TODO match contexts
 \inferrule*[right=Instance]
 {
     d_I, \overline{d} \; \text{fresh}
     \\
-    P_I = P, P_{ax}, \overline{d : \pi}, P_E
+    \Gamma \vdash_{\mathbb{E}} (\overline{d : \pi}) \rightsquigarrow \mathbb{E}
+    \mid P_{\mathbb{E}} \mid \Gamma_{\mathbb{E}}
     \\
-    \Gamma_I = \Gamma, \overline{a}, \overline{b}, \Gamma_E
+    P_I = P, P_{ax}, \overline{d : \pi}, P_{\mathbb{E}}
+    \\
+    \Gamma_I = \Gamma_{\mathbb{E}}, \overline{a}, \overline{b}
     \\
     S_I = \forall \overline{a} \overline{b}. \; \overline{\pi} \Rightarrow TC \;
     \overline{u}
@@ -279,8 +281,8 @@ $$
     (f : \forall \overline{a'} \overline{b'}. \; TC \; \overline{a'}
     \Rightarrow \overline{\pi'} \Rightarrow \tau) \in \Gamma
     \\
-    P_I, d_I : S_I, \Gamma_I \vdash_{tm} e : [\overline{a'} \mapsto % TODO subsumption
-    \overline{u}] \forall \overline{b'}. \; \overline{\pi'} \Rightarrow \tau
+    P_I, d_I : S_I; \Gamma_I \vdash_{tm} e : [\overline{a'} \mapsto
+    \overline{u}] (\forall \overline{b'}. \; \overline{\pi'} \Rightarrow \tau)
     \rightsquigarrow t
     \\
     S_I \hookrightarrow P_{ax}
@@ -291,7 +293,12 @@ $$
 {
     P; \Gamma \vdash_{inst} \textbf{instance} \; \forall \overline{a}
     \overline{b}. \overline{\pi} \Rightarrow TC \; \overline{u} \;
-    \textbf{where} \; f = e \rightsquigarrow TODO
+    \textbf{where} \; f = e \\
+    \rightsquigarrow [ \overline{\textbf{axiom} \; P_{ax}} , d_I :: \forall
+    \overline{a} \overline{b}. \;  \overline{\tau} \rightarrow T_{TC} \;
+    \overline {u} = \Lambda \overline{a} \overline{b}. \; \lambda\overline{(d :
+    \tau)}. \; \mathbb{E}[K_{TC} \; \overline{u} \; \overline{\tau}_b \;
+    \overline{\gamma}_c \; \overline{t}_d \; t]] \mid [P_{ax}, d_I : S_I]
 }
 \end{mathpar}
 \caption{Instance Elaboration}
