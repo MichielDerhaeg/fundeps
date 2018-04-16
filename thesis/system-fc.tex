@@ -64,114 +64,340 @@ witnesses the equality between these types.
 % TERM
 $$
 %TmCast
-\inferrule
+\inferrule*[right=TmCast]
 {P;\Gamma \vdash_{tm} t : v_1 \\ P;\Gamma \vdash_{co} \gamma : v_1 \sim v_2}
 {P;\Gamma \vdash_{tm} t \triangleright \gamma : v_2}
-\; \textsc{TmCast}
 $$
 $$
 %TmVar
-\inferrule
+\inferrule*[right=TmVar]
 {x : v \in \Gamma}
 {\Gamma \vdash_{tm} x : v}
-\; \textsc{TmVar}
 $$
 $$
 %TmCon
-\inferrule
+\inferrule*[right=TmCon]
 {K : v \in \Gamma}
 {\Gamma \vdash_{tm} K : v}
-\; \textsc{TmCon}
 $$
 $$
 %TmAbs
-\inferrule
-{x \notin \Gamma \qquad \Gamma \vdash_{ty} v_1 : \star \qquad \Gamma , x : v_1
+\inferrule*[right=TmAbs]
+{x \notin dom(\Gamma) \qquad \Gamma \vdash_{ty} v_1 : \star \qquad \Gamma , x : v_1
 \vdash_{tm} t : v_2}
 {\Gamma \vdash_{tm} \lambda(x : v_1). t : v_1 \rightarrow v_2}
-\; \textsc{TmAbs}
 $$
 $$
 %TmApp
-\inferrule
+\inferrule*[right=TmApp]
 {\Gamma \vdash_{tm} t_1 : v_2 \rightarrow v_1 \qquad \Gamma \vdash_{tm} t_2 : v_2 }
 {\Gamma \vdash_{tm} t_1 \; t_2 : v_1}
-\; \textsc{TmApp}
 $$
 $$
 %TmTyApp
-\inferrule
+\inferrule*[right=TmTyApp]
 {\Gamma \vdash_{tm} t : \forall (a : k). v \qquad \Gamma \vdash_{ty} v_1 : k}
 {\Gamma \vdash_{tm} t \; v_1 : [a \mapsto v_1]v}
-\; \textsc{TmTyApp}
 $$
 $$
 %TmTyAbs
-\inferrule
-{a : k \notin \Gamma \qquad \Gamma , a : k \vdash_{tm} t : v}
+\inferrule*[right=TmTyAbs]
+{a \notin dom(\Gamma) \\ \Gamma , a : k \vdash_{tm} t : v}
 {\Gamma \vdash_{tm} \Lambda(a : k). t: \forall(a : k). v}
-\; \textsc{TmTyAbs}
 $$
+$$
+%TmCoAbs
+\inferrule*[right=TmCoAbs]
+{
+    c \notin dom(\Gamma)
+    \\
+    \Gamma \vdash_{pr} \psi
+    \\
+    \Gamma, c : \psi \vdash_{tm} t : v
+}
+{
+    \Gamma \vdash_{ŧm} \Lambda(c : \psi). \; t : \psi \Rightarrow v
+}
+$$
+$$
+%TmCoApp
+\inferrule*[right=TmCoApp]
+{
+    \Gamma \vdash_{tm} t : \psi \Rightarrow v
+    \\
+    \Gamma \vdash_{co} \gamma : \psi
+}
+{
+    \Gamma \vdash_{tm} t \; \gamma : v
+}
+$$
+$$
+%TmLet
+\inferrule*[right=TmLet]
+{
+    x \notin dom(\Gamma)
+    \\
+    \Gamma, x : v_1 \vdash_{tm} t_1 : v_1
+    \\
+    \Gamma \vdash_{ty} v_1 : \star
+    \\
+    \Gamma, x : v_1 \vdash_{tm} t_2 : v_2
+}
+{
+    \Gamma \vdash_{tm} (\textbf{let} \; x : v_1 = t_1 \; \textbf{in} \; t_2) : v_2
+}
+$$
+$$
+%TmCase
+% TODO mention v_scr is input for alt rule
+\inferrule*[right=TmCase]
+{
+    \Gamma \vdash_{tm} t_{scr} : v_{scr}
+    \\
+    \overline{\Gamma \vdash_{alt} p \rightarrow t : v_{scr} \rightarrow v}
+}
+{
+    \Gamma \vdash_{tm} \textbf{case} \; t_{scr} \; \textbf{of} \; \overline{p
+    \rightarrow t} : v
+}
+$$
+$$
+%Alt
+\inferrule*[right=Alt]
+{
+    (K : \forall (\overline{a : k}) (\overline{b' : k'}) . \; \overline{\psi} \Rightarrow
+    \overline{v} \rightarrow T \; \overline{a}) \in \Gamma
+    \\
+    \theta = [\overline{a} \mapsto \overline{v}_a, \overline{b'} \mapsto
+    \overline{b}]
+    \\
+    \overline{b}, \overline{c}, \overline{x} \notin dom(\Gamma)
+    \\
+    \Gamma, (\overline{b : k'}), (\overline{c : \theta(\psi)}), (\overline{x :
+    \theta(v)}) \vdash_{tm} t : v_2
+}
+{
+    \Gamma \vdash_{alt} K \; (\overline{b : k'}) \; (\overline{c : \theta(\psi)})
+    \; (\overline{x : \theta(v)}) \rightarrow t : T \; \overline{v}_a
+    \rightarrow v_2
+}
+$$
+\caption{System $F_C$ Term Typing}
+\end{figure}
+
+\begin{figure}
 % TYPES
 $$
 %TyVar
-\inferrule
+\inferrule*[right=Tyvar]
 {a : k \in \Gamma}
 {\Gamma \vdash_{ty} a : k}
-\; \textsc{TyVar}
 $$
 $$
 %TyQual TODO prop psi?
-\inferrule
+\inferrule*[right=TyQual]
 {\Gamma \vdash_{pr} \psi \qquad \Gamma \vdash_{ty} v : k}
 {\Gamma \vdash_{ty} \psi \Rightarrow v : k}
-\; \textsc{TyQual}
 $$
 $$
 %TyCon
-\inferrule
+\inferrule*[right=TyCon]
 {T : k \in \Gamma}
 {\Gamma \vdash_{ty} T : k}
-\; \textsc{TyCon}
 $$
 $$
 %TyApp
-\inferrule
+\inferrule*[right=TyApp]
 {\Gamma \vdash_{ty} v_1 : k1 \rightarrow k_2 \qquad \Gamma \vdash_{ty} v_2 : k_1}
 {\Gamma \vdash_{ty} v_1 v_2 : k_2}
-\; \textsc{TyApp}
 $$
 $$
 %TyAll
-\inferrule
+\inferrule*[right=TyAll]
 {\Gamma , a \vdash_{ty} v : \star \qquad a \notin fv(\Gamma)}
 {\Gamma \vdash_{ty} \forall a . v : \star}
-\; \textsc{TyAll}
 $$
 $$
 %TyFam TODO no theory(P) in my fc juist environment \Gamma ?
-\inferrule
+\inferrule*[right=TyFam]
 {F(\overline{k}) : k' \in \Gamma \qquad \Gamma \vdash_{ty} v_i : k_i}
 {\Gamma \vdash_{ty} F(\overline{v}) : k'}
-\; \textsc{TyFam}
 $$
+\caption{System $F_C$ Type Well-formedness}
+\end{figure}
+\begin{figure}
 $$
 %Prop
-\inferrule
+\inferrule*[right=Prop]
 {\Gamma \vdash_{ty} v_1 : k \qquad \Gamma \vdash_{ty} v_2 : k}
 {\Gamma \vdash_{pr} v_1 \sim v_2}
-\; \textsc{Prop}
+$$
+\end{figure}
+\begin{figure}
+$$
+%CoVar
+\inferrule*[right=CoVar]
+{
+    (c : \psi) \in \Gamma
+}
+{
+    \Gamma \vdash_{co} c : \psi
+}
 $$
 $$
 %CoAx
-\inferrule
-{g (\overline{a : k}) : v_1 \sim v_2 \in \Gamma \qquad \overline{\Gamma
-\vdash_{ty} v : k}}
-{\Gamma \vdash_{co} g \; \overline{v} : [\overline{a} \mapsto \overline{v}]v_1
-\sim [\overline{a} \mapsto \overline{v}]v_2}
+\inferrule*[right=CoAx]
+{
+    (g \; (\overline{a : k}) : v_1 \sim v_2) \in \Gamma
+    \\ 
+    \overline{\Gamma \vdash_{ty} v : k}
+}
+{
+    \Gamma \vdash_{co} g \; \overline{v} : [\overline{a} \mapsto \overline{v}]v_1
+    \sim [\overline{a} \mapsto \overline{v}]v_2
+}
 \; \textsc{CoAx}
 $$
-\caption{System $F_C$ typing rules}
+$$
+%CoRefl
+\inferrule*[right=CoRefl]
+{
+    \Gamma \vdash_{ty} v : k
+}
+{
+    \Gamma \vdash_{co} \langle v \rangle : v \sim v
+}
+$$
+$$
+%CoSym
+\inferrule*[right=CoSym]
+{
+    \Gamma \vdash_{co} \gamma : v_1 \sim v_2
+}
+{
+    \Gamma \vdash_{co} \text{sym} \; \gamma : v_2 \sim v_1
+}
+$$
+$$
+%CoTrans
+% TODO semicolon
+\inferrule*[right=CoTrans]
+{
+    \Gamma \vdash_{co} \gamma_1 : v_1 \sim v_2
+    \\
+    \Gamma \vdash_{co} \gamma_2 : v_2 \sim v_3
+}
+{
+    \Gamma \vdash_{co} \gamma_1 ; \gamma_2 : v_1 \sim v_3
+}
+$$
+$$
+%CoApp
+\inferrule*[right=CoApp]
+{
+    \Gamma \vdash_{ty} v_1 \; v_3 : k
+    \\
+    \Gamma \vdash_{co} \gamma_1 : v_1 \sim v_2
+    \\
+    \Gamma \vdash_{co} \gamma_2 : v_3 \sim v_4
+}
+{
+    \Gamma \vdash_{co} \gamma_1 \; \gamma_2 : v_1 \; v_3 \sim v_2 \; v_4
+}
+$$
+$$
+%CoLeft
+\inferrule*[right=CoLeft]
+{
+    \Gamma \vdash_{co} \gamma : v_1 \; v_2 \sim v_3 \; v_4
+}
+{
+    \Gamma \vdash_{co} \text{left} \; \gamma : v_1 \sim v_3
+}
+$$
+$$
+%CoRight
+\inferrule*[right=CoRight]
+{
+    \Gamma \vdash_{co} \gamma : v_1 \; v_2 \sim v_3 \; v_4
+}
+{
+    \Gamma \vdash_{co} \text{right} \; \gamma : v_2 \sim v_4
+}
+$$
+$$
+%CoFam
+\inferrule*[right=CoFam]
+{
+    (F : \overline{k} \rightarrow k') \in \Gamma
+    \\
+    \overline{\Gamma \vdash_{co} \gamma : v_1 \sim v_2}
+    \\
+    \overline{\Gamma \vdash_{ty} v_1 : k}
+}
+{
+    \Gamma \vdash_{co} F(\overline{\gamma}) : F(\overline{v_1}) \sim
+    F(\overline{v_2})
+}
+$$
+$$
+%CoAbs
+\inferrule*[right=CoAbs]
+{
+    \Gamma, a : k \vdash_{co} \gamma : v_1 \sim v_2
+    \\
+    \Gamma, a : k \vdash_{ty} v_1 : k_1
+    \\
+    (a : k) \notin dom(\Gamma)
+}
+{
+    \Gamma \vdash_{co} \forall a. \; \gamma : \forall. a \; v_1 \sim \forall. a
+    \; v_2
+}
+$$
+$$
+%CoInst
+\inferrule*[right=CoInst]
+{
+    \Gamma \vdash_{co} \forall a. \; \gamma_1 : \forall. a \; v_1 \sim \forall. a
+    \; v_2
+    \\
+    \Gamma \vdash_{co} \gamma_2 : v_3 \sim v_4
+    \\
+    \Gamma \vdash_{ty} v3 : k
+}
+{
+    \Gamma \vdash_{co} \gamma_1 [\gamma_2] : [a \mapsto v_3]v_1 \sim [a \mapsto
+    v_4]v_2
+}
+$$
+$$
+%CoQual
+\inferrule*[right=CoQual]
+{
+    \Gamma \vdash_{pr} \psi
+    \\
+    \Gamma \vdash_{co} \gamma : v_1 \sim v_2
+}
+{
+    \Gamma \vdash_{co} \psi \Rightarrow \gamma : (\psi \Rightarrow v_1) \sim
+    (\psi \Rightarrow v_2)
+}
+$$
+$$
+%CoQual
+\inferrule*[right=CoQInst]
+{
+    \Gamma \vdash_{co} \gamma_1 : (\psi \Rightarrow v_1) \sim
+    (\psi \Rightarrow v_2)
+    \\
+    \Gamma \vdash_{co} \gamma_2 : \psi
+}
+{
+    \Gamma \vdash_{co} \gamma_1 @ \gamma_2 : v_1 \sim v_2
+}
+$$
+\caption{System $F_C$ Coercion Typing}
 \label{fc-type}
 \end{figure}
 
