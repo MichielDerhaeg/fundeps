@@ -69,5 +69,10 @@ instance Functor List where
 test :: List Bool -> List (Maybe Bool)
      = \l. fmap Just l
 
+map :: forall (a :: *). forall (b :: *). (a -> b) -> List a -> List b
+    = \f. \l. case l of
+      Nil -> Nil
+      Cons x xs -> Cons (f x) (map f xs)
+
 let id = \x. x in
   \a. \b . eq (fmap id a) b

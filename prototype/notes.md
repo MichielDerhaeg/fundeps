@@ -36,6 +36,12 @@ Notes
   * refine residual class constraints with the resulting type substitution
     after OutSideIn(X), might not be required but let's be sure.
 
+  * clean out old definitions like type constraints and unification vars
+
+  * remove program expression from haskell and fc
+
+  * parse quantified type contexts better
+
 Substitution type class map
 ---------------------------
 

@@ -120,6 +120,7 @@ dictDestruction ((d :| ClsCt cls tys):cs) = do
   ClassInfo ab_s sc _cls as fds fams _m mty _tc dc <-
     lookupTcEnvM tc_env_cls_info cls
 
+  -- TODO abs_s = bs
   let bs = ab_s \\ as
   (bs', bs_subst) <- freshenRnTyVars bs
   let subst = bs_subst <> (buildSubst $ zipExact as tys)
@@ -355,6 +356,7 @@ elabInsDecl theory (InsD as ins_cs cls typats method method_tm) = do
                         `tExtendGivenCls` ann_ins_cs
                         `tExtendGivens`   match_cs
 
+  -- TODO change order
   (fc_exis_tys, fc_tms, fc_cos) <- entailSuperClass (labelOf as) i_theory head_ct
 
   let ext_theory = theory `tExtendAxioms`  axioms
@@ -514,7 +516,7 @@ elabValBind theory (ValBind a m_ty tm) = do
   (ty,fc_tm) <- case m_ty of
     Nothing -> elabTermSimpl theory tm
     Just ty -> do
-      fc_tm <- elabTermWithSig [] theory tm ty
+      fc_tm <- extendCtxM a ty $ elabTermWithSig mempty theory tm ty
       return (ty,fc_tm)
   ctx <- ask
   fc_ty <- elabPolyTy ty

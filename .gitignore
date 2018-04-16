@@ -3,6 +3,8 @@ tags
 
 prototype/dist/
 prototype/dist-newstyle/
+prototype/cabal.project.local*
+prototype/result
 
 *.aux
 *.fdb_latexmk
