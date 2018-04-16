@@ -10,6 +10,8 @@ System $F_C$ extends polymorphic lambda calculus with explicit type equality
 witnesses, or proofs, called coercions. And with type-level functions and
 top-level axioms which are their instantiations.
 
+% Discuss other additions other additions to System F like datatypes
+
 \subsection{Syntax}
 
 %TODO highlight new stuff
@@ -59,11 +61,115 @@ witnesses the equality between these types.
 \subsection{Typing}
 % TODO other typing rules
 \begin{figure}[h]
+% TERM
 $$
+%TmCast
 \inferrule
 {P;\Gamma \vdash_{tm} t : v_1 \\ P;\Gamma \vdash_{co} \gamma : v_1 \sim v_2}
-{P;\Gamma \vdash_{tm} t \triangleright \gamma v_2}
-\; (\textsc{TmCast})
+{P;\Gamma \vdash_{tm} t \triangleright \gamma : v_2}
+\; \textsc{TmCast}
+$$
+$$
+%TmVar
+\inferrule
+{x : v \in \Gamma}
+{\Gamma \vdash_{tm} x : v}
+\; \textsc{TmVar}
+$$
+$$
+%TmCon
+\inferrule
+{K : v \in \Gamma}
+{\Gamma \vdash_{tm} K : v}
+\; \textsc{TmCon}
+$$
+$$
+%TmAbs
+\inferrule
+{x \notin \Gamma \qquad \Gamma \vdash_{ty} v_1 : \star \qquad \Gamma , x : v_1
+\vdash_{tm} t : v_2}
+{\Gamma \vdash_{tm} \lambda(x : v_1). t : v_1 \rightarrow v_2}
+\; \textsc{TmAbs}
+$$
+$$
+%TmApp
+\inferrule
+{\Gamma \vdash_{tm} t_1 : v_2 \rightarrow v_1 \qquad \Gamma \vdash_{tm} t_2 : v_2 }
+{\Gamma \vdash_{tm} t_1 \; t_2 : v_1}
+\; \textsc{TmApp}
+$$
+$$
+%TmTyApp
+\inferrule
+{\Gamma \vdash_{tm} t : \forall (a : k). v \qquad \Gamma \vdash_{ty} v_1 : k}
+{\Gamma \vdash_{tm} t \; v_1 : [a \mapsto v_1]v}
+\; \textsc{TmTyApp}
+$$
+$$
+%TmTyAbs
+\inferrule
+{a : k \notin \Gamma \qquad \Gamma , a : k \vdash_{tm} t : v}
+{\Gamma \vdash_{tm} \Lambda(a : k). t: \forall(a : k). v}
+\; \textsc{TmTyAbs}
+$$
+% TYPES
+$$
+%TyVar
+\inferrule
+{a : k \in \Gamma}
+{\Gamma \vdash_{ty} a : k}
+\; \textsc{TyVar}
+$$
+$$
+%TyQual TODO prop psi?
+\inferrule
+{\Gamma \vdash_{pr} \psi \qquad \Gamma \vdash_{ty} v : k}
+{\Gamma \vdash_{ty} \psi \Rightarrow v : k}
+\; \textsc{TyQual}
+$$
+$$
+%TyCon
+\inferrule
+{T : k \in \Gamma}
+{\Gamma \vdash_{ty} T : k}
+\; \textsc{TyCon}
+$$
+$$
+%TyApp
+\inferrule
+{\Gamma \vdash_{ty} v_1 : k1 \rightarrow k_2 \qquad \Gamma \vdash_{ty} v_2 : k_1}
+{\Gamma \vdash_{ty} v_1 v_2 : k_2}
+\; \textsc{TyApp}
+$$
+$$
+%TyAll
+\inferrule
+{\Gamma , a \vdash_{ty} v : \star \qquad a \notin fv(\Gamma)}
+{\Gamma \vdash_{ty} \forall a . v : \star}
+\; \textsc{TyAll}
+$$
+$$
+%TyFam TODO no theory(P) in my fc juist environment \Gamma ?
+\inferrule
+{F(\overline{k}) : k' \in \Gamma \qquad \Gamma \vdash_{ty} v_i : k_i}
+{\Gamma \vdash_{ty} F(\overline{v}) : k'}
+\; \textsc{TyFam}
+$$
+$$
+%Prop
+\inferrule
+{\Gamma \vdash_{ty} v_1 : k \qquad \Gamma \vdash_{ty} v_2 : k}
+{\Gamma \vdash_{pr} v_1 \sim v_2}
+\; \textsc{Prop}
+$$
+$$
+%CoAx
+\inferrule
+{g (\overline{a : k}) : v_1 \sim v_2 \in \Gamma \qquad \overline{\Gamma
+\vdash_{ty} v : k}}
+{\Gamma \vdash_{co} g \; \overline{v} : [\overline{a} \mapsto \overline{v}]v_1
+\sim [\overline{a} \mapsto \overline{v}]v_2}
+\; \textsc{CoAx}
 $$
 \caption{System $F_C$ typing rules}
 \label{fc-type}
