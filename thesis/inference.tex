@@ -159,11 +159,65 @@ $$
 \caption{Term Elaboration and Constraint Generation}
 \end{figure}
 
-\begin{figure}
+\subsection{Match Contexts}
+% TODO rename dictDestruction? no longer defined in terms of dictionary brings
+% everything context related in scope
+% Explain type class dictionaries
+
+This procedure deals with bringing relevant structures in scope related
+to type class contexts. It brings super classes in scope and type equalities
+introduced by functional dependencies.
+\begin{verbatim}
+class Eq a => Ord a
+sort :: Ord a => [a] -> [a]
+\end{verbatim}
+In this example, \texttt{Eq} is a superclass of \texttt{Ord}. Because having
+implemented an instance for \texttt{Eq} is a prerequisite for \texttt{Ord}, we
+should read the implication arrow in the class declaration in the other
+direction. If we know that there is an instance for \texttt{Ord}, then we can
+assume there is one for \texttt{Eq} as well. We could add the \texttt{Ord a =>
+Eq a} implication to the program theory as is. But this implication would
+always overlap with those from the instance declarations which would make
+solving type class constraints non-deterministic.
+
+The solution is to preemptively, additionally add the instantiated super class
+constraints from the context as given class constraints. And we do the same with
+the superclasses of the superclasses effectively computing the transitive
+closure of the superclass relation. This implies that this procedure can only
+terminate when the superclass relation is represented by a directed acyclic
+graph.
+
+In the presense of functional dependencies type class contexts also bring type
+equalities into scope for each functional dependency of the class.
+\begin{verbatim}
+class C a b | a -> b
+f :: C Int b => b -> Bool
+\end{verbatim}
+In this example, the constraint \texttt{C Int b} and the functional dependency
+of the class \texttt{C} would give rise to the given equality constraint
+\texttt{$F_C$(Int) $\sim$ b}.
+
+Like most procedures in this chapter, it's result has a System $F_C$
+counterpart. It generates Match Contexts, which are case expressions with a
+single match and a hole.
+\begin{figure}[h]
 $$
 \mathbb{E} ::= \square \mid \textbf{case} \; d \; \textbf{of} \; K \;
-\overline{a} \rightarrow \mathbb{E}
+(\overline{b : k}) \; (\overline{c : \psi}) \; (\overline{x : v}) \; \rightarrow
+\mathbb{E}
 $$
+\end{figure}
+We denote match contexts with \mathbb{E} and $\mathbb{E}[t]$ is the match
+context with the hole replaced with the term $t$.
+
+For every class constraint, we recursively pattern match on each corresponding
+type class dictionary, bringing the super class dictionaries and FD-induced
+coercions and existential type variables in scope.
+
+Lastly, it provides an extended typing environment containing the exposed type
+variables and type class methods.
+
+\begin{figure}
 \begin{mathpar}
 \inferrule*[right=Hole]
 {
@@ -172,6 +226,7 @@ $$
     \Gamma \vdash_{\mathbb{E}} \bullet \rightsquigarrow \square \mid \bullet
     \mid \Gamma
 }
+\\
 % TODO kind b'
 \inferrule*[right=MCtx]
 {
