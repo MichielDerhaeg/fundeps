@@ -271,8 +271,23 @@ elabTmVar x = do
   _           <- extendTcCtxTysM bs $ liftGenM (wfElabClsCs cs)
   (ds,ann_cs) <- liftGenM (annotateClsCs (substInClsCs subst cs))
 
+  -- TODO fix for superclasses
+  fd_eq_cs <- liftGenM . fmap concat $
+    forM ann_cs $ \(_d :| ClsCt cls tys) -> do
+      fds <- lookupClsFundeps cls
+      fams <- lookupClsFDFams cls
+      as' <- lookupClsParams cls
+      let fd_subst = buildSubst (zipExact as' tys)
+      forM (zipExact fams fds) $ \(fam, Fundep ais ai0) -> do
+        c <- freshFcCoVar
+        return $
+          c :| TyFam fam (substInMonoTy fd_subst . TyVar <$> ais) :~:
+          substInMonoTy fd_subst (TyVar ai0)
+  storeEqCs  fd_eq_cs
+
   -- store the constraints
   storeClsCs ann_cs
+
 
   -- System F representation
   let fc_ds = map FcTmVar ds

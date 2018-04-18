@@ -246,8 +246,9 @@ interactWanted (WantedEqCt  (c :| ct1@(TyVar a :~: ty)))
     return
       [WantedEqCt (c :| ct1), WantedClsCt (d' :| sub_cls)]
 interactWanted (WantedEqCt (c1 :| ct1@(TyFam _f1 _tys1 :~: ty1)))
-               (WantedEqCt (c2 :|     (TyFam _f2 _tys2 :~: ty2))) = do
+               (WantedEqCt (c2 :|     (TyFam _f2 _tys2 :~: ty2)))
   -- FEQFEQ
+  | eqMonoTy ty1 ty2 = do
     c2' <- freshFcCoVar
     addSolvCoSubst (c2 |-> FcCoTrans (FcCoVar c1) (FcCoVar c2'))
     return
@@ -533,7 +534,7 @@ ctxList _ [] = Nothing
 topreactWantedCls :: Theory -> WantedCt -> MaybeT EntailM WantedCs
 topreactWantedCls theory (WantedClsCt (d :| ClsCt cls tys)) = do
   untchs <- getUntchs
-  fmap WantedClsCt <$> go untchs (theory_schemes theory)
+  fmap WantedClsCt <$> go (untchs <> ftyvsOf tys) (theory_schemes theory)
   where
     go _ [] = empty
     go untchs ((d' :| CtrScheme bs cls_cs (ClsCt cls' tys')):schemes)
@@ -556,7 +557,7 @@ topreactWantedCls _ _ = empty
 topreactWantedEq :: Theory -> WantedCt -> MaybeT EntailM WantedCs
 topreactWantedEq theory (WantedEqCt (c :| TyFam f tys :~: ty)) = do
   untchs <- getUntchs
-  fmap WantedEqCt <$> go untchs (theory_axioms theory)
+  fmap WantedEqCt <$> go (untchs <> ftyvsOf (ty:tys)) (theory_axioms theory)
   where
     go _ [] = empty
     go untchs (Axiom g as f' tys' ty':axioms)
@@ -662,13 +663,14 @@ entail untchs theory wanteds = do
   let (eq_cs, cls_cs) =
         (substInAnnEqCs flat_ty *** substInAnnClsCs flat_ty) $
         partitionWantedCs residuals
-  -- TODO distinct will be enforced by `unify` i think
   (ty_subst, co_subst) <- eqCsToSubst untchs eq_cs
   let flat_solv_ev =
         substTyInEvidence (elabHsTySubst flat_ty) $
         substEvInEvidence flat_ev solv_ev
-  -- TODO apply ty_subst to cls_cs for safety
-  return (cls_cs, ty_subst, coToEvSubst co_subst <> flat_solv_ev)
+  return
+    ( substInAnnClsCs ty_subst cls_cs
+    , ty_subst
+    , coToEvSubst co_subst <> flat_solv_ev)
 
 eqCsToSubst :: MonadError CompileError m => [RnTyVar] -> AnnEqCs -> m (HsTySubst, FcCoSubst)
 eqCsToSubst _untchs [] = return mempty

@@ -5,6 +5,8 @@
 
 module Frontend.HsTypeChecker where
 
+import Debug.Trace
+
 import           Frontend.Conditions
 import           Frontend.HsConstraintGen
 import           Frontend.HsEntail
@@ -429,28 +431,16 @@ elabTermWithSig untchs theory tm poly_ty = do
                        `tExtendGivenCls` given_ccs
   let untouchables = untchs <> labelOf as
 
-  (_, eq_ty_subst, eq_ev_subst) <-
-    entail untouchables theory'
-      (WantedEqCt <$> (c :| ty1 :~: ty2) : wanted_eqs)
-
-  let refined_ccs = substInAnnClsCs eq_ty_subst wanted_ccs
-  det_subst <- determinacy
-    (ftyvsOf ty2)
-    (dropLabel refined_ccs)
-  let det_refined_ccs = substInAnnClsCs det_subst refined_ccs
-
-  (residual_cs, cls_ty_subst, cls_ev_subst) <-
-    entail untouchables theory' (WantedClsCt <$> det_refined_ccs)
-
-  let ty_subst = cls_ty_subst <> det_subst <> eq_ty_subst
-  let ev_subst = cls_ev_subst <> eq_ev_subst
+  (residual_cs, ty_subst, ev_subst) <- entail untouchables theory' $
+    (WantedClsCt <$> wanted_ccs) <>
+    (WantedEqCt <$> wanted_eqs <> [c :| ty1 :~: ty2])
 
   unless (null residual_cs) $
     tcFail
       (text "Failed to resolve constraints" <+>
        colon <+>
        ppr residual_cs $$ text "From" <+>
-       colon <+> ppr theory' $$ text "Wanted" <+> colon <+> ppr det_refined_ccs)
+       colon <+> ppr theory' $$ text "Wanted" <+> colon <+> ppr wanted_ccs)
 
   dbinds <- elabAnnClsCs given_ccs
   let fc_ty_subst = elabHsTySubst ty_subst
@@ -487,10 +477,12 @@ elabTermSimpl theory tm = do
   let ty_subst = eq_ty_subst <> cls_ty_subst
   let ev_subst = eq_ev_subst <> cls_ev_subst
 
+  traceM $ renderWithColor $ ppr ty_subst
+
   -- Generalize the type
   let new_mono_ty = substInMonoTy cls_ty_subst refined_monoty
   let new_cs      = map dropLabel residual_cs
-  let new_as      = untchs
+  let new_as      = nub $ ftyvsOf new_mono_ty <> ftyvsOf residual_cs
   let gen_ty      = constructPolyTy ( new_as |: (kindOf <$> new_as)
                                     , new_cs
                                     , new_mono_ty
