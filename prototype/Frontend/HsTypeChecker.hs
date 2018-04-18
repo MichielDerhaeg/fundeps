@@ -5,8 +5,6 @@
 
 module Frontend.HsTypeChecker where
 
-import Debug.Trace
-
 import           Frontend.Conditions
 import           Frontend.HsConstraintGen
 import           Frontend.HsEntail
@@ -476,8 +474,6 @@ elabTermSimpl theory tm = do
 
   let ty_subst = eq_ty_subst <> cls_ty_subst
   let ev_subst = eq_ev_subst <> cls_ev_subst
-
-  traceM $ renderWithColor $ ppr ty_subst
 
   -- Generalize the type
   let new_mono_ty = substInMonoTy cls_ty_subst refined_monoty
