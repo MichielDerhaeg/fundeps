@@ -436,7 +436,7 @@ instance PrettyPrint FcTerm where
   ppr (FcTmPropAbs c psi tm) =
     parens (ppr c <+> colon <+> ppr psi) <> dot <+> ppr tm
   ppr (FcTmCoApp tm co) = ppr tm <+> ppr co
-  ppr (FcTmCast tm co) = ppr tm <+> text ">" <+> ppr co
+  ppr (FcTmCast tm co) = ppr tm <+> text "|>" <+> ppr co
 
   needsParens (FcTmApp     {}) = True
   needsParens (FcTmTyApp   {}) = True
