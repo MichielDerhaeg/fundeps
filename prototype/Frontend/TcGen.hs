@@ -1,19 +1,18 @@
-{-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE FlexibleContexts           #-}
-{-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
-module Frontend.HsConstraintGen where
+module Frontend.TcGen where
 
-import           Frontend.HsTcMonad
+import           Frontend.FunDep
 import           Frontend.HsTypes
+import           Frontend.TcMonad
+import           Frontend.TcType
 
 import           Backend.FcTypes
 
 import           Utils.Annotated
 import           Utils.Ctx
 import           Utils.Errors
-import           Utils.FreeVars
 import           Utils.Kind
 import           Utils.PrettyPrint    hiding ((<>))
 import           Utils.Substitution
@@ -24,127 +23,8 @@ import           Utils.Var
 import           Control.Monad.Except
 import           Control.Monad.Reader
 import           Control.Monad.State
-import           Control.Monad.Writer
-import           Data.Either          (partitionEithers)
 import           Data.List            (intersect, (\\))
-
--- * Type and Constraint Elaboration (With Well-formedness (well-scopedness) Check)
--- ------------------------------------------------------------------------------
-
--- | Elaborate a monotype
-wfElabMonoTy :: RnMonoTy -> TcM (Kind, FcType)
-wfElabMonoTy (TyCon tc) = do
-  kind  <- tyConKind tc
-  fc_tc <- lookupTyCon tc
-  return (kind, FcTyCon fc_tc)
-wfElabMonoTy (TyApp ty1 ty2) = do
-  (k1, fc_ty1) <- wfElabMonoTy ty1
-  (k2, fc_ty2) <- wfElabMonoTy ty2
-  case k1 of
-    KArr k1a k1b
-      | k1a == k2 -> return (k1b, FcTyApp fc_ty1 fc_ty2)
-    _other_kind   -> tcFail (text "wfElabMonoTy" <+> colon <+> text "TyApp")
-wfElabMonoTy (TyVar v) = do
-  kind <- lookupCtxM v
-  return (kind, rnTyVarToFcType v)
-wfElabMonoTy (TyFam f tys) = do
-  HsTFInfo _f as k <- lookupTyFamInfo f
-  (ks, fc_tys) <- unzip <$> mapM wfElabMonoTy tys
-  unless ((kindOf <$> as) == ks) $
-    tcFail (text "wfElabMonoTy: kind mismatch (TyFam)")
-  return (k, FcTyFam (rnTyFamToFcFam f) fc_tys)
-
--- | Elaborate a qualified type
-wfElabQualTy :: RnQualTy -> TcM (Kind, FcType)
-wfElabQualTy (QMono ty)    = wfElabMonoTy ty
-wfElabQualTy (QQual ct ty) = do
-  fc_ty1         <- wfElabClsCt ct
-  (kind, fc_ty2) <- wfElabQualTy ty
-  unless (kind == KStar) $
-    tcFail (text "wfElabQualTy" <+> colon <+> text "QQual")
-  return (KStar, mkFcArrowTy fc_ty1 fc_ty2)
-
--- | Elaborate a class constraint
-wfElabClsCt :: RnClsCt -> TcM FcType
-wfElabClsCt (ClsCt cls tys) = do
-  (kinds, fc_tys) <- unzip <$> mapM wfElabMonoTy tys
-  clsArgKinds cls >>= \case
-    ks | ks == kinds -> do
-      fc_tc <- lookupClsTyCon cls
-      return (fcTyApp (FcTyCon fc_tc) fc_tys)
-    _other_kind -> tcFail (text "wfElabClsCt")
-
--- | Elaborate a list of class constraints
-wfElabClsCs :: RnClsCs -> TcM [FcType]
-wfElabClsCs = mapM wfElabClsCt
-
--- | Elaborate an equality constraint
-wfElabEqCt :: EqCt -> TcM FcProp
-wfElabEqCt (ty1 :~: ty2) = do
-  (k1, fc_ty1) <- wfElabMonoTy ty1
-  (k2, fc_ty2) <- wfElabMonoTy ty2
-  unless (k1 == k2) $
-    throwErrorM $ text "wfElabEqCt" <+> colon <+> text "kind mismatch"
-  return $ FcProp fc_ty1 fc_ty2
-
--- | Elaborate a polytype
-wfElabPolyTy :: RnPolyTy -> TcM (Kind, FcType)
-wfElabPolyTy (PQual ty) = wfElabQualTy ty
-wfElabPolyTy (PPoly (a :| _) ty) = do
-  notInCtxM a {- GEORGE: ensure is unbound -}
-  (kind, fc_ty) <- extendCtxM a (kindOf a) (wfElabPolyTy ty)
-  unless (kind == KStar) $
-    tcFail (text "wfElabPolyTy" <+> colon <+> text "PPoly")
-  return (KStar, FcTyAbs (rnTyVarToFcTyVar a) fc_ty)
-
--- * Type and Constraint Elaboration (Without Well-scopedness Check)
--- ------------------------------------------------------------------------------
-
--- | Elaborate a monotype
-elabMonoTy :: RnMonoTy -> FcType
-elabMonoTy (TyCon tc)      = FcTyCon $ rnTyConToFcTyCon tc
-elabMonoTy (TyApp ty1 ty2) = FcTyApp (elabMonoTy ty1) (elabMonoTy ty2)
-elabMonoTy (TyVar v)       = rnTyVarToFcType v
-elabMonoTy (TyFam f tys)   = FcTyFam (rnTyFamToFcFam f) (elabMonoTy <$> tys)
-
--- | Elaborate a class constaint
-elabClsCt :: RnClsCt -> TcM FcType
-elabClsCt (ClsCt cls tys) = do
-  fc_tc <- lookupClsTyCon cls
-  return $ fcTyApp (FcTyCon fc_tc) (elabMonoTy <$> tys)
-
--- | Elaborate class constraints
-elabClsCs :: RnClsCs -> TcM [FcType]
-elabClsCs = mapM elabClsCt
-
--- | Elaborate an equality constraint
-elabEqCt :: EqCt -> FcProp
-elabEqCt (ty1 :~: ty2) = FcProp (elabMonoTy ty1) (elabMonoTy ty2)
-
--- | Elaborate a class constaint scheme
-elabScheme :: CtrScheme -> TcM FcType
-elabScheme (CtrScheme as cs cls_ct) = elabAbs as $ elabImpls cs $ elabClsCt cls_ct
-  where
-    elabImpls (ct1:cs') fc = mkFcArrowTy <$> elabClsCt ct1 <*> elabImpls cs' fc
-    elabImpls [] fc = fc
-    elabAbs ((a :| _):as') fc = FcTyAbs (rnTyVarToFcTyVar a) <$> elabAbs as' fc
-    elabAbs [] fc = fc
-
--- | Elaborate a polytype
-elabPolyTy :: RnPolyTy -> TcM FcType
-elabPolyTy (PQual ty) = elabQualTy ty
-elabPolyTy (PPoly (a :| _) ty) =
-  FcTyAbs (rnTyVarToFcTyVar a) <$> elabPolyTy ty
-
--- | Elaborate a qualified type
-elabQualTy :: RnQualTy -> TcM FcType
-elabQualTy (QQual cls_ct ty) =
-  mkFcArrowTy <$> elabClsCt cls_ct <*> elabQualTy ty
-elabQualTy (QMono ty) = return $ elabMonoTy ty
-
--- | Convert a source type substitution to a System F type substitution
-elabHsTySubst :: HsTySubst -> FcTySubst
-elabHsTySubst =  mapSub rnTyVarToFcTyVar elabMonoTy
+import           Data.Monoid          ((<>))
 
 -- * Constraint store
 -- ------------------------------------------------------------------------------
@@ -360,83 +240,3 @@ inferTyConTy alts = do
   as <- lookupTyConArgs tc
   bs <- mapM (freshRnTyVar . kindOf) as
   return (mkTyConApp tc (TyVar <$> bs), bs)
-
--- | Covert a renamed type variable to a System F type
-rnTyVarToFcType :: RnTyVar -> FcType
-rnTyVarToFcType = FcTyVar . rnTyVarToFcTyVar
-
--- | Covert a list of renamed type variables to a list of System F types
-rnTyVarsToFcTypes :: [RnTyVar] -> [FcType]
-rnTyVarsToFcTypes = map rnTyVarToFcType
-
--- | Covert a renamed term variable to a System F term
-rnTmVarToFcTerm :: RnTmVar -> FcTerm
-rnTmVarToFcTerm = FcTmVar . rnTmVarToFcTmVar
-
--- | TODO better place?
-rnTyFamToFcFam :: RnTyFam -> FcTyFam
-rnTyFamToFcFam (HsTF name) = FcFV name
-
-rnTyConToFcTyCon :: RnTyCon -> FcTyCon
-rnTyConToFcTyCon (HsTC name) = FcTC name
-
--- * Determinacy
--- ------------------------------------------------------------------------------
-
--- | Determinacy relation
-determinacy :: [RnTyVar] -> RnClsCs -> TcM HsTySubst
-determinacy as cls_cs = go cls_cs mempty
-  where
-    go cs ty_subst = do
-      (residual_cs, new_substs) <-
-        partitionEithers <$> mapM (det_step ty_subst) cs
-      if null new_substs then return ty_subst else
-        go residual_cs (ty_subst <> mconcat new_substs)
-
-    det_step ty_subst ct@(ClsCt cls tys) = do
-      as' <- lookupClsParams cls
-      fds <- lookupClsFundeps cls
-      fd_fams <- lookupClsFDFams cls
-      let cls_var_subst = buildSubst $ zipExact as' tys
-      new_subst <- fmap mconcat $
-        forM (zip fds fd_fams) $ \(Fundep bs b0, fam) -> do
-          let (t0:ts) = substInMonoTy cls_var_subst . TyVar <$> (b0 : bs)
-          let refined_ts = substInMonoTy ty_subst <$> ts
-          let as_dom = as <> substDom ty_subst
-          if any (`elem` as_dom) (ftyvsOf t0) ||
-             not (all (`elem` as_dom) $ ftyvsOf ts)
-            then return mempty
-            else mconcat . map (\(fv, proj) -> fv |-> proj (TyFam fam refined_ts)) <$>
-                 projection t0
-      return $ if nullSubst new_subst then Left ct else Right new_subst
-
--- | Gather type variables and compute their corresponding projection function
-projection :: RnMonoTy -> TcM [(RnTyVar, RnMonoTy -> RnMonoTy)]
-projection = go id
-  where
-    go f ty =
-      case ty of
-        app@(TyApp _ _) -> do
-          (tc, tys) <- destructTyApp app
-          ty_fams <- lookupTyConProj tc
-          concat <$>
-            mapM
-              (\(ty_fam, app_ty) -> go (\x -> f (TyFam ty_fam [x])) app_ty)
-              (zip ty_fams tys)
-        TyVar a   -> return [(a, f)]
-        TyCon _   -> return []
-        TyFam _ _ -> tf_error
-
-    destructTyApp (TyApp ty1 ty2) = do
-      (tc, tys) <- destructTyApp ty1
-      return (tc, tys ++ [ty2])
-    destructTyApp (TyCon tc) = return (tc, [])
-    destructTyApp TyFam {} = tf_error
-    destructTyApp (TyVar _a) =
-      throwErrorM $
-      text "projection" <+>
-      colon <+> text "Type variable applications are not yet supported"
-
-    tf_error =
-      throwErrorM $
-      text "projection" <+> colon <+> text "encountered type family"

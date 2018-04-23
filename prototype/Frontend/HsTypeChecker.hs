@@ -1,16 +1,15 @@
-{-# LANGUAGE FlexibleInstances          #-}
-{-# LANGUAGE FlexibleContexts           #-}
-{-# LANGUAGE LambdaCase                 #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-} -- George says: God I hate this flag
+{-# LANGUAGE LambdaCase #-}
 
 module Frontend.HsTypeChecker where
 
-import           Frontend.Conditions
-import           Frontend.HsConstraintGen
-import           Frontend.HsEntail
+import           Frontend.FunDep
 import           Frontend.HsRenamer
-import           Frontend.HsTcMonad
 import           Frontend.HsTypes
+import           Frontend.TcConditions
+import           Frontend.TcEntail
+import           Frontend.TcGen
+import           Frontend.TcMonad
+import           Frontend.TcType
 
 import           Backend.FcTypes
 
@@ -29,8 +28,8 @@ import           Utils.Var
 import           Control.Monad.Except
 import           Control.Monad.Reader
 import           Control.Monad.State
-import           Control.Monad.Writer
-import           Data.List                ((\\), nub)
+import           Data.List            (nub, (\\))
+import           Data.Monoid          ((<>))
 
 -- * Create the typechecking environment from the renaming one
 -- ------------------------------------------------------------------------------

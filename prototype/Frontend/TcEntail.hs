@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase       #-}
 
-module Frontend.HsEntail
+module Frontend.TcEntail
   ( entail
   , WantedCs
   , WantedCt (..)
@@ -15,16 +15,19 @@ module Frontend.HsEntail
   , doesNotOccurIn
   ) where
 
-import           Frontend.HsConstraintGen
-import           Frontend.HsTcMonad
 import           Frontend.HsTypes
+import           Frontend.TcGen
+import           Frontend.TcMonad
+import           Frontend.TcUnify
+import           Frontend.TcType
 
 import           Backend.FcTypes
 
+import           Utils.Alternative
 import           Utils.Annotated
 import           Utils.Errors
 import           Utils.FreeVars
-import           Utils.PrettyPrint  hiding ((<>), empty)
+import           Utils.PrettyPrint  hiding (empty, (<>))
 import           Utils.Substitution
 import           Utils.Utils
 import           Utils.Var
@@ -79,46 +82,6 @@ addSolvCoSubst = addSolvEvSubst . coToEvSubst
 addSolvTmSubst :: MonadState EntailState m => FcTmSubst -> m ()
 addSolvTmSubst = addSolvEvSubst . tmToEvSubst
 
--- * Type Unification
--- ------------------------------------------------------------------------------
-
--- | Type Unification. The first argument are the untouchables (rigid) variables.
-unify :: MonadError CompileError m => [RnTyVar] -> EqCs -> m HsTySubst
-unify _untchs [] = return mempty
-unify  untchs eqs
-  | Just ((subst1, eqs'), eqs'') <- tryRule one_step eqs
-  = do subst2 <- unify untchs (substInEqCs subst1 (eqs' ++ eqs''))
-       return (subst2 <> subst1)
-  | otherwise = tcFail $ vcat [ text "Unification failed."
-                              , text "Residual constraints" <+> colon <+> ppr eqs
-                              , text "Untouchables"         <+> colon <+> ppr untchs ]
-  where
-    one_step :: EqCt -> Maybe (HsTySubst, EqCs)
-    one_step (TyVar v1 :~: TyVar v2)
-      | v1 == v2 = Just (mempty, [])
-    one_step (TyVar v :~: ty)
-      | v `notElem` untchs, v `doesNotOccurIn` ty = Just (v |-> ty, [])
-    one_step (ty :~: TyVar v)
-      | v `notElem` untchs, v `doesNotOccurIn` ty = Just (v |-> ty, [])
-    one_step (_ :~: TyVar _) = Nothing
-    one_step (TyVar _ :~: _) = Nothing
-    one_step (TyCon tc1 :~: TyCon tc2)
-      | tc1 == tc2 = Just (mempty, [])
-      | otherwise  = Nothing
-    one_step (TyApp ty1 ty2 :~: TyApp ty3 ty4)
-      = Just (mempty, [ty1 :~: ty3, ty2 :~: ty4])
-    one_step (TyCon {} :~: TyApp {}) = Nothing
-    one_step (TyApp {} :~: TyCon {}) = Nothing
-    one_step (TyFam {} :~: _) = Nothing
-    one_step (_ :~: TyFam {}) = Nothing
-
--- | Occurs check.
---   Returns `True` if the given variable does not occur in the given type.
-doesNotOccurIn :: RnTyVar -> RnMonoTy -> Bool
-doesNotOccurIn _ TyCon {}        = True
-doesNotOccurIn a (TyApp ty1 ty2) = a `doesNotOccurIn` ty1 && a `doesNotOccurIn` ty2
-doesNotOccurIn a (TyVar b)       = a /= b
-doesNotOccurIn a (TyFam _ tys)   = (a `doesNotOccurIn`) `all` tys
 -- | Substitute an equality within a type and generate a coercion.
 -- This is weird, type type signature could be more precise.
 -- Instead of returning what we passed and throwing it away.
@@ -586,17 +549,6 @@ topreactGiven theory (GivenEqCt (co :| TyFam f tys :~: ty)) = do
 
 -- We don't need a class case here
 topreactGiven _ _ = empty
-
-exhaust :: (Alternative m, Monad m) => (a -> m [a]) -> [a] -> m [a]
-exhaust f xs = do
-  (output, rest) <- tryRule f xs
-  let new_xs = output <> rest
-  exhaust f new_xs <|> pure new_xs
-
-tryRule :: Alternative f => (a -> f b) -> [a] -> f (b, [a])
-tryRule _f []     =  empty
-tryRule f (x:xs)  =  flip (,) xs  <$>         f x
-                 <|> second (x :) <$> tryRule f xs
 
 -- order matters in interaction rules, hence the `flip`
 tryRuleSquared :: Alternative f => (a -> a -> f b) -> [a] -> f (b, [a])

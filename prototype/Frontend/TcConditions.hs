@@ -1,13 +1,12 @@
 {-# LANGUAGE FlexibleInstances      #-}
-{-# LANGUAGE FlexibleContexts       #-}
 {-# LANGUAGE FunctionalDependencies #-}
 
-module Frontend.Conditions where
+module Frontend.TcConditions where
 
-import           Frontend.HsConstraintGen
-import           Frontend.HsEntail
-import           Frontend.HsTcMonad
+import           Frontend.FunDep
 import           Frontend.HsTypes
+import           Frontend.TcEntail
+import           Frontend.TcMonad
 
 import           Utils.Annotated
 import           Utils.Errors

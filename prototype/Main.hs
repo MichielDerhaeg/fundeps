@@ -5,18 +5,18 @@ module Main
   , runTest
   ) where
 
-import           Frontend.HsParser        (hsParse)
-import           Frontend.HsRenamer       (hsRename)
-import           Frontend.HsTypeChecker   (hsElaborate)
+import           Frontend.HsParser      (hsParse)
+import           Frontend.HsRenamer     (hsRename)
+import           Frontend.HsTypeChecker (hsElaborate)
 
-import           Backend.CoercionSimplify (fcSimplify)
-import           Backend.FcTypeChecker    (fcTypeCheck)
+import           Backend.FcSimplify     (fcSimplify)
+import           Backend.FcTypeChecker  (fcTypeCheck)
 
 import           Utils.Errors
 import           Utils.PrettyPrint
-import           Utils.Unique             (newUniqueSupply)
+import           Utils.Unique           (newUniqueSupply)
 
-import           System.Environment       (getArgs, getProgName)
+import           System.Environment     (getArgs, getProgName)
 
 main :: IO ()
 main =

@@ -13,15 +13,19 @@ executable prototype
                      , transformers
   other-modules:       Backend.FcTypeChecker
                      , Backend.FcTypes
-                     , Backend.CoercionSimplify
+                     , Backend.FcSimplify
+                     , Frontend.FunDep
                      , Frontend.HsParser
                      , Frontend.HsRenamer
                      , Frontend.HsTypeChecker
                      , Frontend.HsTypes
-                     , Frontend.HsEntail
-                     , Frontend.HsTcMonad
-                     , Frontend.HsConstraintGen
-                     , Frontend.Conditions
+                     , Frontend.TcConditions
+                     , Frontend.TcEntail
+                     , Frontend.TcGen
+                     , Frontend.TcMonad
+                     , Frontend.TcType
+                     , Frontend.TcUnify
+                     , Utils.Alternative
                      , Utils.Annotated
                      , Utils.AssocList
                      , Utils.Ctx

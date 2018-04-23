@@ -1,11 +1,13 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase       #-}
 
-module Backend.CoercionSimplify
+module Backend.FcSimplify
   ( fcSimplify
   ) where
 
 import           Backend.FcTypes
+
+import           Utils.Alternative
 import           Utils.Annotated
 import           Utils.AssocList
 import           Utils.Ctx
@@ -146,33 +148,6 @@ simplifyCoercion = go
     go (FcCoQInst co1 co2) = doAlt2 FcCoQInst
       go co1
       go co2
-
-doAlt2 :: Alternative f => (a -> b -> c) -> (a -> f a) -> a -> (b -> f b) -> b -> f c
-doAlt2 pat f1 x1 f2 x2 =  pat <$>   f1 x1 <*> pure x2
-                      <|> pat <$> pure x1 <*>   f2 x2
-
-doAlt3 ::
-     Alternative f
-  => (a -> b -> c -> d)
-  -> (a -> f a)
-  -> a
-  -> (b -> f b)
-  -> b
-  -> (c -> f c)
-  -> c
-  -> f d
-doAlt3 pat f1 x1 f2 x2 f3 x3 =  pat <$>   f1 x1 <*> pure x2 <*> pure x3
-                            <|> pat <$> pure x1 <*>   f2 x2 <*> pure x3
-                            <|> pat <$> pure x1 <*> pure x2 <*>   f3 x3
-
-doAltList :: Alternative f => (a -> f a) -> [a] -> f ([a])
-doAltList _f []     = empty
-doAltList  f (x:xs) = doAlt2 (:) f x (doAltList f) xs
-
-keep :: (Alternative m, Monad m) => (a -> m a) -> a -> m a
-keep f x = do
-  x' <- f x
-  keep f x' <|> pure x'
 
 newtype SimplEnv = SimplEnv { unSimplEnv :: AssocList FcAxVar FcAxiomInfo }
 

@@ -2,7 +2,7 @@
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE LambdaCase                 #-}
 
-module Frontend.HsTcMonad where
+module Frontend.TcMonad where
 
 import           Frontend.HsTypes
 
