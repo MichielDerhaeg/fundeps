@@ -410,6 +410,7 @@ tcCoercion (FcCoFam f crcs) = do
   (tys1, tys2) <- unzip . (fmap propToTuple) <$> mapM tcCoercion crcs
   ks1 <- mapM tcType tys1
   ks2 <- mapM tcType tys2
+  -- TODO check fam arg kinds?
   unless (ks1 == ks2) $
     fcFail $ text "FcCoFam" <+> colon <+> text "kind mismatch"
   return $ FcProp (FcTyFam f tys1) (FcTyFam f tys2)
