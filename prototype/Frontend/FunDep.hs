@@ -42,27 +42,24 @@ determinacy as cls_cs = go cls_cs mempty
           if any (`elem` as_dom) (ftyvsOf t0) ||
              not (all (`elem` as_dom) $ ftyvsOf ts)
             then return mempty
-            else mconcat . map (\(fv, proj) -> fv |-> proj (TyFam fam refined_ts)) <$>
-                 projection t0
+            else projection t0 (TyFam fam refined_ts)
       return $ if nullSubst new_subst then Left ct else Right new_subst
 
--- | Gather type variables and compute their corresponding projection function
-projection :: RnMonoTy -> TcM [(RnTyVar, RnMonoTy -> RnMonoTy)]
-projection = go id
+-- | Gather type variables and compute their corresponding projected types
+projection :: RnMonoTy -> RnMonoTy -> TcM HsTySubst
+projection ty proj_ty =
+  case ty of
+    app@(TyApp _ _) -> do
+      (tc, tys) <- destructTyApp app
+      ty_fams <- lookupTyConProj tc
+      mconcat <$>
+        mapM
+          (\(ty_fam, app_ty) -> projection app_ty (TyFam ty_fam [proj_ty]))
+          (zipExact ty_fams tys)
+    TyVar a   -> return (a |-> proj_ty)
+    TyCon _   -> return mempty
+    TyFam _ _ -> tf_error
   where
-    go f ty =
-      case ty of
-        app@(TyApp _ _) -> do
-          (tc, tys) <- destructTyApp app
-          ty_fams <- lookupTyConProj tc
-          concat <$>
-            mapM
-              (\(ty_fam, app_ty) -> go (\x -> f (TyFam ty_fam [x])) app_ty)
-              (zip ty_fams tys)
-        TyVar a   -> return [(a, f)]
-        TyCon _   -> return []
-        TyFam _ _ -> tf_error
-
     destructTyApp (TyApp ty1 ty2) = do
       (tc, tys) <- destructTyApp ty1
       return (tc, tys ++ [ty2])
