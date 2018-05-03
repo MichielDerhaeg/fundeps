@@ -50,3 +50,8 @@ tcFail = throwError . CompileError HsTypeChecker
 
 markTcError :: MonadError CompileError m => m a -> m a
 markTcError = markErrorPhase HsTypeChecker
+
+tagError :: MonadError CompileError m => Doc -> m a -> m a
+tagError doc f =
+  f `catchError` \(CompileError phase err) ->
+    throwError (CompileError phase (err $$ doc))

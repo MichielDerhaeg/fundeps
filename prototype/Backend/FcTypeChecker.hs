@@ -485,6 +485,7 @@ fcTypeCheck us pgm = runExcept
                    $ flip runReaderT fc_init_ctx
                    $ flip runUniqueSupplyT us
                    $ markErrorPhase FcTypeChecker
+                   $ tagError (ppr pgm)
                    $ do buildInitFcEnv pgm
                         tcFcProgram pgm
   where
