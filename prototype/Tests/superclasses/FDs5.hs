@@ -1,4 +1,5 @@
 
+--  SHOULD SUCCEED (Extract the superclass from the dictionary)
 
 data Bool = True | False
 
@@ -20,5 +21,3 @@ gt :: forall (a :: *). Ord a => a -> a -> Bool
    = \x. \y. and (ge x y) (not (eq x y))
 
 \x. x
---  SHOULD SUCCEED (Extract the superclass from the dictionary)
-

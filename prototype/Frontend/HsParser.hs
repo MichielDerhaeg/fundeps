@@ -34,7 +34,7 @@ hsParse contents path =
     Left err -> Left (CompileError HsParser (text (parseErrorPretty' contents err)))
     Right p  -> Right p
   where
-    parser = space *> pProgram <* eof
+    parser = sc *> pProgram <* eof
 
 -- * The Lexer and Utilities
 -- ------------------------------------------------------------------------------
