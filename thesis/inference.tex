@@ -74,8 +74,6 @@ functional dependency. GHC allows for functional dependencies of the form $a
 called \textit{multi-range} functional dependencies, but these can be translated
 into the \textit{single-range} variant \cite{fundeps-chrs} and are therefore not
 considered in this work.
-%TODO multi-range is strictly stronger when coverage condition is violated, we
-%use liberal coverage condition, so this is not always true?
 
 Expressions are a simple $\lambda$-calculus extended with ADT data constructors,
 case expressions and let expressions.
@@ -99,13 +97,13 @@ constructor.
     theory
     \\
     \\
-    \mathcal{C}_w &::= \bullet \mid \mathcal{C}_w, d : \pi \mid \mathcal{C}_w, c
+    \mathcal{C} &::= \bullet \mid \mathcal{C}, d : \pi \mid \mathcal{C}, c
     : \phi &wanted \; constraints
     \\
-    \mathcal{P}_w &::= \bullet \mid \mathcal{P}_w, d : \pi &wanted \; class \;
+    \mathcal{P} &::= \bullet \mid \mathcal{P}, d : \pi &wanted \; class \;
     constraints
     \\
-    \mathcal{E}_w &::= \bullet \mid \mathcal{E}_w, c : \phi &wanted \; equality
+    \mathcal{E} &::= \bullet \mid \mathcal{E}, c : \phi &wanted \; equality
     \; constraints
     \\
     \\
