@@ -33,14 +33,14 @@ simplifyFcProgram pgm = flip evalStateT (SimplEnv mempty)
                            keep go pgm
   where
     go (FcPgmTerm tm)            = FcPgmTerm           <$> simplifyFcTerm tm
-    go (FcPgmDataDecl  decl pgm) = FcPgmDataDecl  decl <$> go pgm
-    go (FcPgmAxiomDecl decl pgm) = FcPgmAxiomDecl decl <$> go pgm
-    go (FcPgmFamDecl   decl pgm) = FcPgmFamDecl   decl <$> go pgm
-    go (FcPgmValDecl (FcValBind f ty tm) pgm) = doAlt2 pat
+    go (FcPgmDataDecl  decl pgm') = FcPgmDataDecl  decl <$> go pgm'
+    go (FcPgmAxiomDecl decl pgm') = FcPgmAxiomDecl decl <$> go pgm'
+    go (FcPgmFamDecl   decl pgm') = FcPgmFamDecl   decl <$> go pgm'
+    go (FcPgmValDecl (FcValBind f ty tm) pgm') = doAlt2 pat
       simplifyFcTerm tm
-      go pgm
+      go pgm'
       where
-        pat tm' pgm' = FcPgmValDecl (FcValBind f ty tm') pgm'
+        pat tm' pgm'' = FcPgmValDecl (FcValBind f ty tm') pgm''
 
 simplifyFcTerm :: FcTerm -> SimplifyM FcTerm
 simplifyFcTerm = go
@@ -112,7 +112,11 @@ simplifyProp (FcProp ty1 ty2) = doAlt2 FcProp
   simplifyFcType ty2
 
 simplifyCoercion :: FcCoercion -> SimplifyM FcCoercion
-simplifyCoercion = go
+simplifyCoercion co' = do
+  FcProp ty1' ty2' <- typeOfCo co'
+  if eqFcTypes ty1' ty2'
+    then pure (FcCoRefl ty1')
+    else go co'
   where
     -- rewrite rules
     go (FcCoTrans (FcCoRefl _ty) co) = pure co
