@@ -18,6 +18,8 @@ prototype/result
 *.vrb
 *.bbl
 *.blg
+*.lof
+*.lot
 
 thesis/*.pdf
 reports/*.pdf

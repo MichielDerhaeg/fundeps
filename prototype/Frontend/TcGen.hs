@@ -127,7 +127,6 @@ elabTmApp tm1 tm2 = do
   a <- TyVar <$> freshRnTyVar KStar
   c <- freshFcCoVar
   storeEqCs [c :| (mkRnArrowTy [ty2] a :~: ty1)]
-  -- TODO plug in
   let fc_tm = FcTmApp (FcTmCast fc_tm1 (FcCoVar c)) fc_tm2
   return (a, fc_tm)
 

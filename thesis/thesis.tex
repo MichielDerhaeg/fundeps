@@ -1,9 +1,21 @@
-\documentclass[]{article}
+\documentclass[master=ecws,masteroption=ss,english]{kulemt}
+\setup
+    { title={Implementation of Functional Dependencies}
+    , author={Michiel Derhaeg}
+    , promotor={Prof.\,dr.\,ir.\ Tom Schrijvers}
+    , assessor={Ir.\, Georgios Karachalias \and Prof.\, dr.\, ir.\, Bart Jacobs}
+    , assistant={Ir.\, Georgios Karachalias}
+    , acyear={2017 - 2018}
+    , inputenc={utf8}
+    , translatedtitle={Implementatie van Functional Dependencies}
+    , udc={placeholder}
+    , shortabstract={short abstract placeholder}
+    , inputenc={utf8}
+    }
 \usepackage{lmodern}
 \usepackage{amssymb,amsmath}
 \usepackage{amstext}
 \usepackage{cite}
-\usepackage[utf8]{inputenc}
 \usepackage{xcolor}
 \usepackage{mathpartir}
 \usepackage{listings}
@@ -11,7 +23,6 @@
 \usepackage{fixltx2e} % provides \textsubscript
 \ifnum 0\ifxetex 1\fi\ifluatex 1\fi=0 % if pdftex
   \usepackage[T1]{fontenc}
-  \usepackage[utf8]{inputenc}
 \else % if luatex or xelatex
   \ifxetex
     \usepackage{mathspec}
@@ -60,37 +71,46 @@
 \def\fps@figure{htbp}
 \makeatother
 
-\author{Michiel Derhaeg}
-\title{Implementation of Functional Dependencies}
-\date{2018}
-
 \newcommand{\george}[1]{\begin{color}{red}{George says: {#1}}\end{color}}
 
 
 \begin{document}
-\maketitle
-\tableofcontents
+
+\begin{preface}
+preface placeholder
+\end{preface}
+
+\tableofcontents*
+
+\begin{abstract}
+abstract placeholder
+\end{abstract}
+
+\listoffigures
+
+\mainmatter
 
 % Introduction
-\input{intro}
+\include{intro}
 
 % Background
-\input{type-classes}
-\input{functional-dependencies}
-\input{promblem-statement}
+\include{type-classes}
+\include{functional-dependencies}
+\include{promblem-statement}
 
 % System Fc
-\input{system-fc}
-\input{inference}
-\input{entailment}
-\input{conditions}
-\input{co-simpl}
-\input{evaluation}
-\input{related-work}
-\input{conclusion}
+\include{system-fc}
+\include{inference}
+\include{entailment}
+\include{conditions}
+\include{co-simpl}
+\include{evaluation}
+\include{related-work}
+\include{conclusion}
 
 %\input{planning}
 
+\backmatter
 \bibliography{references}{}
 \bibliographystyle{plain}
 \end{document}

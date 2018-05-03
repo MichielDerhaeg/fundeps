@@ -1,4 +1,5 @@
-\section{System $F_C$}
+\chapter{System $F_C$}
+\label{cha:system-fc}
 
 In this section we'll define and discuss System $F_C$, the new target language
 of the compiler. It is extended from System F in a few ways that makes it able
@@ -12,7 +13,7 @@ top-level axioms which are their instantiations.
 
 % Discuss other additions other additions to System F like datatypes
 
-\subsection{Syntax}
+\section{Syntax}
 
 %TODO highlight new stuff
 \begin{figure}
@@ -48,7 +49,7 @@ top-level axioms which are their instantiations.
 
 The highlighted parts are the things that are different from standard System F.
 
-\subsubsection{Type equality coercions}
+\subsection{Type equality coercions}
 
 Coercions, denoted by $\gamma$, are the main interesting addition to the target
 language. These are proofs which are usually constructed during the elaboration
@@ -56,9 +57,9 @@ of the source language. These coercions can then be used during typechecking to
 explicitly cast a term $e : v_1$ to type $v_2$ if a coercion is provided that
 witnesses the equality between these types.
 
-\subsubsection{Type functions}
+\subsection{Type functions}
 
-\subsection{Typing}
+\section{Typing}
 % TODO other typing rules
 \begin{figure}[h]
 % TERM
@@ -402,7 +403,7 @@ $$
 \end{figure}
 
 
-\subsection{Operational Semantics}
+\section{Operational Semantics}
 
 % why systemfc?
 % syntax directed => easy to type check
