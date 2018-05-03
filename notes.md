@@ -27,20 +27,17 @@ Notes
 
   * make Axioms and AnnSchemes SnocLists again
 
-  * Value Binding Translation: the computed free unbound variables are the
-    untouchables for the class constraint entailment, but are computed after
-    entailment. => first equality than class cs?
-    * they could become part of the abstraction, but some freshening needs
-      to happen
-
-  * refine residual class constraints with the resulting type substitution
-    after OutSideIn(X), might not be required but let's be sure.
+  * Value Binding Translation
+    - do nosig recursion
+    - check if untouchable hack is no longer required
 
   * clean out old definitions like type constraints and unification vars
 
   * remove program expression from haskell and fc
 
   * parse quantified type contexts better
+
+  * actually check conditions
 
 Substitution type class map
 ---------------------------
