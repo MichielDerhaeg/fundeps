@@ -75,8 +75,8 @@ called \textit{multi-range} functional dependencies, but these can be translated
 into the \textit{single-range} variant \cite{fundeps-chrs} and are therefore not
 considered in this work.
 
-Expressions are a simple $\lambda$-calculus extended with ADT data constructors,
-case expressions and let expressions.
+Expressions consist of a simple $\lambda$-calculus extended with ADT data types
+and let expressions.
 
 %TODO more about type families?
 Monotypes have been extended with type family applications $F(\overline{\tau})$
@@ -151,12 +151,20 @@ type $\tau_1$ should be equal to $\tau_2$. As we will see in
 section~\ref{sec:fundeps}, functional dependencies give rise to equality axioms,
 denoted by $\mathcal{A}$. These are simply the Haskell counterpart of System
 $F_C$ top-level equality axioms and are semantically equivalent, note that $g$
-is an $F_C$ axiom variable in either case. Class and equality constraints can be
-annotated with dictionary variables and coercion variables respectively.
+is an $F_C$ axiom variable in either case. Class constraint, equality
+constraints and constraint schemes can be annotated with evidence, which are
+dictionary variables, coercion variables and again dictionary variables
+respectively. Sets of these are denoted with the calligraphic $\mathcal{P}$,
+$\mathcal{E}$ and $\mathcal{S}$ respectively. A set of both annotated class and
+equality constraints are denoted by $\mathcal{C}$. When these constraints are
+given constraints we use subscript $g$ and these can be annotated with full
+$F_C$ terms and coercions. This won't make a difference during constraint
+generation but has it's use during entailment.
 
-The program theory, denoted by $P$ is a triple of annotated constraint schemes
-equality axioms and a set of local given constraints.
-
+The program theory, denoted by $P$ is a triple of annotated constraint schemes,
+equality axioms and a set of local given constraints. It gathers the all of the
+constraints schemes and equality axioms from instance declarations and the local
+given constraints when under a qualified type.
 
 The typing environment is standard and stores types of term variables and type
 variables with their kinds.
@@ -166,9 +174,9 @@ variables with their kinds.
 \section{Constraint Generation}
 \begin{figure}[h]
 % TmVar
-% TODO fix and define P and E
 % TODO include \notin dom
-$$
+\fbox{$\Gamma \vdash_{tm} e : \tau \rightsquigarrow t \mid \mathcal{C}$}
+\begin{mathpar}
 \inferrule*[right=TmVar]
 {
     (x : \forall \overline{a} \overline{b}. \overline{\pi} \Rightarrow \tau) \in
@@ -181,65 +189,53 @@ $$
 }
 {
     \Gamma \vdash_{tm} x : \theta(\tau) \rightsquigarrow x \; \overline{\alpha}
-    \; \theta(\overline{b}) \; \overline{d} \; | \; \overline{d : \theta(\pi)}; \bullet
+    \; \theta(\overline{b}) \; \overline{d} \; | \; \overline{d : \theta(\pi)}
 }
-$$
+\\
 % TmAbs
-$$
 \inferrule*[right=TmAbs]
 {
-    \Gamma, x : \alpha \vdash_{tm} e : \tau \rightsquigarrow t \; | \; P ; E
+    \Gamma, x : \alpha \vdash_{tm} e : \tau \rightsquigarrow t \; | \; \mathcal{C}
     \\
     \alpha \; \text{fresh}
 }
 {
     \Gamma \vdash_{tm} \lambda x. e : ( \alpha \rightarrow \tau) \rightsquigarrow
-    \lambda (x : \alpha) . t \; | \; P ; E
+    \lambda (x : \alpha) . t \; | \; \mathcal{C}
 }
-$$
+\\
 % TmApp
-$$
 \inferrule*[right=TmApp]
 {
-    \Gamma \vdash_{tm} e_1 : \tau_1 \; | \; P_1; E_1
+    \Gamma \vdash_{tm} e_1 : \tau_1 \; | \; \mathcal{C}_1
     \\
-    \Gamma \vdash_{tm} e_2 : \tau_2 \; | \; P_2; E_2
+    \Gamma \vdash_{tm} e_2 : \tau_2 \; | \; \mathcal{C}_2
     \\
     \alpha, c \; \text{fresh}
-    \\
-    P = P_1, P_2
-    \\
-    E = E_1, E_2, c : \tau_1 \sim (\tau_1 \rightarrow \alpha)
 }
 {
     \Gamma \vdash_{tm} e_1 \; e_2 : a \rightsquigarrow (t_1 \triangleright c) \; t_2
-    \; | \; P ; E
+    \; | \; \mathcal{C}_1, \mathcal{C}_2, c : \tau_1 \sim (\tau_1 \rightarrow \alpha)
 }
-$$
+\\
 % TmLet
-$$
 \inferrule*[right=TmLet]
 {
     \Gamma, x : \alpha \vdash_{tm} e_1: \tau_1 \rightsquigarrow t_1 \; | \;
-    P_1; E_1
+    \mathcal{C}_1
     \\
     \Gamma, x : \alpha \vdash_{tm} e_2: \tau_2 \rightsquigarrow t_2 \; | \;
-    P_2; E_2
+    \mathcal{C}_2
     \\
     \alpha, c \; \text{fresh}
-    \\
-    P = P_1, P_2
-    \\
-    E = E_1, E_2, c : \alpha \sim \tau_1
 }
 {
     \Gamma \vdash_{tm} (\textbf{let} \; x = e_1 \; \textbf{in} \; e_2) : \tau_2
     \rightsquigarrow (\textbf{let} \; x : \tau_1 = t_1 \; \textbf{in} \; t_2) \;
-    | \; P ; E
+    | \; \mathcal{C}_1, \mathcal{C}_2, c : \alpha \sim \tau_1
 }
-$$
+\\
 % TmCon
-$$
 \inferrule*[right=TmCon]
 {
     (K : \forall \overline{a} . \tau) \in \Gamma
@@ -248,14 +244,14 @@ $$
 }
 {
     \Gamma \vdash_{tm} K : [ \overline{\alpha \mapsto \beta}] \tau
-    \rightsquigarrow K \; \overline{\beta} \; | \; \bullet ; \bullet
+    \rightsquigarrow K \; \overline{\beta} \; | \; \bullet
 }
-$$
+\\
 % TmCase
-$$
 \inferrule*[right=TmCase]
 {
-    \Gamma \vdash_{tm} e_{scr} : \tau_{scr} \rightsquigarrow t_{scr} \mid P_{scr}; E_{scr}
+    \Gamma \vdash_{tm} e_{scr} : \tau_{scr} \rightsquigarrow t_{scr} \mid
+    \mathcal{C}_{scr}
     \\
     \alpha, \overline{\beta}, c, \overline{c'} \; \text{fresh}
     \\
@@ -263,19 +259,25 @@ $$
     \in \Gamma
     \\
     \Gamma, \overline{x_i : [\overline{a \mapsto \beta}]\tau_{e_i}} \vdash_{tm} e_i
-    : \tau_{e_i} \rightsquigarrow t_{e_i} \mid P_{e_i}; E_{e_i}
+    : \tau_{e_i} \rightsquigarrow t_{e_i} \mid \mathcal{C}_{e_i}
 }
 {
     \Gamma \vdash_{tm} \textbf{case} \; e_{scr} \; \textbf{of} \; \overline{K \;
     \overline{x} \rightarrow e} : \alpha \rightsquigarrow \textbf{case} \;
-    t_{scr} \triangleright c \; \textbf{of} \; \overline{K \; \overline{x} \rightarrow t
-    \triangleright c'} \\
-    \mid P_{scr}, \overline{P_e}; E_{scr}, \overline{E_e}, c : \tau_{scr} \sim T
+    t_{scr} \triangleright c \; \textbf{of} \; \overline{K \; \overline{x}
+    \rightarrow t \triangleright c'}
+    \\
+    \mid \mathcal{C}_{scr}, \overline{\mathcal{C}_e}, c : \tau_{scr} \sim T
     \; \overline{\beta}, \overline{c' : \tau_e \sim \alpha}
 }
-$$
+\end{mathpar}
+\label{fig:ct-generation}
 \caption{Term Elaboration and Constraint Generation}
 \end{figure}
+Figure~\ref{fig:ct-generation} describes constraint generation and elaboration
+of expressions into System $F_C$. The judgement takes a typing environment and a
+expression $e$ and provides a monotype and a set of annotated wanted
+constraints.
 
 \section{Match Contexts}
 \label{sec:match-contexts}
@@ -338,6 +340,8 @@ Lastly, it provides an extended typing environment containing the exposed type
 variables and type class methods.
 
 \begin{figure}
+\fbox{$\Gamma \vdash_{\mathbb{E}} \mathcal{P} \rightsquigarrow \mathbb{E}
+       \mid \mathcal{C}_g \mid \Gamma$}
 \begin{mathpar}
 \inferrule*[right=Hole]
 {
@@ -416,6 +420,8 @@ Notice that, unlike many previous formalizations of type classes, type class
 declarations to not extend the program theory for the reasons explained in
 section \ref{sec:match-contexts}.
 \begin{figure}
+\fbox{$\Gamma \vdash_{cls} cls \rightsquigarrow \overline{decl} \mid
+       \Gamma_c$}
 \begin{mathpar}
 % TODO kinds
 % TODO too huge
@@ -504,6 +510,8 @@ In addition to the class constraints in the signature, we also add the
 transitive closure of the superclass relation and the FD-induced type equalities
 using match contexts.
 \begin{figure}
+    \fbox{$P; \Gamma \vdash_{inst} inst \rightsquigarrow \overline{decl} \mid
+    P_i$}
 \begin{mathpar}
 \inferrule*[right=Instance]
 {
@@ -549,6 +557,8 @@ using match contexts.
 \end{figure}
 
 \begin{figure}
+\fbox{$P \vdash_{SC} \pi \rightsquigarrow (\overline{\tau}_b,
+    \overline{\gamma}_b, \overline{t}_d)$}
 \begin{mathpar}
 \inferrule*[right=SC]
 {
@@ -574,6 +584,7 @@ using match contexts.
 \end{figure}
 
 \begin{figure}
+    \fbox{$\overline{S} \hookrightarrow \mathcal{A}$}
 % TODO mention or put in rule how to get instatiated fundep types
 \begin{mathpar}
 \inferrule*[right=AxiomGen]
@@ -598,6 +609,7 @@ using match contexts.
 \end{figure}
 
 \begin{figure}
+\fbox{P; \Gamma \vdash_{tm} e : \sigma \rightsquigarrow t}
 \begin{mathpar}
 \inferrule*[right=Subsumption]
 {

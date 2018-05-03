@@ -1,6 +1,8 @@
 \section{Inference with Functional Dependencies}
 \label{sec:fundeps}
 \begin{figure}
+\fbox{$\overline{a}; \overline{\pi} \vdash_{D} \theta \rightsquigarrow
+    \theta'$}
 \begin{mathpar}
 \inferrule*[right=$\text{Step}_D$]
 {
@@ -21,6 +23,7 @@
 \caption{Determinacy Relation}
 \end{figure}
 \begin{figure}
+\fbox{$project(\tau, \tau_{fam}) = \theta$}
 \[
 \begin{array}{l c l}
     project(a, \tau) & = & [a \mapsto \tau]
@@ -47,6 +50,7 @@
     \sim u_2
 \end{array}
 \]
+\fbox{$project(\tau, \tau_{fam}) = \theta$}
 \[
 \begin{array}{l c l}
 
