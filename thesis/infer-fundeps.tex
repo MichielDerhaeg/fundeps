@@ -1,6 +1,8 @@
 \section{Inference with Functional Dependencies}
 \label{sec:fundeps}
 \begin{figure}
+\fbox{$\overline{a}; \overline{\pi} \vdash_{D} \theta \rightsquigarrow
+    \theta'$}
 \begin{mathpar}
 \inferrule*[right=$\text{Step}_D$]
 {
@@ -12,31 +14,53 @@
     fv(u_{i_0}) \nsubseteq \overline{a} \cup dom(\theta)
     \\
     fv(\overline{u}^{i_n}) \subseteq \overline{a} \cup dom(\theta)
-    \\
-    \overline{b; f_{proj}} = project(u_{i_0})
 }
 {
     \overline{a}; \overline{\pi} \vdash_{D} \theta \rightsquigarrow
-    [b_j \mapsto f_{proj_j}(F_{TC_i}(\theta(\overline{u}^{i_n})))] \cdot \theta
+    project(u_{i_0},F_{TC_i}(\theta(\overline{u}^{i_n}))) \cdot \theta
 }
 \end{mathpar}
 \caption{Determinacy Relation}
 \end{figure}
+\begin{figure}
+\fbox{$project(\tau, \tau_{fam}) = \theta$}
+\[
+\begin{array}{l c l}
+    project(a, \tau) & = & [a \mapsto \tau]
+    \\
+    project(T \; \overline{u}, \tau) & = &
+    \overline{project(u_i, Proj^T_i(\tau))}
+\end{array}
+\]
+\caption{Type Constructor Projection Functions}
+\end{figure}
 
 \begin{figure}
-\begin{mathpar}
-\inferrule*[right=ProjVar]
-{
-}
-{
-    project(a) = a;\bullet
-}
-\inferrule*[right=ProjApp]
-{
-}
-{
-    project(T \; \overline{u}) = Proj^T_i(project(u_i))
-}
-\end{mathpar}
-\caption{Type Constructor Projection Functions}
+\[
+\begin{array}{l c l}
+    \textbf{type} \; L &: &\forall k_1 \; k_2. (a : k_1) \rightarrow k_2
+    \\
+    \textbf{type} \; R &: &\forall k_1 \; k_2. (a : k_1) \rightarrow k_2
+    \\
+    \\
+    \textbf{axiom} \; proj_L &:& L((u_1 : k_2 \rightarrow k_1) \; (u_2 : k_2))
+    \sim u_1
+    \\
+    \textbf{axiom} \; proj_R &:& R((u_1 : k_2 \rightarrow k_1) \; (u_2 : k_2))
+    \sim u_2
+\end{array}
+\]
+\fbox{$project(\tau, \tau_{fam}) = \theta$}
+\[
+\begin{array}{l c l}
+
+    project(a, \tau) & = & [a \mapsto \tau]
+    \\
+    project(\tau_1 \; \tau_2, \tau) & = &
+    project(\tau_1, L(\tau)) \cdot project(\tau_2, R(\tau))
+    \\
+    project(T, \tau) & = & \bullet
+\end{array}
+\]
+\caption{Kind Polymorphic Projection Functions}
 \end{figure}

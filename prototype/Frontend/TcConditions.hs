@@ -178,6 +178,7 @@ checkUnambWitness (CtrScheme _bs cs (ClsCt cls tys)) = do
     let det_subst_dom = substDom det_subst
     unless (null (ftyvsOf ui0 \\ det_subst_dom)) $
       throwErrorM $ text "TODO"
+    -- TODO check for equality of image
     unless (length det_subst_dom == length (nub det_subst_dom)) $
       throwErrorM $ text "TODO"
 

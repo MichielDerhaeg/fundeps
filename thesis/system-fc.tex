@@ -62,6 +62,7 @@ witnesses the equality between these types.
 \section{Typing}
 % TODO other typing rules
 \begin{figure}[h]
+\fbox{$\Gamma \vdash_{tm} t : v$}
 % TERM
 $$
 %TmCast
@@ -187,6 +188,7 @@ $$
 \end{figure}
 
 \begin{figure}
+\fbox{\Gamma \vdash_{ty} v : k}
 % TYPES
 $$
 %TyVar
@@ -227,6 +229,7 @@ $$
 \caption{System $F_C$ Type Well-formedness}
 \end{figure}
 \begin{figure}
+\fbox{\Gamma \vdash_{pr} \psi}
 $$
 %Prop
 \inferrule*[right=Prop]
@@ -235,6 +238,7 @@ $$
 $$
 \end{figure}
 \begin{figure}
+\fbox{\Gamma \vdash_{co} \gamma : \psi}
 $$
 %CoVar
 \inferrule*[right=CoVar]
