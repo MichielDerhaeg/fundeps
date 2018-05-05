@@ -13,9 +13,11 @@ module Utils.SnocList
 , findSLMaybeM
 ) where
 
-import Data.List (nub)
-import Utils.PrettyPrint
-import Utils.FreeVars
+import           Utils.FreeVars
+import           Utils.PrettyPrint
+
+import           Data.List         (nub)
+import           Data.Semigroup
 
 -- | SnocLists
 data SnocList a = SN | (SnocList a) :> a
@@ -39,6 +41,9 @@ listToSnocList = go . reverse
 instance PrettyPrint a => PrettyPrint (SnocList a) where
   ppr           = ppr . snocListToList
   needsParens _ = False
+
+instance Semigroup (SnocList a) where
+  (<>) = mappend
 
 instance Monoid (SnocList a) where
   mempty = SN

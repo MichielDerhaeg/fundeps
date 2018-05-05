@@ -21,11 +21,12 @@ module Utils.Var
 , isUniVar
 ) where
 
-import Utils.Unique
-import Utils.PrettyPrint
-import Utils.Kind
+import           Utils.Kind
+import           Utils.PrettyPrint
+import           Utils.Unique
 
-import Data.Function (on)
+import           Data.Function     (on)
+import           Data.Semigroup
 
 -- * Parser Output: Sym (String Wrapper)
 -- ------------------------------------------------------------------------------

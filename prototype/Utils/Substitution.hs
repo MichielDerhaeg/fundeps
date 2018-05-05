@@ -6,17 +6,18 @@
 
 module Utils.Substitution where
 
-import Frontend.HsTypes
-import Backend.FcTypes
+import           Backend.FcTypes
+import           Frontend.HsTypes
 
-import Utils.Var
-import Utils.Kind
-import Utils.Annotated
-import Utils.Unique
-import Utils.Utils
-import Utils.PrettyPrint
+import           Utils.Annotated
+import           Utils.Kind
+import           Utils.PrettyPrint
+import           Utils.Unique
+import           Utils.Utils
+import           Utils.Var
 
-import Control.Monad (liftM2)
+import           Control.Monad     (liftM2)
+import           Data.Semigroup
 
 -- * The SubstVar Class
 -- ------------------------------------------------------------------------------
@@ -243,6 +244,9 @@ instance (PrettyPrint x, PrettyPrint y) => PrettyPrint (Sub x y) where
 
   needsParens _ = False
 
+instance Semigroup (Sub x y) where
+  (<>) = mappend
+
 instance Monoid (Sub x y) where
   mempty = SNil
   mappend sub SNil          = sub
@@ -425,6 +429,9 @@ instance ApplySubst EvSubst FcTerm where
 instance ApplySubst EvSubst FcCoercion where
   applySubst (EvSubst _tm_subst co_subst) =
     applySubst co_subst
+
+instance Semigroup EvSubst where
+  (<>) = mappend
 
 instance Monoid EvSubst where
   mempty = EvSubst mempty mempty

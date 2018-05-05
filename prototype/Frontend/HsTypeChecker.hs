@@ -19,7 +19,7 @@ import           Utils.Ctx
 import           Utils.Errors
 import           Utils.FreeVars
 import           Utils.Kind
-import           Utils.PrettyPrint        hiding ((<>))
+import           Utils.PrettyPrint
 import           Utils.Substitution
 import           Utils.Unique
 import           Utils.Utils
@@ -29,7 +29,7 @@ import           Control.Monad.Except
 import           Control.Monad.Reader
 import           Control.Monad.State
 import           Data.List            (nub, (\\))
-import           Data.Monoid          ((<>))
+import           Data.Semigroup
 
 -- * Create the typechecking environment from the renaming one
 -- ------------------------------------------------------------------------------

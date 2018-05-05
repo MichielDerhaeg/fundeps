@@ -27,7 +27,7 @@ import           Utils.Alternative
 import           Utils.Annotated
 import           Utils.Errors
 import           Utils.FreeVars
-import           Utils.PrettyPrint  hiding (empty, (<>))
+import           Utils.PrettyPrint  hiding (empty)
 import           Utils.Substitution
 import           Utils.Utils
 import           Utils.Var
@@ -37,7 +37,7 @@ import           Control.Arrow             (first, second, (***))
 import           Control.Monad.Except
 import           Control.Monad.State
 import           Control.Monad.Trans.Maybe
-import           Data.Monoid
+import           Data.Semigroup
 
 partitionWantedCs :: WantedCs -> ([WantedEqCt], [WantedClsCt])
 partitionWantedCs (WantedEqCt ct:cs) = first (ct :) $ partitionWantedCs cs

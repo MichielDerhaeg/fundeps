@@ -10,14 +10,15 @@
 
 module Backend.FcTypes where
 
-import Utils.Unique
-import Utils.Var
-import Utils.Kind
-import Utils.PrettyPrint
-import Utils.Annotated
+import           Utils.Annotated
+import           Utils.Kind
+import           Utils.PrettyPrint
+import           Utils.Unique
+import           Utils.Var
 
-import Data.Maybe (isJust)
-import Data.Function (on)
+import           Data.Function     (on)
+import           Data.Maybe        (isJust)
+import           Data.Semigroup
 
 -- * Arrow Type Constructor
 -- ----------------------------------------------------------------------------

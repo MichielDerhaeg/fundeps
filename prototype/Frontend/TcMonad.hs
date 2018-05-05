@@ -12,7 +12,7 @@ import           Utils.AssocList
 import           Utils.Ctx
 import           Utils.Errors
 import           Utils.Kind
-import           Utils.PrettyPrint    hiding ((<>))
+import           Utils.PrettyPrint
 import           Utils.Unique
 import           Utils.Var
 

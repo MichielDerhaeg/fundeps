@@ -9,12 +9,12 @@ import           Frontend.HsTypes
 
 import           Utils.Alternative
 import           Utils.Errors
-import           Utils.PrettyPrint  hiding (empty, (<>))
+import           Utils.PrettyPrint  hiding (empty)
 import           Utils.Substitution
 import           Utils.Var
 
 import           Control.Monad.Except
-import           Data.Monoid
+import           Data.Semigroup
 
 -- * Type Unification
 -- ------------------------------------------------------------------------------

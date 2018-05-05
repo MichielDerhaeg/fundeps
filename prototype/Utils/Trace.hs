@@ -4,9 +4,14 @@ module Utils.Trace (Trace, traceM, dumpTrace) where
 
 import Utils.PrettyPrint
 import Utils.SnocList
-import Control.Monad.Writer
+
+import           Control.Monad.Writer
+import           Data.Semigroup
 
 newtype Trace = MkTrace (SnocList Doc)
+
+instance Semigroup Trace where
+  (<>) = mappend
 
 instance Monoid Trace where
   mempty  = MkTrace mempty

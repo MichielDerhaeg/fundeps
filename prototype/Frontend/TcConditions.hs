@@ -11,7 +11,7 @@ import           Frontend.TcMonad
 import           Utils.Annotated
 import           Utils.Errors
 import           Utils.FreeVars
-import           Utils.PrettyPrint  hiding ((<>))
+import           Utils.PrettyPrint
 import           Utils.Substitution
 import           Utils.Utils
 import           Utils.Var
@@ -19,8 +19,7 @@ import           Utils.Var
 import           Control.Monad (forM_, unless, when)
 import           Data.Foldable (asum)
 import           Data.List     (nub, (\\))
-import           Data.Monoid
-
+import           Data.Semigroup
 
 -- | The size norm
 class SizeOf a where

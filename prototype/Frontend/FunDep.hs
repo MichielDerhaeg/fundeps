@@ -7,14 +7,14 @@ import           Frontend.HsTypes
 
 import           Utils.Errors
 import           Utils.FreeVars
-import           Utils.PrettyPrint    hiding ((<>))
+import           Utils.PrettyPrint
 import           Utils.Substitution
 import           Utils.Utils
 import           Utils.Var
 
 import           Control.Monad (forM)
 import           Data.Either   (partitionEithers)
-import           Data.Monoid   ((<>))
+import           Data.Semigroup
 
 -- * Determinacy
 -- ------------------------------------------------------------------------------

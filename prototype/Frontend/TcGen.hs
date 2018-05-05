@@ -14,7 +14,7 @@ import           Utils.Annotated
 import           Utils.Ctx
 import           Utils.Errors
 import           Utils.Kind
-import           Utils.PrettyPrint    hiding ((<>))
+import           Utils.PrettyPrint
 import           Utils.Substitution
 import           Utils.Unique
 import           Utils.Utils
@@ -24,13 +24,16 @@ import           Control.Monad.Except
 import           Control.Monad.Reader
 import           Control.Monad.State
 import           Data.List            (intersect, (\\))
-import           Data.Monoid          ((<>))
+import           Data.Semigroup
 
 -- * Constraint store
 -- ------------------------------------------------------------------------------
 
 -- | ConstraintStore containing both the equality constraints and named class constraints
 data ConstraintStore = CS AnnEqCs AnnClsCs
+
+instance Semigroup ConstraintStore where
+  (<>) = mappend
 
 instance Monoid ConstraintStore where
   mempty = CS mempty mempty

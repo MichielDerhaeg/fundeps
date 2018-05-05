@@ -31,6 +31,7 @@ import           Utils.Var
 
 import           Control.Monad.Except
 import           Control.Monad.Reader
+import           Data.Semigroup
 
 -- * Context operations
 -- ------------------------------------------------------------------------------

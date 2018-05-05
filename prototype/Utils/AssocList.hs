@@ -4,14 +4,19 @@ module Utils.AssocList
 , mapFstWithDataAssocList, mapAssocListM, mapAssocListM_ -- make it completely opaque
 ) where
 
-import Utils.SnocList
-import Utils.PrettyPrint
-import Control.Arrow (second)
+import           Utils.PrettyPrint
+import           Utils.SnocList
+
+import           Control.Arrow     (second)
+import           Data.Semigroup
 
 -- * Association Lists
 -- ------------------------------------------------------------------------------
 
 newtype AssocList a b = AssocList (SnocList (a,b))
+
+instance Semigroup (AssocList a b) where
+  (<>) = mappend
 
 instance Monoid (AssocList a b) where
   mempty = AssocList mempty
