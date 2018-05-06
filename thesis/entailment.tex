@@ -65,7 +65,7 @@ a &\prec& u
 \end{figure}
 
 \begin{figure}
-%TODO fresh
+\small
 \fbox{$canon_w(\mathcal{Q}) = {\mathcal{Q}' \mid \eta}_\bot$}
 \[
 \begin{array}{l c l}
@@ -88,30 +88,31 @@ canon (c : \tau_1 \sim \tau_2)
 \\
 canon_w(d : \mathbb{D}[F(\overline{u})]) &=& \{ c_1 : F(\overline{u}) \sim \beta,
 d_2 : \mathbb{D}[\beta]\} \mid d \mapsto d_2 \triangleright \gamma
-\\ \where \beta, c_1, d_2 \; \text{fresh},
-\\ \whereindent [\beta \mapsto F(\overline{u})](\text{sym} \; c_1, \mathbb{D}[\beta])
-\rightsquigarrow (\gamma, \pi)
+\\ \multicolumn{3}{l}{\where \beta, c_1, d_2 \; \text{fresh}, [\beta \mapsto
+F(\overline{u})](\text{sym} \; c_1, \mathbb{D}[\beta]) \rightsquigarrow (\gamma,
+\pi)}
 \\
 canon_w(c : \mathbb{F}[F(\overline{u})] \sim \tau) &=& \{c_1 : F(\overline{u})
 \sim \beta, c_2 : \mathbb[\beta] \sim \tau \} \mid c \mapsto (\text{sym} \; \gamma)
 \fctrans c_2
-\\ \where \beta, c_1, d_2 \; \text{fresh},
-\\ \whereindent [\beta \mapsto F(\overline{u})](\text{sym} \; c_1,
-\mathbb{F}[\beta]) \rightsquigarrow (\gamma, \tau)
+\\ \multicolumn{3}{l}{\where \beta, c_1, d_2 \; \text{fresh},
+[\beta \mapsto F(\overline{u})](\text{sym} \;
+c_1, \mathbb{F}[\beta]) \rightsquigarrow (\gamma, \tau)}
 \\
 canon_w(c : \tau \sim \mathbb{T}[F(\overline{u})])
 \\ \qquad \mid \tau \equiv F'(\overline{u}') \; || \; \tau \equiv \alpha &=&
 \{c_1 : F(\overline{u}) \sim \beta, c_2 : \tau \sim \mathbb{T}[\beta]\} \mid c
 \mapsto c_2 \fctrans \gamma
-\\ \where \beta, c_1, d_2 \; \text{fresh},
-\\ \whereindent [\beta \mapsto F(\overline{u})](\text{sym} \; c_1,
-\mathbb{T}[\beta]) \rightsquigarrow (\gamma, \tau')
+\\ \multicolumn{3}{l}{\where \beta, c_1, d_2 \; \text{fresh},
+[\beta \mapsto F(\overline{u})](\text{sym} \;
+c_1, \mathbb{T}[\beta]) \rightsquigarrow (\gamma, \tau')}
 \end{array}
 \]
 \caption{Canonicalize Wanted Constraints}
 \end{figure}
 
 \begin{figure}
+\small
 \fbox{$canon(\mathcal{Q}_w) = {\mathcal{Q}_w' \mid \overline{untch} ; \theta ;
 \eta}_\bot$}
 \[
@@ -154,6 +155,7 @@ canon_g(c : \tau \sim \mathbb{T}[F(\overline{u})])
 \end{figure}
 
 \begin{figure}
+\small
 \fbox{$interact_w(\mathcal{Q}_1, \mathcal{Q}_2) = \mathcal{Q}' \mid \eta$}
 \[
 \begin{array}{l c l}
@@ -195,6 +197,7 @@ interact (d_1 : TC \; \overline{u}, d_2 : TC \; \overline{u}) &=& d_1 : TC \;
 \caption{Wanted Binary Interaction Rules}
 \end{figure}
 \begin{figure}
+\small
 \fbox{$interact_g(\mathcal{Q}_1, \mathcal{Q}_2) = \mathcal{Q}'$}
 \[
 \begin{array}{l c l}
@@ -233,6 +236,7 @@ interact_g(t_1 : TC \; \overline{u}, t_2 : TC \; \overline{u}) &=& \{t_1 : TC \;
 \end{figure}
 
 \begin{figure}
+\small
 \fbox{$simplifies(\mathcal{Q}_g, \mathcal{Q}) = \mathcal{Q}' \mid \eta$}
 \[
 \begin{array}{l c l}
