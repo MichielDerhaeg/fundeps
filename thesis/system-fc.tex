@@ -22,7 +22,8 @@ top-level axioms which are their instantiations.
     \highlight{F(\overline{v})}  \; | \;  \forall a. v  \; | \; \highlight{\psi
     \Rightarrow v} &\textit{Types}\\ \\
     \highlight{\gamma} &::= \highlight{\langle v \rangle \; | \; \text{sym} \; \gamma \; | \;
-    \text{left} \; \gamma \; | \; \text{right} \; \gamma \; | \; \gamma_1 ;
+    \text{left} \; \gamma \; | \; \text{right} \; \gamma \; | \; \gamma_1
+    \fctrans
     \gamma_2 \; | \; \psi \Rightarrow \gamma} &\textit{Coercions} \\ 
     \; &\quad \highlight{| \; \; F(\overline{\gamma}) \; | \; \forall a . \; \gamma \; | \;
     \gamma_1 [\gamma_2] \; | \; g \; \overline{v} \; | \; c \; | \; \gamma_1 @
@@ -293,7 +294,7 @@ $$
     \Gamma \vdash_{co} \gamma_2 : v_2 \sim v_3
 }
 {
-    \Gamma \vdash_{co} \gamma_1 ; \gamma_2 : v_1 \sim v_3
+    \Gamma \vdash_{co} \gamma_1 \fctrans \gamma_2 : v_1 \sim v_3
 }
 $$
 $$

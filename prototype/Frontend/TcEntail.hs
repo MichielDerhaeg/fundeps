@@ -307,6 +307,7 @@ simplify (GivenEqCt   (co :| (fam1@TyFam {} :~: ty1)))
   return [WantedEqCt (c' :| (ty1 :~: ty2))]
 simplify (GivenClsCt  (tm :| ClsCt cls1 tys1))
          (WantedClsCt (d  :| ClsCt cls2 tys2))
+  -- SDDICTG
   | cls1 == cls2, and (zipWithExact eqMonoTy tys1 tys2) = do
   addSolvTmSubst (d |-> tm)
   return mempty

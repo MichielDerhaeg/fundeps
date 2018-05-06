@@ -1,2 +1,357 @@
 \chapter{Constraint Entailment}
 \label{cha:entailment}
+%TODO rule names
+
+\begin{figure}
+\begin{mathpar}
+\inferrule*[Right=Entail]
+{
+    ~
+}
+{
+    P ; \overline{untchs} \vDash \mathcal{C} \rightsquigarrow
+    (\mathcal{P}_{residual}, \theta, \eta)
+}
+\end{mathpar}
+\caption{Constraint Entailment}
+\end{figure}
+
+\begin{figure}
+\fbox{$\vdash_{can} Q$}
+\begin{mathpar}
+\inferrule*[right=CEQ]
+{
+    a \prec u
+    \\
+    a \notin fv(u)
+}
+{
+    \vdash_{can} a \sim u
+}
+\inferrule*[right=CFEQ]
+{
+    ~
+}
+{
+    \vdash_{can} F(\overline{u}) \sim u
+}
+\inferrule*[right=CDICT]
+{
+    ~
+}
+{
+    \vdash_{can} TC \; \overline{u}
+}
+\end{mathpar}
+\caption{Canonical Constraints}
+\end{figure}
+
+\begin{figure}
+%TODO explain real a \prec b or put it in figure?
+\fbox{$\tau_1 \prec \tau_2$}
+\[
+\begin{array}{l c l l}
+F(\overline{\tau}) &\prec& \tau &\text{when} \; \tau \not\equiv
+F'(\overline{\tau}')
+\\
+a &\prec& b &\text{when} \; a \notin \overline{untchs}
+\\
+a &\prec& b &\text{when} \; a < b \; \text{lexicographically}
+\\
+a &\prec& u
+\end{array}
+\]
+\caption{}
+\end{figure}
+
+\begin{figure}
+%TODO fresh
+\fbox{$canon_w(\mathcal{Q}) = {\mathcal{Q}' \mid \eta}_\bot$}
+\[
+\begin{array}{l c l}
+canon_w(c : \tau \sim \tau) &=& \bullet \mid c \mapsto \langle \tau \rangle
+\\
+canon_w(c : \tau_1 \; \tau_2 \sim \tau_3 \; \tau_4) &=& \{c_1 : \tau_1 \sim
+\tau_3, c_2 : \tau_2  \sim \tau_4\} \mid c \mapsto c_1 \; c_2
+\\ \where c_1, c_2 \; \text{fresh}
+\\
+canon_w(c : T_1 \sim T_2)
+\\ \guard T_1 \neq T_2 &=& \bot
+\\
+canon_w(c : a \sim u)
+\\ \guard a \in fv(u) \; \&\& \; u \neq a &=& \bot
+\\
+canon (c : \tau_1 \sim \tau_2)
+\\ \qquad \mid \tau_2 < \tau_1 &=& c' : \tau_2 \sim \tau_1 \mid c \mapsto \text{sym}
+\; c'
+\\ \where c' \; \text{fresh}
+\\
+canon_w(d : \mathbb{D}[F(\overline{u})]) &=& \{ c_1 : F(\overline{u}) \sim \beta,
+d_2 : \mathbb{D}[\beta]\} \mid d \mapsto d_2 \triangleright \gamma
+\\ \where \beta, c_1, d_2 \; \text{fresh},
+\\ \whereindent [\beta \mapsto F(\overline{u})](\text{sym} \; c_1, \mathbb{D}[\beta])
+\rightsquigarrow (\gamma, \pi)
+\\
+canon_w(c : \mathbb{F}[F(\overline{u})] \sim \tau) &=& \{c_1 : F(\overline{u})
+\sim \beta, c_2 : \mathbb[\beta] \sim \tau \} \mid c \mapsto (\text{sym} \; \gamma)
+\fctrans c_2
+\\ \where \beta, c_1, d_2 \; \text{fresh},
+\\ \whereindent [\beta \mapsto F(\overline{u})](\text{sym} \; c_1,
+\mathbb{F}[\beta]) \rightsquigarrow (\gamma, \tau)
+\\
+canon_w(c : \tau \sim \mathbb{T}[F(\overline{u})])
+\\ \qquad \mid \tau \equiv F'(\overline{u}') \; || \; \tau \equiv \alpha &=&
+\{c_1 : F(\overline{u}) \sim \beta, c_2 : \tau \sim \mathbb{T}[\beta]\} \mid c
+\mapsto c_2 \fctrans \gamma
+\\ \where \beta, c_1, d_2 \; \text{fresh},
+\\ \whereindent [\beta \mapsto F(\overline{u})](\text{sym} \; c_1,
+\mathbb{T}[\beta]) \rightsquigarrow (\gamma, \tau')
+\end{array}
+\]
+\caption{Canonicalize Wanted Constraints}
+\end{figure}
+
+\begin{figure}
+\fbox{$canon(\mathcal{Q}_w) = {\mathcal{Q}_w' \mid \overline{untch} ; \theta ;
+\eta}_\bot$}
+\[
+\begin{array}{l c l}
+canon_g(\gamma : \tau \sim \tau) &=& \bullet \mid \bullet ; \bullet ; \bullet
+\\
+canon_g(\gamma : \tau_1 \; \tau_2 \sim \tau_3 \; \tau_4) &=& \{ \text{left} \;
+\gamma : \tau_1 \sim \tau_3, \text{right} \; \gamma : \tau_2 \sim \tau_4\} \mid
+\bullet ; \bullet ; \bullet
+\\
+canon_g(\gamma : T_1 \sim T_2)
+\\ \qquad \mid T_1 \neq T_2 &=& \bot
+\\
+canon_g(\gamma : a \sim u)
+\\
+\qquad \mid a \in fv(u) \; \&\& \; u \neq a &=& \bot
+\\
+canon_g(\gamma : \tau_1 \sim \tau_2)
+\\ \guard \tau_2 < \tau_1 &=& \text{sym} \; \gamma : \tau_2 \sim \tau_1
+\mid \bullet ; \bullet ; \bullet
+\\
+canon_g(t : \mathbb{D}[F(\overline{u})]) &=& \{ d : \mathbb{D}[\beta], c :
+F(\overline{u} \sim \beta)\}
+\\ \where \beta, c, d \; \text{fresh} && \mid \{\beta\} ; \beta \mapsto F(\overline{u}) ; [c
+\mapsto F(\overline{u}), d \mapsto t]
+\\
+canon_g(\gamma : \mathbb{F}[F(\overline{u})] \sim \tau) &=& \{ c_1 :
+\mathbb{F}[\beta] \sim \tau, c_2 : F(\overline{u} \sim \beta)\}
+\\ \where \beta, c_1, c_2 \; \text{fresh} && \mid \{ \beta \} ; \beta \mapsto F(\overline{u}) ; \; [c_1 \mapsto \gamma,
+c_2 \mapsto \langle F(\overline{u}  \rangle)]
+\\
+canon_g(c : \tau \sim \mathbb{T}[F(\overline{u})])
+\\ \guard \tau \equiv F'(\overline{u}') \; || \; \tau \equiv \alpha &=&
+\{ c_1 : \tau \sim \mathbb{T}[\beta], c_2 : F(\overline{u}) \sim \beta\}
+\\ \where \beta, c_1, c_2 \; \text{fresh} && \mid \{\beta\} ; \beta \mapsto F(\overline{u}) ; [c_1 \mapsto \gamma, c_2
+\mapsto \langle F(\overline{u}) \rangle]
+\end{array}
+\]
+\caption{Canonicalize Given Constraints}
+\end{figure}
+
+\begin{figure}
+\fbox{$interact_w(\mathcal{Q}_1, \mathcal{Q}_2) = \mathcal{Q}' \mid \eta$}
+\[
+\begin{array}{l c l}
+interact_w(c_1 : a \sim u_1, c_2 : a \sim u_2) &=& \{c_1 : a \sim u_1, c_2' :
+u_1 \sim u_2\} \mid c_2 \mapsto c_1 \fctrans c_2'
+\\ \where c_2' \; \text{fresh}
+\\
+interact_w(c_1 : a \sim u_1, c_2 : b \sim u_2)
+\\ \guard a \in fv(u_2 )&=& \{c_1 : a  \sim u_1, c_2' : b \sim \tau\} \mid
+c_2 \mapsto c_2' \fctrans \text{sym} \; \gamma
+\\ \where [a \mapsto u_1](c_1, u_2) \rightsquigarrow (\gamma, \tau),
+\\ \whereindent c_2' \; \text{fresh}
+\\
+interact_w(c_1 : a \sim u_1, c_2 : F(\overline{u}) \sim u_2)
+\\ \guard a \in fv(\overline{u}, u_2) &=& \{c_1 : a \sim u_1, c_2' : \tau_1
+\sim \tau_2\} \mid c_2 \mapsto \gamma_1 \fctrans c_2' \fctrans \text{sym} \;
+\gamma_2
+\\ \where [a \mapsto u_1](c_1, F(\overline{u})) \rightsquigarrow
+(\gamma_1, \tau_1),
+\\ \whereindent [a \mapsto u_1](c_1, u_2) \rightsquigarrow
+(\gamma_2, \tau_2),
+\\ \whereindent c_2' \; \text{fresh}
+\\
+interact_w(c : a \sim u, d : TC \; \overline{u})
+\\ \guard a \in fv(\overline{u}) &=& \{c : a \sim u, d' : \pi\} \mid d
+\mapsto d' \triangleright \text{sym} \; \gamma
+\\ \where [a \mapsto u](c, TC \; \overline{u}) \rightsquigarrow
+(\gamma, \pi)
+\\ \whereindent d' \; \text{fresh}
+\\
+interact_w(c_1 : F(\overline{u}) \sim u_1, c_2 : F(\overline{u}) \sim u_2) &=&
+\{c_1 : F(\overline{u}) \sim u_1, c_2' : u_1 \sim u_2\} \mid c_2 \mapsto c_1
+\fctrans c_2'
+\\
+interact (d_1 : TC \; \overline{u}, d_2 : TC \; \overline{u}) &=& d_1 : TC \;
+\overline{u} \mid d_2 \mapsto d_1
+\end{array}
+\]
+\caption{Wanted Binary Interaction Rules}
+\end{figure}
+\begin{figure}
+\fbox{$interact_g(\mathcal{Q}_1, \mathcal{Q}_2) = \mathcal{Q}'$}
+\[
+\begin{array}{l c l}
+interact_g(\gamma_1 : a \sim u_1, \gamma_2 : a \sim u_2) &=& \{\gamma_1 : a \sim
+u_1, \text{sym} \; \gamma_1 \fctrans \gamma_2 : u_1 \sim u_2\}
+\\
+interact_g(\gamma_1 : a \sim u_1, \gamma_2 : b \sim u_2)
+\\ \guard a \in fv(u_2 )&=& \{\gamma_1 : a  \sim u_1, \gamma_2 \fctrans \gamma :
+b \sim \tau\}
+\\ \where [a \mapsto u_1](\gamma_1, u_2) \rightsquigarrow (\gamma, \tau)
+\\
+interact_g(\gamma_1 : a \sim u_1, \gamma_2 : F(\overline{u}) \sim u_2)
+\\ \guard a \in fv(\overline{u}, u_2) &=& \{\gamma_1 : a \sim u_1, \text{sym} \;
+\gamma_1' \fctrans \gamma_2 \fctrans \gamma_2': \tau_1 \sim \tau_2\}
+\\ \where [a \mapsto u_1](\gamma_1, F(\overline{u})) \rightsquigarrow
+(\gamma_1', \tau_1)
+\\ \whereindent [a \mapsto u_1](\gamma_1, u_2) \rightsquigarrow
+(\gamma_2', \tau_2)
+\\
+interact_g(\gamma : a \sim u, t : TC \; \overline{u})
+\\ \qquad \mid a \in fv(\overline{u}) &=& \{\gamma : a \sim u, t \triangleright
+\gamma' : \pi\}
+\\ \where [a \mapsto u](\gamma, TC \; \overline{u}) \rightsquigarrow
+(\gamma', \pi)
+\\
+%TODO guard for equality?
+interact_g(\gamma_1 : F(\overline{u}) \sim u_1, \gamma_2 : F(\overline{u}) \sim
+u_2) &=& \{\gamma_1 : F(\overline{u}) \sim u_1, \text{sym} \; \gamma_1 \fctrans
+\gamma_2: u_1 \sim u_2\}
+\\
+interact_g(t_1 : TC \; \overline{u}, t_2 : TC \; \overline{u}) &=& \{t_1 : TC \;
+\overline{u}\}
+\end{array}
+\]
+\caption{Given Binary Interaction Rules}
+\end{figure}
+
+\begin{figure}
+\fbox{$simplifies(\mathcal{Q}_g, \mathcal{Q}) = \mathcal{Q}' \mid \eta$}
+\[
+\begin{array}{l c l}
+simplifies(\gamma : a \sim u_1, c : a \sim u_2) &=& \{c' : u_1 \sim u_2\} \mid c
+\mapsto \gamma \fctrans c'
+\\ \where c' \; \text{fresh}
+\\
+simplifies(\gamma_1 : a \sim u_1, c : b \sim u_2)
+\\ \guard a \in fv(u_2) &=& \{c' : b \sim \tau\} \mid c \mapsto c' \fctrans
+\text{sym} \; \gamma_2
+\\ \where [a \sim u_1](\gamma_1, F(\overline{u})) \rightsquigarrow (\gamma_2,
+\tau)
+\\ \whereindent c' \; \text{fresh}
+\\
+simplifies(\gamma_1 : a \sim u_1, c_2 : F(\overline{u}) \sim u_2)
+\\ \guard a \in fv(\overline{u}) &=& \{c': \tau \sim u_2\} \mid c_2 \mapsto
+\gamma_2 \fctrans c'
+\\ \where [a \mapsto u_1](\gamma_1, F(\overline{u})) \rightsquigarrow (\gamma_2,
+\tau)
+\\ \whereindent c' \; \text{fresh}
+\\
+simplifies(\gamma_1 : a \sim u_1, d : TC \; \overline{u})
+\\ \guard a \in fv(\overline{u}) &=& \{d' : \pi\} \mid d \mapsto
+d' \triangleright \text{sym} \; \gamma_2
+\\ \where [a \mapsto u_1](\gamma_1, TC \; \overline{u}) \rightsquigarrow
+(\gamma_2, \pi)
+\\ \whereindent d' \; \text{fresh}
+\\
+simplifies(\gamma_1 : F(\overline{u}) \sim u_1, c : F(\overline{u}) \sim u_2)
+&=& \{c' : u_1, u_2\} \mid c \mapsto \gamma_1 \fctrans c'
+\\ \where c' \; \text{fresh}
+\\
+simplifies(t : TC \; \overline{u}, d : TC \; \overline{u}) &=& \bullet \mid d
+\mapsto t
+\end{array}
+\]
+\end{figure}
+
+\begin{figure}
+% TODO implicit or explicit untchs passing?
+\fbox{$topreact_w(P, \mathcal{Q}) = \mathcal{Q}' \mid \eta$}
+\begin{mathpar}
+\inferrule*[right=TopreactWCls]
+{
+    (d_I : \forall \overline{a} \overline{a}'. \; \overline{\pi} \Rightarrow TC
+    \; \overline{u}_0) \in P
+    \\
+    \overline{d} \; \text{fresh}
+    \\
+    \overline{b} = \overline{untchs}, fv(\overline{u})
+    \\
+    unify(\overline{b}, \overline{u \sim u_0} ) = \theta
+}
+{
+    topreact_w(\overline{untchs}, d : TC \; \overline{u}) = \overline{d : \theta(\pi)} \mid d
+    \mapsto d_I \; \theta(\overline{a}) \; \theta(\overline{a}')
+}
+\end{mathpar}
+\fbox{$topreact_w(P, \mathcal{Q}) = \mathcal{Q}' \mid \eta$}
+\begin{mathpar}
+\inferrule*[right=TopreactWEq]
+{
+    (g \; \overline{a} : F(\overline{u}_0) \sim u_0) \in P
+    \\
+    \overline{b} = \overline{untchs}, fv(\overline{u},u)
+    \\
+    unify(\overline{b}, \overline{u \sim u_0}) = \theta
+}
+{
+    topreact_w(P, c : F(\overline{u}) \sim u) = c' : \theta(u_0) \sim u \mid c
+    \mapsto g \; \theta(\overline{a}) \fctrans c'
+}
+\end{mathpar}
+\fbox{$topreact_g(P,\mathcal{Q}_g) = \mathcal{Q}_g'$}
+\begin{mathpar}
+\inferrule*[right=TopreactGEq]
+{
+    (g \; \overline{a} : F(\overline{u}_0) \sim u_0) \in P
+    \\
+    \overline{b} = \overline{untchs}, fv(\overline{u},u)
+    \\
+    unify(\overline{b}, \overline{u \sim u_0}) = \theta
+}
+{
+    topreact_g(P, \gamma : F(\overline{u}) \sim u) = \text{sym} \; (g \;
+    \theta(\overline{a})) \fctrans \gamma : \theta(u_0) \sim u
+}
+\end{mathpar}
+\caption{Top-level reaction rules}
+\end{figure}
+
+\begin{figure}
+%TODO appendix
+\fbox{$unify(\overline{a}; \overline{\phi}) = \theta_\bot$}
+\[
+\begin{array}{l c l}
+unify(\overline{a}; \bullet) &=& \bullet
+\\
+unify(\overline{a}; \overline{\phi}, b \sim b) &=& unify(\overline{a};
+\overline{\phi})
+\\
+unify(\overline{a}; \overline{\phi}, T \sim T) &=& unify(\overline{a};
+\overline{\phi})
+\\
+unify(\overline{a}; \overline{\phi}, b \sim \tau)
+\\ \guard b \notin \overline{a}, b \notin fv(\tau) &=& unify(\overline{a};
+\theta(\overline{\phi})) \cdot \theta
+\\ \where \theta = [b \mapsto \tau]
+\\
+unify(\overline{a}; \overline{\phi}, \tau \sim b)
+\\ \guard b \notin \overline{a}, b \notin fv(\tau) &=& unify(\overline{a};
+\theta(\overline{\phi})) \cdot \theta
+\\ \where \theta = [b \mapsto \tau]
+\\
+unify(\overline{a}; \overline{\phi}, \tau_1 \; \tau_2 \sim \tau_3 \; \tau_4) &=&
+unify(\overline{a}; \overline{\phi}, \tau_1 \sim \tau_3, \tau_2 \sim \tau_4)
+\\
+unify(\overline{a}; \overline{\phi}) &=& \bot
+\end{array}
+\]
+\caption{Hindley-Milner Unification}
+\end{figure}
