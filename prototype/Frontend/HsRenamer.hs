@@ -291,8 +291,9 @@ rnDataDecl (DataD tc as dcs) = do
   rnas <- mapM rnTyVar as
 
   -- Store the TyCon info in the global environment
-  projs <- forM [0..(length as)] $ \i ->
-    HsTF . mkName (mkSym ("Proj" ++ show (symOf tc) ++ show i )) <$> getUniqueM
+  projs <- forM (zip [0 ..] as) $ \(i, _) ->
+      HsTF . mkName (mkSym ("Proj" ++ show (symOf tc) ++ show (i :: Word))) <$>
+      getUniqueM
   addTyConInfoRnM tc $ HsTCInfo rntc rnas (FcTC (nameOf rntc)) projs
 
   -- Rename the data constructors

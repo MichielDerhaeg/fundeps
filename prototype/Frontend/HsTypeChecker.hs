@@ -64,7 +64,7 @@ buildInitTcEnv pgm (RnEnv _rn_cls_infos dc_infos tc_infos) = do -- GEORGE: Assum
 
         fd_fams <- forM (zip [0..] rn_fundeps) $ \(i,Fundep ais ai0) -> do
           fd_fam <- HsTF .
-            mkName (mkSym ("F" ++ show (symOf rn_cls) ++ show (i :: Word)))
+            mkName (mkSym ("FunDep" ++ show (symOf rn_cls) ++ show (i :: Word)))
             <$> getUniqueM
           addTyFamInfoTcM fd_fam $ HsTFInfo fd_fam ais (kindOf ai0)
           return fd_fam
@@ -334,17 +334,18 @@ extendCtxKindAnnotatedTysM ann_as = extendCtxM as (map kindOf as)
 -- ------------------------------------------------------------------------------
 
 elabInsDecl :: Theory -> RnInsDecl -> TcM ([FcAxiomDecl], FcValBind, Theory)
-elabInsDecl theory (InsD as ins_cs cls typats method method_tm) = do
+elabInsDecl theory (InsD ab_s ins_cs cls typats method method_tm) = do
   let tys = hsTyPatToMonoTy <$> typats
   let head_ct = ClsCt cls tys
-  let bs = labelOf as \\ ftyvsOf tys
-  let fc_as = rnTyVarToFcTyVar . labelOf <$> as
+  let as = ftyvsOf tys
+  let bs = labelOf ab_s \\ as
+  let fc_abs = rnTyVarToFcTyVar . labelOf <$> ab_s
 
   overlapCheck theory head_ct
-  unambiguousCheck bs (labelOf as) ins_cs
+  unambiguousCheck bs as ins_cs
 
   ins_d <- freshDictVar
-  ins_scheme <- freshenLclBndrs $ CtrScheme as ins_cs head_ct
+  ins_scheme <- freshenLclBndrs $ CtrScheme ab_s ins_cs head_ct
 
   ann_ins_cs <- snd <$> annotateClsCs ins_cs
 
@@ -356,7 +357,7 @@ elabInsDecl theory (InsD as ins_cs cls typats method method_tm) = do
                         `tExtendGivens`   match_cs
 
   -- TODO change order
-  (fc_exis_tys, fc_tms, fc_cos) <- entailSuperClass (labelOf as) i_theory head_ct
+  (fc_exis_tys, fc_tms, fc_cos) <- entailSuperClass (labelOf ab_s) i_theory head_ct
 
   let ext_theory = theory `tExtendAxioms`  axioms
                           `tExtendSchemes` [ins_d :| ins_scheme]
@@ -364,19 +365,19 @@ elabInsDecl theory (InsD as ins_cs cls typats method method_tm) = do
   fc_method_tm <- do
     let theory' = i_theory `tExtendSchemes` [ins_d :| ins_scheme]
     expected_method_ty <- instMethodTy tys <$> lookupCtxM method
-    setCtxM match_ctx $ extendCtxM (labelOf as) (dropLabel as) $
-      elabTermWithSig (labelOf as) theory' method_tm expected_method_ty
+    setCtxM match_ctx $ extendCtxM (labelOf ab_s) (dropLabel ab_s) $
+      elabTermWithSig (labelOf ab_s) theory' method_tm expected_method_ty
 
-  dtrans_ty <- extendCtxM (labelOf as) (dropLabel as) $ do
+  dtrans_ty <- extendCtxM (labelOf ab_s) (dropLabel ab_s) $ do
     fc_head_ty <-  wfElabClsCt head_ct
     fc_ins_cs <- wfElabClsCs ins_cs
-    return $ fcTyAbs fc_as $ fcTyArr fc_ins_cs fc_head_ty
+    return $ fcTyAbs fc_abs $ fcTyArr fc_ins_cs fc_head_ty
 
   fc_dict_transformer <- do
     binds <- elabAnnClsCs ann_ins_cs
     dc    <- lookupClsDataCon cls
     return $
-      fcTmTyAbs fc_as $
+      fcTmTyAbs fc_abs $
        fcTmAbs binds $
          matchCtxApply mctx $
           FcTmDataCon dc `fcTmTyApp` (elabMonoTy <$> tys)
