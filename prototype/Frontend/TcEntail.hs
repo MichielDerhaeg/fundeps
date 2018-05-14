@@ -333,7 +333,7 @@ canonicalizeWanted (WantedEqCt (c :| ct)) = do
       | tc1 /= tc2 = throwErrorM $ text "TODO"
     -- OCCCHECKW
     go _ (TyVar a :~: ty)
-      | a `elem` ftyvsOf ty
+      | a `elem` ftyvsOf ty -- TODO ty should be orphan, a ~ F(a) is allowed
       , not (eqMonoTy (TyVar a) ty) = throwErrorM $ text "TODO occurscheck"
     -- ORIENTW
     go untchs (ty1 :~: ty2)
