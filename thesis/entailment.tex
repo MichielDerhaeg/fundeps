@@ -222,7 +222,7 @@ a &\prec& u
 \subsubsection{Flattening}
 Type families are not allowed to appear nested as part of other types in
 canonical constraints. The flattening procedure extracts those type families and
-splits up the constraint. For example:
+splits up the constraint. For example: %TODO cite example source
 $$
 a \sim [F \; a]
 $$
@@ -548,6 +548,7 @@ that will be discussed in chapter~\ref{cha:conditions} about conditions.
 \begin{figure}
 % TODO annotate untchs passing
 % TODO better names for function names maybe?
+%TODO call untchs something else like as or bs
 \fbox{$topreactCls_w(P, \mathcal{Q}) = \mathcal{Q}' \mid \eta$}
 \begin{mathpar}
 \inferrule*[right=TopreactClsW]
@@ -562,7 +563,7 @@ that will be discussed in chapter~\ref{cha:conditions} about conditions.
     unify(\overline{b}, \overline{u \sim u_0} ) = \theta
 }
 {
-    topreactCls_w(\overline{untchs}, d : TC \; \overline{u}) = \overline{d :
+    topreactCls_w(\overline{untchs}, P, d : TC \; \overline{u}) = \overline{d :
     \theta(\pi)} \mid d \mapsto d_I \; \theta(\overline{a}) \;
     \theta(\overline{a}') \; \overline{d}
 }
