@@ -37,6 +37,7 @@ import           Control.Arrow             (first, second, (***))
 import           Control.Monad.Except
 import           Control.Monad.State
 import           Control.Monad.Trans.Maybe
+import           Data.List                 ((\\))
 import           Data.Semigroup
 
 partitionWantedCs :: WantedCs -> ([WantedEqCt], [WantedClsCt])
@@ -503,9 +504,10 @@ topreactWantedCls theory (WantedClsCt (d :| ClsCt cls tys)) = do
     go _ [] = empty
     go untchs ((d' :| CtrScheme bs cls_cs (ClsCt cls' tys')):schemes)
       | cls == cls'
-      , Right ty_subst <- unify untchs (zipWithExact (:~:) tys tys') = do
+      , Right match_subst <- unify untchs (zipWithExact (:~:) tys tys') = do
+        ty_subst <-
+          (<> match_subst) . snd <$> freshenRnTyVars (labelOf bs \\ ftyvsOf tys')
         (ds, ann_cls_cs) <- annotateClsCs $ substInClsCs ty_subst cls_cs
-        -- TODO freshen existentials
         let fc_subbed_bs = map elabMonoTy . substInTyVars ty_subst $ labelOf bs
         let ev_subst =
               d |->

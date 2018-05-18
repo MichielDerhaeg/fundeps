@@ -79,14 +79,14 @@ extendTcCtxTysM ty_vars m = foldl (\m' a -> extendCtxM a (kindOf a) m') m ty_var
 -- | Freshen up a list of type variables. Return
 --   a) the list of fresh variables (NB: same length as input)
 --   b) the substitution from the old to the fresh ones
-freshenRnTyVars :: [RnTyVar] -> TcM ([RnTyVar], HsTySubst)
+freshenRnTyVars :: MonadUnique m => [RnTyVar] -> m ([RnTyVar], HsTySubst)
 freshenRnTyVars tvs = do
   new_tvs <- mapM freshRnTyVar (map kindOf tvs)
   let subst = buildRnSubst (zipExact tvs new_tvs)
   return (new_tvs, subst)
 
 -- | Instantiate a polytype with fresh unification variables
-instPolyTy :: RnPolyTy -> TcM ([RnTyVar], RnClsCs, RnMonoTy)
+instPolyTy :: MonadUnique m => RnPolyTy -> m ([RnTyVar], RnClsCs, RnMonoTy)
 instPolyTy poly_ty = do
   (bs,subst) <- freshenRnTyVars (map labelOf as)
   let new_cs = substInClsCs subst cs

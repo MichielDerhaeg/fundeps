@@ -533,69 +533,111 @@ simplifies(t : TC \; \overline{u}, d : TC \; \overline{u}) &=& \bullet \mid d
 \end{figure}
 
 \subsection{Top-level Reactions}
-The last set of rules we'll discuss are the top-level reaction rules. These
-rules are used to interact with top-level class instance schemes and type
-equality axioms that get introduced by instance declarations.
+The last set of rules we'll discuss are the top-level reaction rules, depicted
+in figure~\ref{fig:topreact}. These rules are used to interact with top-level
+class instance schemes and type equality axioms that get introduced by instance
+declarations.
 
+%TODO citation backward chaining?
 For solving class constraints the standard \textit{backwards-chaining} method is
-used. This method is specified in rule $topreactCls_w$.
+used. This method is specified in rule $topreactCls_w$. Instance declarations
+are interpeted as logical implications, $\texttt{instance} \; \overline{\pi}
+\Rightarrow \pi$ means that if all of the constraints in the premise
+$\overline{\pi}$ are known or can be proven, we can prove $\pi$. Because we
+start from the goal, we look for an declaration that proves it, assume that it
+holds and attempt to prove the premise instead. Effectively working our way
+backwards through the implications, hence the name \textit{backwards-chaining}.
+For example:
+\begin{verbatim}
+    instance Eq Int
+    instance Eq Bool
+    instance (Eq a, Eq b) => Eq (a, b)
+\end{verbatim}
+To prove the wanted constraint \textit{Eq (Int, Bool)} the instance declaration
+for \textit{Eq (a, b)} is used with $a$ instantiated with $Int$ and $b$ with
+$Bool$. As a consequence the constraints in the premise are added as new wanted
+constraints. Both of which can be solved in the next iterations where they will
+match the instance declarations for \textit{Eq Int} and \textit{Eq Bool}
+respectively. And as these instances don't have a premise the constraints will
+be completely resolved.
+%TODO talk about evidence?
+
+%TODO cite 2007a, mention solving in both directions
+Equality axioms are are handled in a very similar way as binary interaction or
+simplification. These are simply used as left-to-right substitutions. Unlike
+wanted or given constraint, equality axioms and constraint schemes are
+polymorphic. Simple Hindley-Milner unification, as depicted in
+figure~\ref{fig:unify}, is used to produce a substitution that maps the
+abstracted over type variables to the instantiated types. This why the free type
+variables from the wanted or given constraints are included as untouchables. So
+the substitution does not end up mapping type variables in the constraint to
+those from the program theory because these may never end up in the resulting
+System $F_C$. If the axiom or constraint scheme doesn't match if this
+unification fails.
+
+Note that top-level reaction for wanted equality and class constraints are
+handled by two distinct rules. Reaction with class constraints must be delayed
+until the very end.
+%TODO why? only to prevent non-determinism with given class constraints? This
+%used to be required to prevent matching issues before we added the free tyvs as
+%untchs to unify. So equality related things had to happen first. No longer
+%required so topreact as a whole can be deferred to last? should be cleaner
 
 The top-level reaction rules are the only rules allowed to introduce additional
 type families and type class constraints. To make sure that they do not harm
-termination several restrictions are imposed on instance declarations. More on
-that will be discussed in chapter~\ref{cha:conditions} about conditions.
+termination several restrictions are imposed on class and instance declarations.
+More on that will be discussed in chapter~\ref{cha:conditions} about conditions.
 
 \begin{figure}
-% TODO annotate untchs passing
-% TODO better names for function names maybe?
-%TODO call untchs something else like as or bs
-\fbox{$topreactCls_w(P, \mathcal{Q}) = \mathcal{Q}' \mid \eta$}
+\fbox{$topreactCls_w(\overline{a}_{utch}, P, \mathcal{Q}) = \mathcal{Q}' \mid \eta$}
 \begin{mathpar}
 \inferrule*[right=TopreactClsW]
 {
-    (d_I : \forall \overline{a} \overline{a}'. \; \overline{\pi} \Rightarrow TC
-    \; \overline{u}_0) \in P
+    (d_I : \forall \overline{a} \overline{b}. \; \overline{\pi} \Rightarrow TC
+    \; \overline{u}') \in P
     \\
-    \overline{d} \; \text{fresh}
+    \overline{d}, \overline{b}' \; \text{fresh}
     \\
-    \overline{b} = \overline{untchs}, fv(\overline{u})
+    \overline{a}_{utch}' = \overline{a}_{utch}, fv(\overline{u})
     \\
-    unify(\overline{b}, \overline{u \sim u_0} ) = \theta
+    \theta = [b \mapsto b'] \cdot unify(\overline{a}_{utch}', \overline{u \sim
+    u'})
 }
 {
-    topreactCls_w(\overline{untchs}, P, d : TC \; \overline{u}) = \overline{d :
-    \theta(\pi)} \mid d \mapsto d_I \; \theta(\overline{a}) \;
-    \theta(\overline{a}') \; \overline{d}
+    topreactCls_w(\overline{a}_{utch}, P, d : TC \; \overline{u}) = \overline{d
+    : \theta(\pi)} \mid d \mapsto d_I \; \theta(\overline{a} \overline{b}) \;
+    \overline{d}
 }
 \end{mathpar}
-\fbox{$topreactEq_w(P, \mathcal{Q}) = \mathcal{Q}' \mid \eta$}
+\fbox{$topreactEq_w(\overline{a}_{utch}, P, \mathcal{Q}) = \mathcal{Q}' \mid \eta$}
 \begin{mathpar}
 \inferrule*[right=TopreactEqW]
 {
-    (g \; \overline{a} : F(\overline{u}_0) \sim \tau) \in P
+    (g \; \overline{a} : F(\overline{u}') \sim \tau) \in P
     \\
-    \overline{b} = \overline{untchs}, fv(\overline{u},u)
+    \overline{a}_{utch}' = \overline{a}_{utch}, fv(\overline{u},u)
     \\
-    unify(\overline{b}, \overline{u \sim u_0}) = \theta
+    \theta = unify(\overline{a}_{utch}', \overline{u \sim u'})
 }
 {
-    topreactEq_w(P, c : F(\overline{u}) \sim u) = c' : \theta(u_0) \sim u \mid c
-    \mapsto g \; \theta(\overline{a}) \fctrans c'
+    topreactEq_w(\overline{a}_{utch}, P, c : F(\overline{u}) \sim u) = c' :
+    \theta(\tau) \sim u \mid c \mapsto g \; \theta(\overline{a}) \fctrans c'
 }
 \end{mathpar}
-\fbox{$topreactEq_g(P,\mathcal{Q}_g) = \mathcal{Q}_g'$}
+\fbox{$topreactEq_g(\overline{a}_{utch}, P,\mathcal{Q}_g) = \mathcal{Q}_g'$}
 \begin{mathpar}
 \inferrule*[right=TopreactGEq]
 {
-    (g \; \overline{a} : F(\overline{u}_0) \sim u_0) \in P
+    (g \; \overline{a} : F(\overline{u}') \sim \tau) \in P
     \\
-    \overline{b} = \overline{untchs}, fv(\overline{u},u)
+    \overline{a}_{utch}' = \overline{a}_{utch}, fv(\overline{u},u)
     \\
-    unify(\overline{b}, \overline{u \sim u_0}) = \theta
+    \theta = unify(\overline{a}_{utch}', \overline{u \sim u'})
 }
 {
-    topreactEq_g(P, \gamma : F(\overline{u}) \sim u) = \text{sym} \; (g \;
-    \theta(\overline{a})) \fctrans \gamma : \theta(u_0) \sim u
+    topreactEq_g(\overline{a}_{utch}, P, \gamma : F(\overline{u}) \sim u) =
+    \text{sym} \; (g \; \theta(\overline{a})) \fctrans \gamma : \theta(u') \sim
+    u
 }
 \end{mathpar}
 \caption{Top-level reaction rules}
@@ -603,7 +645,7 @@ that will be discussed in chapter~\ref{cha:conditions} about conditions.
 \end{figure}
 
 \begin{figure}
-%TODO appendix
+%TODO appendix?
 \fbox{$unify(\overline{a}; \overline{\phi}) = \theta_\bot$}
 \[
 \begin{array}{l c l}
@@ -636,3 +678,91 @@ unify(\overline{a}; \overline{\phi}) &=& \bot
 \end{figure}
 
 \section{Solver structure}
+
+%TODO define value for representing 'empty' or 'Nothing' when rule doesn't
+%match?
+%TODO really not sure in how much detail i should go, want to omit side-effects
+%as well in this section
+\subsection{Rule combinators}
+In this section we define several abstractions for composing rules that are used
+to implement the solver. The $liftR$ combinator lifts a rule from being applied
+to single constraint to a set of constraints. Either a single constraint is
+matched out of the set and the result is returned with the rest of the
+constraints. The $\|$ operator represents non-deterministic choice, the first
+rule is attempted and if it doesn't match the second one is used instead.
+
+\begin{figure}
+\begin{mathpar}
+\inferrule*[right=Try]
+{
+  ~
+}
+{
+  liftR(r, \overline{x}) = (x)
+}
+\\
+\inferrule*[right=OrL]
+{
+  r_1
+}
+{
+  r_1 \| r_2 = r_1
+}
+\quad
+\inferrule*[right=OrR]
+{
+  r_2
+}
+{
+  r_1 \| r_2 = r_2
+}
+\quad
+\inferrule*[right=Fix]
+{
+  ~
+}
+{
+  fix(r,x)
+}
+\end{mathpar}
+\end{figure}
+
+\subsection{Rule order}
+Even though the algorithm was designed to be independent of the order in which
+the rewrite rules fire, a decision has been made on a specific order. Because it
+is strictly required for the soundness of the algorithm or so that the rules for
+which we know that they don't apply to anything anymore are no longer attempted.
+The latter is not required by any means but it did not make the solver more
+complex.
+
+Every rule except \textbf{canonicalization} expects canonical
+constraints. Therefore this rule is exhaustively applied first. Afterwards,
+other rules might produce additional rules that are not canonical and
+canonicalization is applied just to the output of all other rules but not to the
+entire set of constraints.
+
+The set of \textbf{given} constraints is in no way affected by rewrite rules
+involving wanted constraints and therefore we exhaustively apply all rules
+exclusive to given constraints first.
+
+%TODO rename topreact is name doesn't change
+Lastly we do the same for all \textbf{wanted} constraints but these can't be
+applied in any order. We must refrain from applying $topreact$ to class
+constraints until the very end when no other rules apply. This is to prevent
+issues related to non-determinism over given class constraints. For example:
+\begin{verbatim}
+    instance Eq a => Eq [a]
+    f :: Eq [a] => [a] -> Bool
+    f x = x == x
+\end{verbatim}
+The usage of \texttt{==} gives rise to the wanted constraint $Eq \; [a]$. This
+could react with the instance declaration. This would result in the new wanted
+constraint $Eq \; a$ for which we have no way of solving. However $Eq \; [a]$ could
+easily be $simplified$ away using the given constraint $Eq \; [a]$ from the type
+signature. Therefore, $topreact$ is applied last to prevent such situations.
+
+\subsection{Building a substitution}
+After we get the normalized set of constraint, i.e. no rule applies to these
+constraints, all that is left to do is to apply the flatting substitutions to
+the constraints and the evidence and use the resulting equality constraints to
+construct a substitution.
