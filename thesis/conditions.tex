@@ -1,2 +1,70 @@
 \chapter{Conditions}
 \label{cha:conditions}
+
+Up until now we have only mentioned how to do type inference in the presence of
+functional dependencies. But functional dependencies are in essence a
+restriction imposed on instance declarations, a restriction we have yet to
+specify how to enforce. And as mentioned in the previous
+chapter~\ref{cha:entailment}, certain restrictions have to be put in place on
+class and instance declarations to make sure type checking terminates.
+In this chapter we will discuss how to enforce these and other desirable
+properties usually found in Haskell implementations.
+
+\section{Termination}
+
+\subsection{Directed acyclic graph}
+Before we type check class declarations, we have to verify that the superclass
+relations forms a directed acyclic graph. This is to ensure termination of the
+determinacy relation discussed in section~\ref{sec:determinacy} and the
+computation of match context discussed in section~\ref{sec:match-contexts}.
+
+Both of these procedures compute the transitive closure of the superclass
+relation and if this relation would be represented by a cyclic graph, these
+functions would never terminate. We therefore simply enforce this is not the
+case when type checking class declarations.
+\begin{figure}
+\begin{mathpar}
+\inferrule*[right=Cyclic]
+{
+    TC \in \overline{TC}
+}
+{
+    cycleCheck(\overline{TC}; TC) = \bot
+}
+\\
+\inferrule*[right=Acyclic]
+{
+    TC \notin \overline{TC}
+    \\
+    class \; \forall{a}. \; \overline{TC' \; \overline{u}'} \Rightarrow TC \;
+    \overline{u}
+}
+{
+    cycleCheck(\overline{TC}; TC) = \overline{cycleCheck(\overline{TC}, TC;
+    TC_i')}
+}
+\end{mathpar}
+\end{figure}
+
+\subsection{Instance declarations}
+To ensure termination for class constraint entailment, in particular the
+$topreact_w$ rule for class constraints, we employ the termination condition of
+the the Paterson Conditions \cite{fundeps-chrs},~Def.~11. So given an instance
+declaration $instance \; \forall \overline{a}. \; \overline{\pi} \Rightarrow TC
+\; \overline{u}$:
+
+\begin{itemize}
+    \item Every type variable in of $\overline{a}$ has no more occurrences in a
+    single type class constraint $\pi$ the context $\overline{\pi}$ than in the
+    head $TC \; \overline{u}$.
+
+    \item The total number of type constructors and variables in the context
+    $\overline{\pi}$, including repititions, should be less than the number in
+    $\overline{u}$.
+\end{itemize}
+
+\section{Functional Dependency Property}
+
+\section{Ambiguity}
+
+\section{Coherence}
