@@ -39,6 +39,16 @@ Notes
 
   * actually check conditions
 
+  * error of `Tests/termination/CHRs27.hs` does not look like a bug, the
+    residual constraint should end up in the type signature somehow, i see no
+    other way than allowing the constraint to be quantified over. or removing
+    it somehow through skolemization
+
+  * error of `Tests/termination/CHRs9.hs` is because of the mistake in the
+    outsidein(x) spec, the orient rule should apply to this, even though the
+    spec says it shouldn't, it says the left type should be a type pattern,
+    which is untrue i believe
+
 Substitution type class map
 ---------------------------
 

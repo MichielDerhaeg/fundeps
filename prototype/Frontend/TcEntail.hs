@@ -633,17 +633,14 @@ eqCsToSubst untchs eqs
   | Just ((ty_subst, co_subst), eqs') <- tryRule step eqs = do
     (ty_subst', co_subst') <- eqCsToSubst untchs (substInAnnEqCs ty_subst eqs')
     return (ty_subst' <> ty_subst, co_subst' <> co_subst)
-  | otherwise = throwErrorM $ text "TODO failed with: " <+> ppr eqs
+  | otherwise =
+    throwErrorM $
+    text "Entailment failed with residual equality constraints:" <+> ppr eqs
   where
-    step (c :| TyVar v1 :~: TyVar v2)
-      | v1 == v2 = Just (mempty, c |-> FcCoRefl (elabMonoTy (TyVar v1)))
+    step (c :| ty1 :~: ty2)
+      | eqMonoTy ty1 ty2 = Just (mempty, c |-> FcCoRefl (elabMonoTy ty1))
     step (c :| TyVar v :~: ty)
       | v `notElem` untchs = Just (v |-> ty, c |-> FcCoRefl (elabMonoTy ty))
     step (c :| ty :~: TyVar v)
       | v `notElem` untchs = Just (v |-> ty, c |-> FcCoRefl (elabMonoTy ty))
-    step (_ :| _ :~: TyVar _) = Nothing
-    step (_ :| TyVar _ :~: _) = Nothing
-    step (c :| TyCon tc1 :~: TyCon tc2)
-      | tc1 == tc2 = Just (mempty, c |-> FcCoRefl (elabMonoTy (TyCon tc1)))
-      | otherwise = Nothing
-    step (_ :| _ :~: _) = Nothing
+    step _ = Nothing

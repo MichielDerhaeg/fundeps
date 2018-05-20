@@ -59,12 +59,11 @@ interoperability with type classes.
 \section{Overview}
 
 \begin{figure}
-$$
+\[ % george doesn't like '$$'
 P ; \overline{untchs} \vDash \mathcal{C} \rightsquigarrow
 (\mathcal{P}_{residual}, \theta, \eta)_\bot
-$$
+\]
 \caption{Constraint Entailment}
-\label{fig:entail}
 \end{figure}
 
 The constraint solver takes the program theory $P$ containing the top-level
@@ -745,7 +744,7 @@ The set of \textbf{given} constraints is in no way affected by rewrite rules
 involving wanted constraints and therefore we exhaustively apply all rules
 exclusive to given constraints first.
 
-%TODO rename topreact is name doesn't change
+%TODO rename topreact if name doesn't change
 Lastly we do the same for all \textbf{wanted} constraints but these can't be
 applied in any order. We must refrain from applying $topreact$ to class
 constraints until the very end when no other rules apply. This is to prevent
@@ -762,7 +761,89 @@ easily be $simplified$ away using the given constraint $Eq \; [a]$ from the type
 signature. Therefore, $topreact$ is applied last to prevent such situations.
 
 \subsection{Building a substitution}
-After we get the normalized set of constraint, i.e. no rule applies to these
-constraints, all that is left to do is to apply the flatting substitutions to
-the constraints and the evidence and use the resulting equality constraints to
-construct a substitution.
+
+\begin{figure}
+\fbox{$P ; \overline{a}_{utch} \vDash \mathcal{C} \rightsquigarrow
+(\mathcal{P}_{residual}, \theta, \eta)_\bot$}
+\begin{mathpar}
+\inferrule*[right=Entail]
+{
+    solve(\overline{a}_{utch}, P, \mathcal{C}) \rightsquigarrow
+    {\mathcal{C}_{residual} \mid \theta_{flat} ; \eta_{flat} ; \eta}_\bot
+    \\
+    \mathcal{C}_{flat} = \theta_{flat}(C_{residual})
+    \\
+    \mathcal{E}_{flat}, \mathcal{P}_{flat} \equiv \mathcal{C}_{flat}
+    \\
+    (\theta, \eta_{refl})_\bot = toSubst(\overline{a}_{utch}; \mathcal{E}_{flat})
+}
+{
+    P ; \overline{a}_{utch} \vDash \mathcal{C} \rightsquigarrow
+    (\theta(\mathcal{P}_{flat}), \theta, \eta_{refl} \cdot
+    \eta_{flat}(\eta))_\bot
+}
+\end{mathpar}
+\caption{Constraint Entailment}
+\label{fig:entail}
+\end{figure}
+%TODO some sort of occurscheck here as well i think
+
+After we get the normalized set of constraint with respect to the rewrite rules,
+i.e. no rule applies to these constraints, all that is left to do is to apply
+the flatting substitutions to the constraints and the evidence to undo the
+flattening done by canonicalization. Afterwards, the resulting constraints are
+split up in equality and type class constraints and these equality constraints
+are used to build the type substitution. This final procedure of the entailment
+relation is specified in figure~\ref{fig:entail}. The normalized and unflattened
+equality constraints, denoted by $\mathcal{E}_{flat}$, should be very similar to
+a substitution already. $\{ c_1 : a \sim \tau_1, c_2 : F \; \tau_2 \sim b,
+\mathellipsis \}$, where $a$ and $b$ are not untouchable, simply needs to become
+$[a \mapsto \tau_1, b \mapsto F \; \tau_2, \mathellipsis]$ and the evidence
+simply becomes the reflection of the image of the type substitution $[ c_2
+\mapsto \langle \tau_2 \rangle, c_2 \mapsto \langle \tau_2 \rangle,
+\mathellipsis]$.
+
+The $toSubst$ function specified in figure~\ref{fig:to-subst} constructs the
+type substitution and additional evidence out of the constraints
+$\mathcal{E}_{flat}$. The constraints $\mathcal{E}_{flat}$ and the resulting
+substitution must have certain properties. Every constraint must have a shape
+like $a \sim \tau$ or $\tau \sim a$ where $a \notin \overline{a}_{utch}$ and $a
+\notin fv(\tau)$. $\mathcal{E}_{flat}$ should be void of inconsistencies like
+$\{a \sim Int, a \sim Bool\}$ and the resulting substitution must be idempotent.
+The procedure $toSubst$, inspired by unification, satisfies and verifies these
+properties. Invalid constraints simply float upwards as residual equality
+constraints and $toSubst$ presents an error to the user if it fails to solve all
+constraints.
+
+Note that this procedure could fail with a residual equality constraint like $F
+\; Int \sim F \; Bool$, which doesn't always have to be inconsistent. In
+practice, one could quantify over these constraints but because we disallow
+equality constraints in the source syntax, we simply fail as with incosistent
+constraints like $Bool \sim Int$.
+\begin{figure}
+\[
+\begin{array}{l c l}
+toSubst(\overline{a}_{utch}; \bullet) &=& (\bullet, \bullet)
+\\
+toSubst(\overline{a}_{utch}; \mathcal{E}, c : \tau \sim \tau) &=&
+(\theta, \eta \cdot [c \mapsto \langle \tau \rangle] )
+\\ \where (\theta, \eta) = toSubst(\overline{a}_{utch}, \mathcal{E})
+\\
+toSubst(\overline{a}_{utch}; \mathcal{E}, c : a \sim \tau)
+\\ \guard a \notin \overline{a}_{utch} &=& (\theta \cdot [a \mapsto \tau], \eta
+\cdot [c \mapsto \langle \tau \rangle])
+\\ \where (\theta, \eta) = toSubst(\overline{a}_{utch}, [a \mapsto
+\tau](\mathcal{E}))
+\\
+toSubst(\overline{a}_{utch}; \mathcal{E}, c : \tau \sim a)
+\\ \guard a \notin \overline{a}_{utch} &=& (\theta \cdot [a \mapsto \tau], \eta
+\cdot [c \mapsto \langle \tau \rangle])
+\\ \where (\theta, \eta) = toSubst(\overline{a}_{utch}, [a \mapsto
+\tau](\mathcal{E}))
+\\
+toSubst(\overline{a}_{utch}; \mathcal{E}) &=& \bot
+\end{array}
+\]
+\caption{Build the substitution}
+\label{fig:to-subst}
+\end{figure}
