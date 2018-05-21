@@ -140,7 +140,7 @@ overlapCheck theory cls_ct@(ClsCt cls1 tys1) =
 
 -- | Check the compatibility condition
 checkCompat :: Theory -> CtrScheme -> TcM ()
-checkCompat theory (CtrScheme _bs cs (ClsCt cls tys)) = do
+checkCompat theory scheme@(CtrScheme _bs cs (ClsCt cls tys)) = do
   let other_schemes = dropLabel $ theory_schemes theory
   mapM_ go other_schemes
   where
@@ -161,7 +161,9 @@ checkCompat theory (CtrScheme _bs cs (ClsCt cls tys)) = do
               unless
                 (substInMonoTy ty_subst (substInMonoTy substi ui0) `eqMonoTy`
                  substInMonoTy ty_subst (substInMonoTy substi' ui0')) $
-              throwErrorM $ text "TODO"
+              throwErrorM $
+                text "Compatability condition violated for:"
+                <+> ppr scheme
             _ -> return ()
       | otherwise = return ()
 
