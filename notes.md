@@ -49,6 +49,9 @@ Notes
     spec says it shouldn't, it says the left type should be a type pattern,
     which is untrue i believe
 
+  * don't forget wel-formedness rules, etc for haskell and system fc in
+    appendices
+
 Substitution type class map
 ---------------------------
 

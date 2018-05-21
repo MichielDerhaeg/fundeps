@@ -169,7 +169,7 @@ checkCompat theory scheme@(CtrScheme _bs cs (ClsCt cls tys)) = do
 
 -- | Check the unambiguous witness condition
 checkUnambWitness :: CtrScheme -> TcM ()
-checkUnambWitness (CtrScheme _bs cs (ClsCt cls tys)) = do
+checkUnambWitness scheme@(CtrScheme _bs cs (ClsCt cls tys)) = do
   as <- lookupClsParams cls
   fds <- lookupClsFundeps cls
   forM_ fds $ \(Fundep ais ai0) -> do
@@ -178,10 +178,10 @@ checkUnambWitness (CtrScheme _bs cs (ClsCt cls tys)) = do
     det_subst <- determinacy (ftyvsOf uis) cs
     let det_subst_dom = substDom det_subst
     unless (null (ftyvsOf ui0 \\ det_subst_dom)) $
-      throwErrorM $ text "TODO"
+      throwErrorM $ text "Unambiguous witness condition violated for: " <+> ppr scheme
     -- TODO check for equality of image
     unless (length det_subst_dom == length (nub det_subst_dom)) $
-      throwErrorM $ text "TODO"
+      throwErrorM $ text "Unambiguous witness condition violated for: " <+> ppr scheme
 
 -- * Ambiguous type checking
 -- ------------------------------------------------------------------------------

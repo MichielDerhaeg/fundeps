@@ -92,36 +92,102 @@ Functions} (Def 6.4 \cite{Karachalias:2017:EFD:3156695.3122966}).
 
 \subsection{Compatibility}
 
-For every instance declaration we verify if they are '\textit{compatible}' with
-all other previously defined instance declarations.
-
 \begin{figure}
+%TODO unify can be \bot too, how do we specify this?
 \fbox{$P \vdash_{compat} S_I$}
 \begin{mathpar}
 \inferrule*[right=Compat]
 {
-  \overline{\forall \overline{a}' \overline{b}'. \; \overline{\pi}' \Rightarrow
-  TC \; \overline{u}'} \in P
+  \overline{\forall \overline{a}_2 \overline{b}_2. \; \overline{\pi}_2 \Rightarrow
+  TC \; \overline{u}_2} \in P
   \\
-  \text{class} \; \forall \overline{a} \overline{b}. \; TC \; \overline{a} \mid
-  \overline{fd}
+  \text{class} \; \forall \overline{a} \overline{b}. \; \overline{\pi}
+  \Rightarrow TC \; \overline{a} \mid \overline{fd}
   \\
   fd_i \equiv a_{i_1}, \mathellipsis, a_{i_n} \rightarrow a_{i_0}
   \\
-  compat()
+  \theta_{i1} = det(fv(\overline{u}_1^{i_n}), \overline{\pi}_1)
   \\
-  \theta = det(fv(\overline{u}), \overline{\pi})
+  \theta_{i2} = det(fv(\overline{u}_2^{i_n}), \overline{\pi}_2)
   \\
-  \theta = det(fv(\overline{u}), \overline{\pi})
+  \theta_\bot = unify(\bullet; \overline{u_1^i \sim u_2^i}^n)
+  \\
+  \theta(\theta_{i1}(u_{i_01})) = \theta(\theta_{i1}(u_{i_02}))
 }
 {
-  P \vdash_{compat} \forall \overline{a} \overline{b}. \; \overline{\pi} \Rightarrow TC \;
+  P \vdash_{compat} \forall \overline{a}_1 \overline{b}_1. \; \overline{\pi}_1 \Rightarrow TC \;
+  \overline{u}_1
+}
+\end{mathpar}
+\caption{Compatibility Condition}
+\label{fig:compat}
+\end{figure}
+
+For every instance declaration we verify whether or not they are
+\textit{compatible} with all other previously defined instance declarations. The
+implementation of the definition of compatibility condition by Karachalias et
+al.~\cite{Karachalias:2017:EFD:3156695.3122966} is specified in
+figure~\ref{fig:compat}.
+
+This condition serves the same purpose as \textit{Consistency} (Def. 8
+\cite{fundeps-chrs}), originally defined by Jones~\cite{Jones00typeclasses}.
+It verifies for every functional dependency if the domain indeed determines the
+range for every pair of instance declarations. In other words, if for two
+instance declarations the domain of a functional dependency overlaps, the type
+of the range should be the same.  Note that if the unification of the domain
+fails, the condition is trivially satisfied. It prevents situations like the
+following example from being accepted by the type checker.
+%TODO better example? contrived example that is more liberal maybe?
+\begin{verbatim}
+    class C a b | a -> b
+    instance C Int Int
+    instance C Int Bool
+\end{verbatim}
+
+Unlike the formalization of consistency, it uses the determinacy relation to see
+if the image of the dependency can be fully determined by also taking the
+instance context into account. Making this condition more liberal than the
+consistency condition.
+
+\subsection{Unambiguous Witness}
+
+This condition verifies that the determinacy relation $det(\overline{a},
+\overline{\pi})$, discussed in section~\ref{sec:determinacy}, is deterministic
+and produces the same substitution regardless o
+
+\begin{figure}
+%TODO substitute question mark
+\fbox{$P \vdash_{?} S_I$}
+\begin{mathpar}
+\inferrule*[right=UnambWitness]
+{
+  \text{class} \; \forall \overline{a} \overline{b}. \; \overline{\pi}
+  \Rightarrow TC \; \overline{a} \mid \overline{fd}
+  \\
+  fd_i \equiv a_{i_1}, \mathellipsis, a_{i_n} \rightarrow a_{i_0}
+  \\
+  \theta = det(fv(\overline{u}^{i_n}), \overline{\pi}')
+  \\
+  \overline{\beta} = fv(u_{i_0})
+  \\
+  \overline{\beta} \subseteq dom(\theta)
+  \\
+  [\beta_i \mapsto \tau_1] \in \theta
+  \\
+  [\beta_i \mapsto \tau_2] \in \theta
+  \\
+  \tau_1 = \tau_2
+}
+{
+  P \vdash_{?} \forall \overline{a}' \overline{b}'. \; \overline{\pi}' \Rightarrow TC \;
   \overline{u}
 }
 \end{mathpar}
+\caption{Unambiguous Witness Functions}
+\label{fig:unamb-witness}
 \end{figure}
 
-\subsection{Unambiguous Witness}
+\subsection{Coverage}
 
 \section{Ambiguity}
 
