@@ -59,10 +59,11 @@ declaration $instance \; \forall \overline{a}. \; \overline{\pi} \Rightarrow TC
     single type class constraint $\pi$ the context $\overline{\pi}$ than in the
     head $TC \; \overline{u}$.
 
-    \item The total number of type constructors and variables in the context
-    $\overline{\pi}$, including repititions, should be less than the number in
-    $\overline{u}$.
+    \item For every constraint $\pi$ in the context $\overline{\pi}$, the total
+    number of type constructors and variables , including repititions, should be
+    less than the number in $\overline{u}$.
 \end{itemize}
+%TODO examples from GHC user guide are nice
 
 %TODO weren't we going to replace this one?
 Secondly, to ensure termination for for constraint entailment with regards to
