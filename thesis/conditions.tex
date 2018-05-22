@@ -151,13 +151,8 @@ consistency condition.
 
 \subsection{Unambiguous Witness}
 
-This condition verifies that the determinacy relation $det(\overline{a},
-\overline{\pi})$, discussed in section~\ref{sec:determinacy}, is deterministic
-and produces the same substitution regardless o
-
 \begin{figure}
-%TODO substitute question mark
-\fbox{$P \vdash_{?} S_I$}
+\fbox{$P \vdash_{W} S_I$}
 \begin{mathpar}
 \inferrule*[right=UnambWitness]
 {
@@ -179,7 +174,7 @@ and produces the same substitution regardless o
   \tau_1 = \tau_2
 }
 {
-  P \vdash_{?} \forall \overline{a}' \overline{b}'. \; \overline{\pi}' \Rightarrow TC \;
+  P \vdash_{W} \forall \overline{a}' \overline{b}'. \; \overline{\pi}' \Rightarrow TC \;
   \overline{u}
 }
 \end{mathpar}
@@ -187,8 +182,53 @@ and produces the same substitution regardless o
 \label{fig:unamb-witness}
 \end{figure}
 
+\[
+\begin{array}{l l l l}
+\text{class} \; &\forall \overline{a} \overline{b}. \; \overline{\pi}
+&\Rightarrow TC \; \overline{a} \mid \overline{fd}^m &\text{where} \; f ::
+\sigma
+\\
+\text{instance} \; &\forall \overline{a}' \overline{b}'. \; \overline{\pi}'
+&\Rightarrow TC \; \overline{a}' &\text{where} \; f = e
+\end{array}
+\]
+
+Karachalias et al. defined this condition as follows: "For each functional
+dependency $fd_i \equiv \overline{a}^{i_n} \rightarrow a_{i_0}$ it is required
+that $det(fv(\overline{u}^{i_n}),\overline{\pi}') $ is non-amiguous on
+$fv(u_{i_0})$"\cite{Karachalias:2017:EFD:3156695.3122966} (Def 6.4)
+Meaning that in regardless which order the determinacy relation derives the
+witness derivation(i.e. the substitution) from $\overline{\pi}'$, the resulting
+substitution should be equivalent when applied to $fv(u_{i_0})$.
+
+The implementation of this check abuses the implementation of the determinacy
+relation. Depending on the order the determinacy procedure specified in
+figure~\ref{fig:determinacy} selects the next class constraint, the order in
+which the substitution is constructed is different. If the resulting
+substitution is ambiguous it would contain two pairs $[\beta \mapsto \tau_1]$
+and $[\beta \mapsto \tau_2]$ that would map the same type variable to two
+syntactically distinct types. This check verifies the absence of such two pairs.
+
 \subsection{Coverage}
 
+%TODO cite chrs second sentence?
+The last functional dependency related condition we will discuss is coverage.
+It verifies that determining the types in the domain fully determines the type
+in the range. We employ the \textit{Liberal Coverage Condition}(Def.
+15\cite{fundeps-chrs}), which is verified during axiom generation specified in
+figure~\ref{fig:axiomgen} and not as an external check. It is implicitly
+verified by checking if the free variables of image of every generated axiom are
+a subset of the free variables of the domain. It is easy to see that this is
+equivalent as the liberal coverage condition and instead the transitive closure
+is computed early by the determinacy relation
+
+%TODO we could easily verify this like externally like the axiom termination
+%check
+
 \section{Ambiguity}
+
+\subsection{Ambiguous class contexts}
+
+\subsection{Ambiguous types}
 
 \section{Coherence}
