@@ -85,12 +85,12 @@ termCheckInstance :: CtrScheme -> TcM ()
 termCheckInstance scheme@(CtrScheme as cs ins_head) =
   unless (occCheck && sizeCheck) $
   throwErrorM $
-  ppr scheme <+>
-  colon <+>
-  text "The instance declaration does not satisfy the termination conditions"
+  text "The instance declaration does not satisfy the termination conditions" <>
+  colon $$
+  ppr scheme
   where
     occCheck = and [occOf a ct <= occOf a ins_head | a <- labelOf as, ct <- cs]
-    sizeCheck = sum (sizeOf <$> cs) < sizeOf ins_head
+    sizeCheck = and [sizeOf ct < sizeOf ins_head | ct <- cs]
 
 -- | Termination check of a generated axiom
 -- not enforcing this one, will be replaced
@@ -162,8 +162,8 @@ checkCompat theory scheme@(CtrScheme _bs cs (ClsCt cls tys)) = do
                 (substInMonoTy ty_subst (substInMonoTy substi ui0) `eqMonoTy`
                  substInMonoTy ty_subst (substInMonoTy substi' ui0')) $
               throwErrorM $
-                text "Compatability condition violated for:"
-                <+> ppr scheme
+                text "Compatability condition violated for" <> colon
+                $$ ppr scheme
             _ -> return ()
       | otherwise = return ()
 
@@ -178,10 +178,10 @@ checkUnambWitness scheme@(CtrScheme _bs cs (ClsCt cls tys)) = do
     det_subst <- determinacy (ftyvsOf uis) cs
     let det_subst_dom = substDom det_subst
     unless (null (ftyvsOf ui0 \\ det_subst_dom)) $
-      throwErrorM $ text "Unambiguous witness condition violated for: " <+> ppr scheme
+      throwErrorM $ text "Unambiguous witness condition violated for" <> colon <+> ppr scheme
     -- TODO check for equality of image
     unless (length det_subst_dom == length (nub det_subst_dom)) $
-      throwErrorM $ text "Unambiguous witness condition violated for: " <+> ppr scheme
+      throwErrorM $ text "Unambiguous witness condition violated for" <> colon <+> ppr scheme
 
 -- * Ambiguous type checking
 -- ------------------------------------------------------------------------------
@@ -192,4 +192,4 @@ checkUnambType poly_ty = do
   let fixed_ty_vars = fixed ty
   det_subst <- determinacy fixed_ty_vars cs
   unless (null $ ftyvsOf cs \\ substDom det_subst <> fixed_ty_vars) $
-    throwErrorM $ text "Ambiguous type" <+> colon <+> ppr poly_ty
+    throwErrorM $ text "Ambiguous type" <> colon <+> ppr poly_ty

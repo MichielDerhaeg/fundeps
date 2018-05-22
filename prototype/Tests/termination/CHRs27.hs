@@ -34,5 +34,10 @@ e2 = head (zip (Cons True (Cons False Nil))
 
 -- This fails while it shouldn't I think. Looks
 -- like a bug or something I think.
+--
+-- doesn't look like a bug, the family from the fundep needs to end up in the
+-- type signature, or get removed by skolemization, only way for it to end up
+-- in the signature is by quantifying
+
 \x. x
 

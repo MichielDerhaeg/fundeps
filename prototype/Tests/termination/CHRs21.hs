@@ -17,5 +17,8 @@ instance forall (a :: *) (b :: *) (c :: *).
 
 -- THIS EXAMPLE REALLY NEEDS THE REFINED WEAK COVERAGE
 -- CONDITION (LIBERAGE COVERAGE CONDITION) TO TYPE-CHECK
+--
+-- fails termination conditions?
+
 \x. x
 

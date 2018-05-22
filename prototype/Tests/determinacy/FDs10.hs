@@ -24,5 +24,8 @@ instance forall (a :: *) (b :: *) (c :: *). (G a c, H c b) => F (List a) (List b
 -- ||                      as : [a_uJ, b_uK, c_uI],
 -- ||                      class constraints : [G a_uJ c_uI, H c_uI b_uK]
 
+-- instance fails termination conditions, 'c' appears more often in context
+-- than in the head, GHC agrees with me :p
+
 \x. x
 

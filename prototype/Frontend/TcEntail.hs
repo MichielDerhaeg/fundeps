@@ -163,7 +163,8 @@ smallerThan untchs = go
       | otherwise = a < b
 
     -- tv < Xi
-    go TyVar {} ty = isOrphan ty
+    go TyVar {} TyApp {} = True
+    go TyVar {} TyCon {} = True
 
     go _ _ = False
 
@@ -226,7 +227,6 @@ interactWanted (WantedClsCt (d1 :| ClsCt cls1 tys1))
       [WantedClsCt (d1 :| ClsCt cls1 tys1)]
 interactWanted _ _ = empty
 
--- TODO always return first total constraint? order important?
 interactGiven :: GivenCt -> GivenCt -> MaybeT EntailM GivenCs
 interactGiven (GivenEqCt (co1 :| ct1@(TyVar a :~: ty1)))
               (GivenEqCt (co2 :|      TyVar b :~: ty2))
@@ -266,7 +266,7 @@ interactGiven (GivenClsCt ( tm1 :|  ct1@(ClsCt cls1 tys1)))
               (GivenClsCt (_tm2 :| _ct2@(ClsCt cls2 tys2)))
   -- DDICT
   | cls1 == cls2, and (zipWithExact eqMonoTy tys1 tys2) =
-  return [GivenClsCt (tm1 :| ct1)] -- TODO tm1 right?
+  return [GivenClsCt (tm1 :| ct1)]
 interactGiven _ _ = empty
 
 simplify :: GivenCt -> WantedCt -> MaybeT EntailM WantedCs
@@ -331,11 +331,15 @@ canonicalizeWanted (WantedEqCt (c :| ct)) = do
       return [c1 :| (ty1 :~: ty3), c2 :| (ty2 :~: ty4)]
     -- FAILDECW
     go _ (TyCon tc1 :~: TyCon tc2)
-      | tc1 /= tc2 = throwErrorM $ text "TODO"
+      | tc1 /= tc2 =
+        throwErrorM $
+        text "Entailment" <> colon <+> text "failed to unify" <> colon <+> ppr ct
     -- OCCCHECKW
     go _ (TyVar a :~: ty)
-      | a `elem` ftyvsOf ty -- TODO ty should be orphan, a ~ F(a) is allowed
-      , not (eqMonoTy (TyVar a) ty) = throwErrorM $ text "TODO occurscheck"
+      | a `elem` ftyvsOf ty, isOrphan ty
+      , not (eqMonoTy (TyVar a) ty) =
+        throwErrorM $
+        text "Entailment" <> colon <+> text "inifite type" <> colon <+> ppr ct
     -- ORIENTW
     go untchs (ty1 :~: ty2)
       | smallerThan untchs ty2 ty1 = do
@@ -401,7 +405,9 @@ canonicalizeGiven (GivenEqCt (co :| ct)) = do
       | tc1 /= tc2 = throwErrorM $ text "TODO"
     -- OCCCHECKG
     go _ (TyVar a :~: ty)
-      | a `elem` ftyvsOf ty, not (eqMonoTy (TyVar a) ty) = throwErrorM $ text "TODO"
+      | a `elem` ftyvsOf ty, not (eqMonoTy (TyVar a) ty) =
+        throwErrorM $
+        text "Entailment" <> colon <+> text "inifite type" <> colon <+> ppr ct
     -- ORIENTG
     go untchs (ty1 :~: ty2)
       | smallerThan untchs ty2 ty1 = return [FcCoSym co :| ty2 :~: ty1]
@@ -455,7 +461,6 @@ canonicalizeGiven (GivenClsCt (tm :| cls_ct))
     addUntch beta
     addFlatTySubst $ beta |-> fam_ty
     addFlatEvSubst $
-      -- TODO ask should be refl?
       coToEvSubst (c |-> FcCoRefl (elabMonoTy fam_ty)) <> tmToEvSubst (d |-> tm)
     return
       [ GivenClsCt (FcTmVar d :| applyClsCtx ctx (TyVar beta))

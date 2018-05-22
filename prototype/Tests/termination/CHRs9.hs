@@ -20,5 +20,7 @@ f = \b. \x. \y. case b of
 -- SINCE 'b' APPEARS IN A TYPE FAMILY APPLICATION, THIS SHOULD NOT TRIGGER AN
 -- OCCURS CHECK (IF THAT IS WHY THE ERROR OCCURS).
 
+-- fails to terminate, termination checks pass though
+
 \x. x
 

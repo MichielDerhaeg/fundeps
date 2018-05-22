@@ -346,12 +346,17 @@ elabInsDecl theory (InsD ab_s ins_cs cls typats method method_tm) = do
 
   ins_d <- freshDictVar
   ins_scheme <- freshenLclBndrs $ CtrScheme ab_s ins_cs head_ct
+  checkCompat theory ins_scheme
+  termCheckInstance ins_scheme
 
   ann_ins_cs <- snd <$> annotateClsCs ins_cs
 
   (mctx, match_cs, match_ctx) <- dictDestruction ann_ins_cs
 
   axioms <- generateAxioms ins_scheme
+  unless (all (termCheckAxiom) axioms) $
+    throwErrorM $ text "term axiom"
+
   let i_theory = theory `tExtendAxioms`   axioms
                         `tExtendGivenCls` ann_ins_cs
                         `tExtendGivens`   match_cs

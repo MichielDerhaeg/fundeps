@@ -17,5 +17,7 @@ instance forall (a :: *) (b :: *). F a b Bool => F (List a) (List b) Bool where
 instance forall (a :: *) (b :: *). H a b => F (List a) (List b) Char where
   fop = undefined
 
+-- this clearly violates compatability/consistency
+
 \x. x
 

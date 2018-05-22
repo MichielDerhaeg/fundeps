@@ -26,5 +26,7 @@ instance forall (a :: *) (b :: *) (c :: *). (G a (Tup a Nat), H c b) => F (List 
 -- ||                      as : [a_uP, b_uQ, c_uR],
 -- ||                      class constraints : [G a_uP (Tup a_uP Nat), H c_uR b_uQ]
 
+-- context is actually ambiguous
+
 \x. x
 
