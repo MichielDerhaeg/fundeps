@@ -348,6 +348,7 @@ elabInsDecl theory (InsD ab_s ins_cs cls typats method method_tm) = do
   ins_scheme <- freshenLclBndrs $ CtrScheme ab_s ins_cs head_ct
   checkCompat theory ins_scheme
   termCheckInstance ins_scheme
+  checkUnambWitness ins_scheme
 
   ann_ins_cs <- snd <$> annotateClsCs ins_cs
 

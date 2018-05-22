@@ -18,7 +18,7 @@ import           Utils.Var
 
 import           Control.Monad (forM_, unless, when)
 import           Data.Foldable (asum)
-import           Data.List     (nub, (\\))
+import           Data.List     (nub, (\\), groupBy)
 import           Data.Semigroup
 
 -- | The size norm
@@ -177,11 +177,13 @@ checkUnambWitness scheme@(CtrScheme _bs cs (ClsCt cls tys)) = do
     let ui0:uis = substInMonoTy subst . TyVar <$> ai0 : ais
     det_subst <- determinacy (ftyvsOf uis) cs
     let det_subst_dom = substDom det_subst
-    unless (null (ftyvsOf ui0 \\ det_subst_dom)) $
-      throwErrorM $ text "Unambiguous witness condition violated for" <> colon <+> ppr scheme
-    -- TODO check for equality of image
-    unless (length det_subst_dom == length (nub det_subst_dom)) $
-      throwErrorM $ text "Unambiguous witness condition violated for" <> colon <+> ppr scheme
+    unless (go mempty (destructSubst det_subst)) $
+      throwErrorM $
+      text "Unambiguous witness condition violated for" <> colon <+> ppr scheme
+  where
+    go _ [] = True
+    go l ((a, ty):rest) =
+      maybe (go ((a, ty) : l) rest) (const False) (lookup a l)
 
 -- * Ambiguous type checking
 -- ------------------------------------------------------------------------------
