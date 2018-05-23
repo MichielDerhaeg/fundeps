@@ -17,12 +17,10 @@ import           Utils.Utils
 import           Control.Applicative
 import           Control.Monad.Reader
 import           Control.Monad.State
-
+import           Data.Maybe           (fromMaybe)
 
 fcSimplify :: FcProgram -> FcProgram
-fcSimplify pgm = case simplifyFcProgram pgm of
-  Nothing -> pgm
-  Just pgm' -> pgm'
+fcSimplify pgm = fromMaybe pgm (simplifyFcProgram pgm)
 
 -- | Repeatedly simplify a System Fc program until no rules apply.
 -- Returns `Nothing` if it can't be simplified anymore.
@@ -40,7 +38,7 @@ simplifyFcProgram pgm = flip evalStateT (SimplEnv mempty)
       simplifyFcTerm tm
       go pgm'
       where
-        pat tm' pgm'' = FcPgmValDecl (FcValBind f ty tm') pgm''
+        pat tm' = FcPgmValDecl (FcValBind f ty tm')
 
 simplifyFcTerm :: FcTerm -> SimplifyM FcTerm
 simplifyFcTerm = go
@@ -93,7 +91,7 @@ simplifyFcType = go
     go (FcTyFam f tys) = FcTyFam f <$> doAltList go tys
 
 simplifyFcAlts :: FcAlts -> SimplifyM FcAlts
-simplifyFcAlts alts = doAltList simplifyFcAlt alts
+simplifyFcAlts = doAltList simplifyFcAlt
 
 simplifyFcAlt :: FcAlt -> SimplifyM FcAlt
 simplifyFcAlt (FcAlt (FcConPat dc bs ann_cs ann_xs) tm) =
@@ -103,8 +101,8 @@ simplifyFcAlt (FcAlt (FcConPat dc bs ann_cs ann_xs) tm) =
     (doAltList simplifyFcType) (dropLabel ann_xs)
     simplifyFcTerm tm
   where
-    pat props tys tm' =
-      FcAlt (FcConPat dc bs (labelOf ann_cs |: props) (labelOf ann_xs |: tys)) tm'
+    pat props tys =
+      FcAlt (FcConPat dc bs (labelOf ann_cs |: props) (labelOf ann_xs |: tys))
 
 simplifyProp :: FcProp -> SimplifyM FcProp
 simplifyProp (FcProp ty1 ty2) = doAlt2 FcProp
@@ -193,7 +191,7 @@ typeOfCo (FcCoRight co) = typeOfCo co >>= \case
   FcProp (FcTyApp _ty1 ty2) (FcTyApp _ty3 ty4) -> return $ FcProp ty2 ty4
   _ -> empty
 typeOfCo (FcCoFam f crcs) = do
-  (tys1, tys2) <- unzip . (fmap propToTuple) <$> mapM typeOfCo crcs
+  (tys1, tys2) <- unzip . fmap propToTuple <$> mapM typeOfCo crcs
   return $ FcProp (FcTyFam f tys1) (FcTyFam f tys2)
   where
     propToTuple (FcProp ty1 ty2) = (ty1, ty2)
@@ -209,7 +207,7 @@ typeOfCo (FcCoQual psi co) = do
   FcProp ty1 ty2 <- typeOfCo co
   return $ FcProp (FcTyQual psi ty1) (FcTyQual psi ty2)
 typeOfCo (FcCoQInst co1 _co2) = typeOfCo co1 >>= \case
-  FcProp (FcTyQual _psi1 ty1) (FcTyQual _psi2 ty2) -> do
+  FcProp (FcTyQual _psi1 ty1) (FcTyQual _psi2 ty2) ->
     return $ FcProp ty1 ty2
   _ -> empty
 
