@@ -1,2 +1,46 @@
 \chapter{Coercion Simplification}
 \label{cha:co-simpl}
+
+Every step the constraint entailment algorithm takes, a new piece of evidence is
+emitted that mirrors this action. It often produces enormous coercions for even
+the simplest of programs. This makes the resulting program more difficult the
+parse for humans and the coercions themselves almost impossible to comprehend.
+What makes matters even worse is that every time FD induced equalities are not
+required ,these coercions would simply prove $a \sim a$ for any type $a$. They
+are essentially very complicated reflections, making them, and the type cast that
+uses them, completely useless.
+
+% and in an attempt to preserve the author's sanity.
+To alleviate this problem, we employ a coercion simplification procedure that
+transforms these coercions to ones that are strictly smaller but entirely
+equivalent.
+
+\begin{figure}
+%TODO define environment
+\[
+\begin{array}{l c l}
+simplCo(\gamma) \\
+\guard \Gamma \vdash_{co} \rightsquigarrow \tau \sim \tau &=& \langle \tau
+\rangle
+\\
+simplCo(\langle \tau \rangle \fctrans \gamma) &=& \gamma
+\\
+simplCo(\gamma \fctrans \langle \tau \rangle) &=& \gamma
+\\
+simplCo(\langle \tau_1 \rangle \; \langle \tau_2 \rangle) &=& \langle \tau_1 \;
+\tau_2 \rangle
+\\
+simplCo(\text{sym} \; (\text{sym} \; \gamma)) &=& \gamma
+\\
+simplCo(\text{sym} \; (\langle \tau \rangle)) &=& \langle \tau \rangle
+\\
+simplCo(\text{sym} \; \gamma_1 \fctrans \text{sym} ; \gamma_2) &=& \text{sym} \;
+(\gamma_1 \fctrans \gamma_2)
+\\
+simplCo(F(\overline{\gamma}) \fctrans F(\overline{\gamma}')) &=&
+F(\overline{\gamma_i \fctrans \gamma_i'})
+\end{array}
+\]
+\caption{Coercion Simplification}
+\label{fig:co-simpl}
+\end{figure}
