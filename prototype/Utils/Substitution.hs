@@ -264,6 +264,10 @@ sub_rec (SCons s x y) t = sub_rec s (substVar x y t)
 buildSubst :: [(x,y)] -> Sub x y
 buildSubst = foldl (\s (x,y) -> SCons s x y) SNil
 
+destructSubst :: Sub x y -> [(x,y)]
+destructSubst SNil = []
+destructSubst (SCons s x y) = destructSubst s <> [(x,y)]
+
 -- | Compute the domain of the substitution
 substDom :: Sub x y -> [x]
 substDom SNil             = []

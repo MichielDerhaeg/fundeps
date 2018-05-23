@@ -359,6 +359,7 @@ canon_g(c : \tau \sim \mathbb{T}[F(\overline{u})])
 \end{figure}
 
 \subsection{Binary interaction}
+\label{sec:binary-interaction}
 The binary interaction rules are specified in figures~\ref{fig:interact_w} and
 \ref{fig:interact_g} and transform two given or wanted \textit{canonical
 constraints} to either given or wanted constraints respectively.
@@ -376,9 +377,9 @@ Binary interactions also remove duplicates of type class constraints. This
 makes a lot of sense for wanted constraints: if we solved one, we can also solve
 the other and the evidence of $[d_2 \rightarrow d_1$] clearly reflects this
 notion. For wanted constraints however, we do the same but simply throw away the
-evidence. This has no consequences because of the coherence property of type
-classes is enforced. This means that there should only be one unique choice of
-instance for any given type. The property implies that if the evidence can be
+evidence. This has no consequences because the coherence property of type
+classes is enforced. This means that there should only be one unique choice for
+an instance for any given type. The property implies that if the evidence can be
 derived in multiple ways, it should semantically be the same. So there is no
 loss of information.
 %TODO example?

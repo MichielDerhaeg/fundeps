@@ -196,7 +196,7 @@ consistency condition.
 
 Karachalias et al. defined this condition as follows: "For each functional
 dependency $fd_i \equiv \overline{a}^{i_n} \rightarrow a_{i_0}$ it is required
-that $det(fv(\overline{u}^{i_n}),\overline{\pi}') $ is non-amiguous on
+that $det(fv(\overline{u}^{i_n}),\overline{\pi}') $ is non-ambiguous on
 $fv(u_{i_0})$"\cite{Karachalias:2017:EFD:3156695.3122966} (Def 6.4)
 Meaning that in regardless which order the determinacy relation derives the
 witness derivation(i.e. the substitution) from $\overline{\pi}'$, the resulting
@@ -210,6 +210,8 @@ substitution is ambiguous it would contain two pairs $[\beta \mapsto \tau_1]$
 and $[\beta \mapsto \tau_2]$ that would map the same type variable to two
 syntactically distinct types. This check verifies the absence of such two pairs.
 
+%TODO example?
+
 \subsection{Coverage}
 
 %TODO cite chrs second sentence?
@@ -221,15 +223,156 @@ figure~\ref{fig:axiomgen} and not as an external check. It is implicitly
 verified by checking if the free variables of image of every generated axiom are
 a subset of the free variables of the domain. It is easy to see that this is
 equivalent as the liberal coverage condition and instead the transitive closure
-is computed early by the determinacy relation
+is computed earlier by the determinacy relation.
 
-%TODO we could easily verify this like externally like the axiom termination
+%TODO we could easily verify this externally like the axiom termination
 %check
+
+%TODO example
 
 \section{Ambiguity}
 
-\subsection{Ambiguous class contexts}
+Ambiguity occurs when there is a class constraint over a type variable where the
+type variable can never be determined.
+
+\begin{verbatim}
+    show :: Show a => a -> String
+    read :: Read a => String -> a
+    f x = show (read x)
+\end{verbatim}
+
+% damnit latex layout
+% TODO nicely explained in introduction, what do i explain here? do i repeat
+% myself?
+% TODO really unsatisfied with this
+In this classic example of ambiguity the type of \texttt{f} would be
+\texttt{(Show a, Read a) => String -> String}. \footnote{The type would be
+\texttt{String -> String} in GHCi, and therefore not ambiguous, because
+\texttt{a} would default to \texttt{()}.}. No matter the context in which
+\texttt{f} is used, the type of \texttt{a} can never be determined and is
+therefore ambiguous.
+
+In these simple examples, checking for ambiguity would simply consist of
+checking if all of the type variables in the context would also appear in what
+they happen to be quantifying over which would imply they can be directly
+determined. But this procedure becomes a bit more involved when functional
+dependencies are present. Either these variables are present or can be
+determined indirectly by another type through a functional dependency or even a
+chain of several. For example:
+\begin{verbatim}
+    class C a b | a -> b
+    f :: C a b => a -> a
+\end{verbatim}
+
+Even though \texttt{b} does not appear in the monotype component of the
+signature of \texttt{f}, \texttt{a} does and \texttt{b} can be determined
+through \texttt{a} using the functional dependency making the type signature of
+\texttt{f} unambiguous.
+
+\subsection{Ambiguous class/instance contexts}
+
+\[
+\begin{array}{l l l}
+\text{class} \; &\forall \overline{a} \overline{b}. \; \overline{\pi}
+&\Rightarrow TC \; \overline{u}
+\\
+\text{instance} \; &\forall \overline{a} \overline{b}. \; \overline{\pi}
+&\Rightarrow TC \; \overline{u}
+\end{array}
+\]
+\[
+unambContext(\overline{b},\overline{a},\overline{\pi}) = \overline{b} \subseteq
+dom(det(\overline{a},\overline{\pi}))
+\]
+
+For class and instance contexts we would have to verify if the type variables
+$\overline{b}$, that do not appear in the head $TC \; \overline{u}$ but only in
+the context $\overline{\pi}$, can be completely determined by $\overline{a}$.
+This is quite straightforward using the determinacy relation. If the determinacy
+relation creates a substitution for every variable in $\overline{b}$ we know
+that they can all be determined and the context is unambiguous.
 
 \subsection{Ambiguous types}
 
+Checking for ambiguity for types, inferred or annotated, is also rather
+straightforward but unlike with class/instance contexts we have to take type
+families into account. We don't allow type families in the source text but this
+restriction does not hold for inferred types.
+
+\[
+\begin{array}{l l l l}
+fixed(a) &= {a} &\quad fixed(\tau_1 \; \tau_2) & = fixed(\tau_1) \cup
+fixed(\tau_2) \\
+fixed(T) &= \bullet &\quad fixed(F(\overline{\tau})) &= \bullet \\
+\end{array}
+\]
+\begin{mathpar}
+\inferrule*
+{
+    \sigma \equiv \forall \overline{a}. \; \overline{\pi} \Rightarrow \tau
+    \\
+    fv(\overline{\pi}) \subseteq dom(det(fixed(\tau),\overline{\pi})) \cup
+    fixed(\tau)
+}
+{
+    unambType(\sigma)
+}
+\end{mathpar}
+
+The check is very similar to the class/instance case but instead we only
+consider the \textit{fixed} type variables of the monotype $\tau$ to be directly
+determined. The \textit{fixed} type variables are the variables that do not
+solely occur within type family applications. Consider the following example:
+
+\begin{verbatim}
+    C a b | a -> b
+    h :: C a b => F a
+
+    f :: Int
+    f = h
+\end{verbatim}
+
+Given that $F(Int) \sim Int$ and $F(Bool) \sim Int$, the usage of \texttt{h} in
+the body of \texttt{f} gives rise to the wanted constraint $F(a) \sim Int$.  $a$
+could in this case be $Int$ or $Bool$. And therefore the usage of \texttt{h}
+does not determine the type of $a$ and indirectly the type of $b$.  Even worse,
+this makes $a$ itself ambiguous and this should be rejected regardless of the
+given class constraint $C \; a \; b$.
+%TODO are the free variables of the class cs sufficient? does it need to include
+%the free vars of sigma too? maybe not, they have to occur as part of type class
+%constraints
+
 \section{Coherence}
+
+This is the last property that needs an explicit check to be ensured and was
+briefly discussed section~\ref{sec:binary-interaction}. Coherence ensures that
+no matter how a type class constraint is resolved and the corresponding
+evidence is derived, the operational semantics of the resulting program should
+always be the same. The semantics of type classes are defined in the methods of
+instance declarations and therefore for any given types the choice for an
+instance should always be the same. This implies it suffices to restrict
+instance declarations to be \textit{non-overlapping}. No instantiation of a type
+class constraint can possible match with the heads of two different instance
+declarations.
+%TODO simple example?
+
+This property is again verified for every instance declaration. By attempting to
+unify the types in the instance declaration with the corresponding types in
+every other previously defined instance declaration. If unification produces
+valid substitution than this would imply that there is an instantiation of the
+constraint that can match both instance declarations and the program should be
+rejected. If no such substitution exists, unification fails and all is well.
+\begin{figure}
+\begin{mathpar}
+\inferrule*
+{
+    (\forall \overline{a}. \; \overline{\pi} \Rightarrow TC \; \overline{u}')
+    \in P
+    \\
+    \bot = unify(\bullet,\overline{u_i \sim u_i'})
+}
+{
+    overlapCheck(P,TC \; \overline{u})
+}
+\end{mathpar}
+\end{figure}
