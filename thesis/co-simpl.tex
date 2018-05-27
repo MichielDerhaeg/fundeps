@@ -3,44 +3,83 @@
 
 Every step the constraint entailment algorithm takes, a new piece of evidence is
 emitted that mirrors this action. It often produces enormous coercions for even
-the simplest of programs. This makes the resulting program more difficult the
+the simplest of programs. This makes the resulting program more difficult to
 parse for humans and the coercions themselves almost impossible to comprehend.
 What makes matters even worse is that every time FD induced equalities are not
-required ,these coercions would simply prove $a \sim a$ for any type $a$. They
-are essentially very complicated reflections, making them, and the type cast that
-uses them, completely useless.
-
-% and in an attempt to preserve the author's sanity.
-To alleviate this problem, we employ a coercion simplification procedure that
-transforms these coercions to ones that are strictly smaller but entirely
-equivalent.
+required, these coercions would simply prove $a \sim a$ for any type $a$. They
+are essentially very complicated reflections, making them, and the type cast
+that uses them, completely useless.
 
 \begin{figure}
-%TODO define environment
+\fbox{$\Gamma_{co} \vdash t \rightsquigarrow t'$}
 \[
 \begin{array}{l c l}
-simplCo(\gamma) \\
-\guard \Gamma \vdash_{co} \rightsquigarrow \tau \sim \tau &=& \langle \tau
+\Gamma_{co} \vdash_{?} t \triangleright \langle \tau \rangle &\rightsquigarrow& t\\
+\\
+\Gamma_{co} \vdash \gamma \\
+\guard \Gamma_{co} \vdash_{co} \rightsquigarrow \tau \sim \tau &\rightsquigarrow& \langle \tau
 \rangle
 \\
-simplCo(\langle \tau \rangle \fctrans \gamma) &=& \gamma
+\Gamma_{co} \vdash \langle \tau \rangle \fctrans \gamma &\rightsquigarrow& \gamma
 \\
-simplCo(\gamma \fctrans \langle \tau \rangle) &=& \gamma
+\Gamma_{co} \vdash \gamma \fctrans \langle \tau \rangle &\rightsquigarrow& \gamma
 \\
-simplCo(\langle \tau_1 \rangle \; \langle \tau_2 \rangle) &=& \langle \tau_1 \;
-\tau_2 \rangle
+\Gamma_{co} \vdash \langle \tau_1 \rangle \; \langle \tau_2 \rangle
+&\rightsquigarrow& \langle \tau_1 \; \tau_2 \rangle
 \\
-simplCo(\text{sym} \; (\text{sym} \; \gamma)) &=& \gamma
+\Gamma_{co} \vdash \text{sym} \; (\text{sym} \; \gamma)) &\rightsquigarrow& \gamma
 \\
-simplCo(\text{sym} \; (\langle \tau \rangle)) &=& \langle \tau \rangle
+\Gamma_{co} \vdash \text{sym} \; (\langle \tau \rangle) &\rightsquigarrow& \langle \tau \rangle
 \\
-simplCo(\text{sym} \; \gamma_1 \fctrans \text{sym} ; \gamma_2) &=& \text{sym} \;
-(\gamma_1 \fctrans \gamma_2)
+%TODO this one is done in the oppisite direction in the fc paper
+\Gamma_{co} \vdash \text{sym} \; \gamma_1 \fctrans \text{sym} ; \gamma_2
+&\rightsquigarrow& \text{sym} \; (\gamma_1 \fctrans \gamma_2)
 \\
-simplCo(F(\overline{\gamma}) \fctrans F(\overline{\gamma}')) &=&
-F(\overline{\gamma_i \fctrans \gamma_i'})
+\Gamma_{co} \vdash F(\overline{\gamma}) \fctrans F(\overline{\gamma}')
+&\rightsquigarrow& F(\overline{\gamma_i \fctrans \gamma_i'})
 \end{array}
 \]
 \caption{Coercion Simplification}
 \label{fig:co-simpl}
+\end{figure}
+
+% and in an attempt to preserve the author's sanity.
+To alleviate this problem, we employ a coercion simplification procedure that
+transforms these coercions to ones that are strictly smaller but entirely
+equivalent. This procedure is inspired by the coercion normalization procedure
+by Sulzmann et al.~\cite{Sulzmann:2007:SFT:1190315.1190324}. And like
+normalization, it consists of several rewrite rules specified in
+figure~\ref{fig:co-simpl}. We call it simplification instead of normalization
+because we employ a much smaller set of rules that only simplifies the coercions
+instead of reducing it to some normal form. These rules have proven to be highly
+effective and sufficient so no effort has been made to implement full
+normalization.
+
+However, this would be trivial given that all of the surrounding framework is in
+place, which includes type-aware rewrite rules. This means we can take the type
+of a coercion (the proposition) into account. This implies that we need to do
+some sort of type checking during coercion simplification.  Simplification is
+implemented as a separate operation, completely independent from type checking.
+To be able to determine the proposition of a coercion and type-aware coercion
+rewriting, a simplified implementation of the coercion typing rules specified in
+Figure~\ref{fig:fc-co-type} is. Because actual type checking occurs in a
+different phase this version of coercion, typing does not need to type check
+anything or verify any well-formedness. We only attempt to derive the
+proposition. The specification of the simplified coercion typing is specified in
+Figure~\ref{fig:fc-co-type}
+
+We make use of a simplified typing environment, specified in
+Figure~\ref{fig:co-env} and denoted by $\Gamma_{co}$. As type checking types is
+not required and determining syntactic equality of types or observing their
+structure does not require any context or environment, it suffices to only keep
+track of coercion variables brought into scope and axiom variables defined by
+axiom declarations.
+
+\begin{figure}
+\[
+\Gamma_{co} ::= \bullet \mid \Gamma_{co}, \; c : \tau_1 \sim \tau_2 \mid
+\Gamma_{co}, \; g \; \overline{a} : F(\overline{v}) \sim v
+\]
+\caption{Coercion Environment}
+\label{fig:co-env}
 \end{figure}

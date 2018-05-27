@@ -52,6 +52,16 @@ Notes
   * don't forget wel-formedness rules, etc for haskell and system fc in
     appendices
 
+  * parsing typats does not support arrows, maybe drop typats all together, it
+    does not seem very useful because we parse polytypes with normal monotypes,
+    lets not go half way, we immediately convert to monotypes anyway
+
+  * represent program as list of decls, core does this to, allows for nicer
+    abstractions, cleaner as functions could simply return a list of Decl
+    instead of precisely what is needed
+
+  * finish wanted FD constraint generation
+
 Substitution type class map
 ---------------------------
 
