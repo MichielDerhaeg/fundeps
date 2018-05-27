@@ -240,7 +240,7 @@ $$
 \end{figure}
 \begin{figure}
 \fbox{$\Gamma \vdash_{co} \gamma : \psi$}
-$$
+\begin{mathpar}
 %CoVar
 \inferrule*[right=CoVar]
 {
@@ -249,8 +249,7 @@ $$
 {
     \Gamma \vdash_{co} c : \psi
 }
-$$
-$$
+\\
 %CoAx
 \inferrule*[right=CoAx]
 {
@@ -262,9 +261,7 @@ $$
     \Gamma \vdash_{co} g \; \overline{v} : [\overline{a} \mapsto \overline{v}]v_1
     \sim [\overline{a} \mapsto \overline{v}]v_2
 }
-\; \textsc{CoAx}
-$$
-$$
+\\
 %CoRefl
 \inferrule*[right=CoRefl]
 {
@@ -273,8 +270,7 @@ $$
 {
     \Gamma \vdash_{co} \langle v \rangle : v \sim v
 }
-$$
-$$
+\\
 %CoSym
 \inferrule*[right=CoSym]
 {
@@ -283,10 +279,8 @@ $$
 {
     \Gamma \vdash_{co} \text{sym} \; \gamma : v_2 \sim v_1
 }
-$$
-$$
+\\
 %CoTrans
-% TODO semicolon
 \inferrule*[right=CoTrans]
 {
     \Gamma \vdash_{co} \gamma_1 : v_1 \sim v_2
@@ -296,8 +290,7 @@ $$
 {
     \Gamma \vdash_{co} \gamma_1 \fctrans \gamma_2 : v_1 \sim v_3
 }
-$$
-$$
+\\
 %CoApp
 \inferrule*[right=CoApp]
 {
@@ -310,8 +303,7 @@ $$
 {
     \Gamma \vdash_{co} \gamma_1 \; \gamma_2 : v_1 \; v_3 \sim v_2 \; v_4
 }
-$$
-$$
+\\
 %CoLeft
 \inferrule*[right=CoLeft]
 {
@@ -320,8 +312,7 @@ $$
 {
     \Gamma \vdash_{co} \text{left} \; \gamma : v_1 \sim v_3
 }
-$$
-$$
+\\
 %CoRight
 \inferrule*[right=CoRight]
 {
@@ -330,8 +321,7 @@ $$
 {
     \Gamma \vdash_{co} \text{right} \; \gamma : v_2 \sim v_4
 }
-$$
-$$
+\\
 %CoFam
 \inferrule*[right=CoFam]
 {
@@ -345,8 +335,7 @@ $$
     \Gamma \vdash_{co} F(\overline{\gamma}) : F(\overline{v_1}) \sim
     F(\overline{v_2})
 }
-$$
-$$
+\\
 %CoAbs
 \inferrule*[right=CoAbs]
 {
@@ -360,8 +349,7 @@ $$
     \Gamma \vdash_{co} \forall a. \; \gamma : \forall. a \; v_1 \sim \forall. a
     \; v_2
 }
-$$
-$$
+\\
 %CoInst
 \inferrule*[right=CoInst]
 {
@@ -376,8 +364,7 @@ $$
     \Gamma \vdash_{co} \gamma_1 [\gamma_2] : [a \mapsto v_3]v_1 \sim [a \mapsto
     v_4]v_2
 }
-$$
-$$
+\\
 %CoQual
 \inferrule*[right=CoQual]
 {
@@ -389,8 +376,7 @@ $$
     \Gamma \vdash_{co} \psi \Rightarrow \gamma : (\psi \Rightarrow v_1) \sim
     (\psi \Rightarrow v_2)
 }
-$$
-$$
+\\
 %CoQual
 \inferrule*[right=CoQInst]
 {
@@ -402,9 +388,9 @@ $$
 {
     \Gamma \vdash_{co} \gamma_1 @ \gamma_2 : v_1 \sim v_2
 }
-$$
+\end{mathpar}
 \caption{System $F_C$ Coercion Typing}
-\label{fc-type}
+\label{fig:fc-co-type}
 \end{figure}
 
 
