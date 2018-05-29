@@ -37,7 +37,8 @@ Notes
 
   * parse quantified type contexts better
 
-  * actually check conditions
+  * ~~actually check conditions~~
+    - actually check ambiguous witness
 
   * error of `Tests/termination/CHRs27.hs` does not look like a bug, the
     residual constraint should end up in the type signature somehow, i see no
@@ -61,6 +62,12 @@ Notes
     instead of precisely what is needed
 
   * finish wanted FD constraint generation
+
+  * doet topreactCls_w need to happen after topreactEqw? or can they be merged?
+
+  * rule names required for solver rewrite rules?
+
+  * fix inference syntax, does not correspond to rewrite rules
 
 Substitution type class map
 ---------------------------
