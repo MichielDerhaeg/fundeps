@@ -44,6 +44,7 @@ Notes
     residual constraint should end up in the type signature somehow, i see no
     other way than allowing the constraint to be quantified over. or removing
     it somehow through skolemization
+    - probably should fail without signature
 
   * error of `Tests/termination/CHRs9.hs` is because of the mistake in the
     outsidein(x) spec, the orient rule should apply to this, even though the
@@ -56,6 +57,7 @@ Notes
   * parsing typats does not support arrows, maybe drop typats all together, it
     does not seem very useful because we parse polytypes with normal monotypes,
     lets not go half way, we immediately convert to monotypes anyway
+    - remove type patterns from impl, it's a theoretical construct
 
   * represent program as list of decls, core does this to, allows for nicer
     abstractions, cleaner as functions could simply return a list of Decl
@@ -63,7 +65,8 @@ Notes
 
   * finish wanted FD constraint generation
 
-  * doet topreactCls_w need to happen after topreactEqw? or can they be merged?
+  * does topreactCls_w need to happen after topreactEqw? or can they be merged?
+    - do it -Shia Labeouf
 
   * rule names required for solver rewrite rules?
 
