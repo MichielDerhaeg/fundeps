@@ -13,7 +13,7 @@ class forall (a :: *) (b :: *). C a b | a -> b where
 -- undefined :: forall a. a
 undefined = let x = x in x
 
-instance forall (a :: *) (b :: *). (C1 a b, C2 a b) => C a b where
+instance forall (a :: *) (b :: *). (C1 a b, C2 a b) => C (List a) (List b) where
   cop = undefined
 
 -- SHOULD FAIL due to Ambiguous Witness Derivation
