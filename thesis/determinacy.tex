@@ -1,15 +1,48 @@
 \section{Determinacy}
 \label{sec:determinacy}
+The determinacy relation is one of the key idea's of the formalization of
+functional dependencies used in the work of Karachalias et
+al.~\cite{Karachalias:2017:EFD:3156695.3122966}.  It takes the form of
+$det(\overline{a},\overline{\pi}) = \theta$ and can be interpreted as follows:
+It produces a substitution that replaces the type variables of $\overline{\pi}$
+with entirely equivalent types that only use type variables from $\overline{a}$.
+It does so by leveraging the functional dependencies of the type class
+constraints in question. Every functional dependency gives rise to a type family
+that maps the domain to the range of the dependency, allowing us to
+\textit{determine} the range using the domain, hence the name
+\textit{determinacy}. Consider this simple example:
+
+\[
+\begin{array}{l c l}
+    \texttt{class C a b | a -> b} &\rightsquigarrow& \textbf{type} \; F_C(a) \\
+    \texttt{instance C Int Bool} &\rightsquigarrow& \textbf{axiom} \; g :
+    F_C(Int) \sim Bool \\
+    \\
+\end{array}
+\]
+\[
+    det(c, C \; c \; d) = [d \mapsto F_C (c)]
+\]
+
+The functional dependency of the class \texttt{C} gives rise to a type family
+$F_C$ which can be used to refer to the type variable $d$ using the type
+variable $c$. The instance declaration gives rise to an axiom $g$ that states
+that $F_C(Int)$ is equal to $Bool$. This could be used to guide type inference, if
+the inference algorithm decides that that $a$ is equal to $Int$, it can use the
+axiom $g$ to determine that $F_C(c)$, and indirectly $d$, should be equal to
+$Bool$. A second use of this relation is to verify if type variables can be
+determined by the given type variables and class constraints. One simply needs
+to inspect the domain of the substitution for an occurence of this type
+variable.
+
 \begin{figure}
-\fbox{$\overline{a}; \overline{\pi} \vdash_{D} \theta \rightsquigarrow
-    \theta'$}
+\fbox{$\overline{a}; \overline{\pi} \vdash_{D} \theta \rightsquigarrow \theta'$}
 \begin{mathpar}
 \inferrule*[right=$\text{Step}_D$]
 {
     TC \; \overline{u} \in \overline {\pi}
     \\
-    (fd_i \equiv \overline{a}^{i_n} \rightarrow a_{i_0}) \in (\overline{fd}^m
-    \in TC)
+    TC \; \overline{a} \mid a_{i_1}, \mathellipsis, a_{i_n} \rightarrow a_{i_0}
     \\
     fv(u_{i_0}) \nsubseteq \overline{a} \cup dom(\theta)
     \\
@@ -23,8 +56,84 @@
 \caption{Determinacy Relation}
 \label{fig:determinacy}
 \end{figure}
+
+The determinacy relation $det(\overline{a},\overline{\pi}) = \theta$ is formally
+defined as $\overline{a};\overline{\pi} \vdash_{D} \bullet \rightsquigarrow^!
+\theta$ where the single determinacy step $\overline{a};\overline{\pi}
+\vdash_{D} \theta \rightsquigarrow \theta'$ is defined in
+Figure~\ref{fig:determinacy}. The exclamation mark $!$ indicates that we
+repeatedly apply the single determinacy step until no additional substitution is
+produced for any type class constraint.
+
+For every type class constraint, for every instantiated functional dependency,
+if the range of the dependency has not yet been determined but the domain can be
+determined, we update the substitution to map the range to the type family
+application of the types in the domain of the dependency. Consider the following
+example:
+\[
+\begin{array}{l}
+\texttt{class G a b | a -> b}\\
+\texttt{class H a b | a -> b}\\
+\end{array}
+\]
+
+Computing the determinacy substitution $det(a, \{G \; a \; c, H \; c \; b \} )$
+would go as follows:
+\[
+\begin{array}{l l c l}
+a; \{\highlight{G \; a \; c}, H \; c \; b\} &\vdash_{D} \bullet
+&\rightsquigarrow& [c \mapsto F_G(a)]
+\\
+a; \{G \; a \; c, \highlight{H \; c \; b}\} &\vdash_{D}  [c \mapsto F_G(a)]
+&\rightsquigarrow& [b \mapsto F_H(F_G(a)), c \mapsto F_G(a)]
+\\
+a; \{G \; a \; c, H \; c \; b\} &\vdash_{D}  [b \mapsto F_H(F_G(a)), c \mapsto
+F_G(a)] &\not\rightsquigarrow&
+\end{array}
+\]
+
+In the first iteration, only the $G \; a \; c$ matches, as $c$ can be determined
+by $a$. The $[c \mapsto F_G(a)]$ substitution would then allow the $H \; c \; b$
+constraint to be matched, as $c$ is now indirectly determined by $a$ which
+allows $b$ to be determined by $c$. All type variables of every range of every
+functional dependency are now accounted for and the determinacy relation halts.
+
+Not every set of type class constraints would contain just type variables like
+in the previous example. This is what the $project$ function specified in
+Figure~\ref{fig:project} is for. To illustrate what it does consider the
+following:
+
+$det(a, C \; a \; (Either \;
+String \; c))$ can not have $[c \mapsto F_C(a)]$ as a result, $a$ determines
+$Either$ $String$ $c$ and not just $c$. If we had a type family $EitherR$
+available with the following axiom
+\[
+  \textbf{axiom} \; eitherR \; a_1 \; a_2 : EitherR(Either \; a_1 \; a_2) \sim a_2
+\]
+determinacy could instead correctly produce $[c \mapsto EitherR(F_C(a))]$. We
+generalize this to $Proj^T_i$, a projection type family for every type
+constructor $T$ and parameter with index $i$. These need to be generated for
+every data type declaration, for every parameter of the type constructor.
+
+\[
+\begin{array}{l l}
+  \textbf{type} \; &Proj^T_i(a)
+  \\
+  \textbf{axiom} \; g \; \overline{a}^n : &Proj^T_i(T \; a_1 \mathellipsis a_n)
+  \sim a_i
+\end{array}
+\]
+
+To really drive the point home, the following more complicated example $det(a, C
+\; a \; (Either \; (Maybe \; b) \; c) )$ would produce the following
+substitution:
+\[
+[ b \mapsto Proj^{Maybe}_1(Proj^{Either}_1(F_C(a))), c \mapsto
+Proj^{Either}_2(F_C(a))]
+\]
+
 \begin{figure}
-\fbox{$project(\tau, \tau_{fam}) = \theta$}
+\fbox{$project(u, \tau_{fam}) = \theta$}
 \[
 \begin{array}{l c l}
     project(a, \tau) & = & [a \mapsto \tau]
@@ -35,10 +144,37 @@
     project(T, \tau) & = & \bullet
 \end{array}
 \]
-\caption{Type Constructor Projection Functions}
+\caption{Type Constructor Projection Function}
+\label{fig:project}
 \end{figure}
 
-\begin{figure}
+Notice that $project$ is a partial function, it only considers type applications
+of the form $T \; \overline{u}$ where the leftmost component is a type
+constructor. Unfortunately this is not always the case. Consider the following
+slightly contrived example:
+
+\begin{verbatim}
+    class A a b | a -> b
+    class B a b | a -> b
+    class C a b | a -> b
+    instance (Functor f, A a (f b), B b c) => C a c
+\end{verbatim}
+
+The type variable $c$ in the instance declaration of \texttt{C} can be
+determined indirectly through $b$. But $b$ would need to be projected out of $(f
+\; b)$. We can't use a projection of the form $Proj^T_i$ because $f$ is not a
+type constructor but a variable so in this case we would require something more
+general.
+
+If our Haskell-like system and our version of \systemfc were to be extended
+with kind polymorphism~\cite{yorgey}, we could instead use a version of the
+$project$ function that would be more practical and support these cases. This
+version of $project$ is specified in Figure~\ref{fig:poly-project}. Instead of
+defining projection type families for every type constructor we would only have
+to generate exactly two. $L$ and $R$ project the left and right component
+respectively of a type application.
+%TODO example?
+
 \[
 \begin{array}{l c l}
     \textbf{type} \; L &: &\forall k_1 \; k_2. (a : k_1) \rightarrow k_2
@@ -53,17 +189,19 @@
     \sim u_2
 \end{array}
 \]
-\fbox{$project(\tau, \tau_{fam}) = \theta$}
+\begin{figure}
+\fbox{$project(u, \tau_{fam}) = \theta$}
 \[
 \begin{array}{l c l}
 
     project(a, \tau) & = & [a \mapsto \tau]
     \\
-    project(\tau_1 \; \tau_2, \tau) & = &
-    project(\tau_1, L(\tau)) \cdot project(\tau_2, R(\tau))
+    project(u_1 \; u_2, \tau) & = &
+    project(u_1, L(\tau)) \cdot project(u_2, R(\tau))
     \\
     project(T, \tau) & = & \bullet
 \end{array}
 \]
-\caption{Kind Polymorphic Projection Functions}
+\caption{Poly-kinded Projection Function}
+\label{fig:poly-project}
 \end{figure}

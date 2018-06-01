@@ -451,18 +451,19 @@ section \ref{sec:match-contexts}.
     \\
     \Gamma \vdash_{ty} \sigma_{real} \rightsquigarrow v_{real}
     \\
-    t_f = \Lambda \overline{a} \overline{a'}. \lambda(d : T_{TC} \; \overline{a}). \textbf{case}
-    \; d \; \textbf{of} \; K_{TC} \; \overline{b} \; (\overline{c : \psi}) \;
-    (\overline{d : \pi}) \; (x : v) \rightarrow x \; \overline{a'}
-    \\
-    \overline{decl_c} =
+    \mbox{$\begin{array}{l@{\hspace{.1cm}}c@{\hspace{.1cm}}l}
+    \overline{decl_c} & = &
     [\textbf{data} \; T_{TC} \; \overline{a} \;
     \textbf{where} \; K_{TC} \colon \forall \overline{a} \overline{b}. \;
     \overline{\psi} \Rightarrow \overline{\tau} \rightarrow v \rightarrow T_{TC}
-    \; \overline{a}
-    , \overline{\textbf{type} \, F_{TC_i} \; \overline{a}^{i_n}}^m
-    , \textbf{let} \; f : v_{real} = t_f
+    \; \overline{a} \\
+    &  &, \overline{\textbf{type} \, F_{TC_i} \; \overline{a}^{i_n}}^m \\
+    &  &, \textbf{let} \; f : v_{real} = \Lambda \overline{a} \overline{a'}.
+    \lambda(d : T_{TC} \; \overline{a}). \; \textbf{case} \; d \; \textbf{of} \;
+    K_{TC} \; \overline{b} \; (\overline{c : \psi}) \; (\overline{d : \pi}) \;
+    (x : v) \rightarrow x \; \overline{a'}
     ]
+    \end{array}$}
 }
 {
     \Gamma \vdash_{cls} \textbf{class} \; \forall \overline{a} \overline{b} .
@@ -476,6 +477,7 @@ section \ref{sec:match-contexts}.
 \end{figure}
 
 \section{Instance Elaboration}
+\label{sec:instance-elaboration}
 Most of the heaving lifting and FD-related things are handled by match
 contexts~\ref{sec:conditions} and the superclass
 entailment~\ref{fig:superclass-entailment} and axiom
