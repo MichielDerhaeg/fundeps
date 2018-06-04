@@ -1,1 +1,122 @@
 \chapter{Evaluation}
+\label{cha:evalutation}
+
+Everything discussed in the previous chapters has been implemented in a
+prototype compiler that serves to validate the work of Karachalias et
+al.~\cite{Karachalias:2017:EFD:3156695.3122966}. This has been largely
+successful and has been tested against many examples from the works of Sulzmann
+et al.~\cite{fundeps-chrs} and Karachalias et
+al.~\cite{Karachalias:2017:EFD:3156695.3122966}.
+However, this has not gone without compilactions. During this process several
+issues have revealed themselves. In this chapter, we will discuss these issues and
+how the they have been addressed, if addressed at all.
+
+\section{Projection Type Families}
+
+In Section~\ref{sec:determinacy} we introduced the concept of projection type
+families. The type constructor based projections have been shown to be incable
+of handling type applications where the leftmost component is not a type
+constructor. Poly-kinded projections should be able to deal with these cases but
+it requires that we extend our Haskell-like system and \systemfc with
+\textit{kind polymorphism}~\cite{yorgey}. This is already a part of GHC and
+should therefore not be a cause of difficulties were this to be integrated into
+mainstream Haskell implementations.
+
+\section{Wanted FD Constraints}
+\label{sec:wanted-fd-constraints}
+
+As mentioned in Section~\ref{sec:constraint-generation}, simply using the
+determinacy relation to disambiguate generated class constraints has been proven
+to be insufficient. Consider the following example from
+Section~\ref{sec:functional-dependencies}:
+
+\begin{verbatim}
+    class Collection c e | c -> e
+      singleton :: e -> c
+    singleton2 :: (Collection c2 c1, Collection c1 e) => e -> c2
+    singleton2 x = singleton (singleton x)
+\end{verbatim}
+
+The full type of \texttt{singleton} is $C \; c \; e \Rightarrow e \rightarrow
+c$. If we don't generate FD-induced equality constraints during constraint
+generation, the usage of \texttt{singleton} would only give rise to the wanted
+class constraint $C \; c \; e$. The monotype component of \texttt{singleton}
+contains both type variables $c$ and $e$, which means that the determinacy
+relation does effectively nothing because the constraint is not ambiguous in
+relation to the monotype $e \rightarrow c$.
+
+Without considering the explicit type annotation, constraint entailment would
+infer a type for \texttt{singleton2} equivalent to the annotation, namely:
+\[
+    (Collection \; \delta \; \beta, Collection \; \beta \; \alpha) \Rightarrow
+    \alpha \rightarrow \delta
+\]
+with $\alpha, \beta$ and $\delta$ fresh unification variables. If we do take the
+type signature into account, we have to perform subsumption as discussed in
+Section~\ref{sec:subsumption}. In short, generate an additional constraint
+$(\alpha \rightarrow \delta) \sim (e \rightarrow c2)$ and introduce the type class
+constraints in the signature as given constraints.
+
+Entailment would fail with $Collection \; c2 \; \beta$ and $Collection \; \beta
+\; e$ as unsolved constraints. These could not be solved with the given
+constraint in the signature because it was unable to determine that $\beta$
+should actually be $c1$.
+
+If we instead generate additional FD-induced wanted equality constraints for
+every functional dependency for every generated wanted class constraint, we
+would also have to solve $F_C(c2) \sim \beta$. The type signature of
+\texttt{singleton2} would also give rise to the given constraint $F_C(c2) \sim
+c1$ because of the $C \; c2 \; c1$ constraint in the signature and the functional
+dependency of the class $C$. Using the given constraint $F_c(c2) \sim c1$ the
+entailment algorithm can  rewrite $F_C(c2) \sim \beta$ to $c1 \sim \beta$. Which
+is the last piece of information we needed to solve the class constraints.
+
+In short, we now introduce wanted constraints for every functional dependency to
+enable the entailment algorithm to always use the relationships enforced by
+functional dependencies.
+
+\section{Constraint Entailment}
+
+The work of Karachalias et al.~\cite{Karachalias:2017:EFD:3156695.3122966}
+provides a specification for constraint entailment but not an actual algorithm
+capable of solving the constraints imposed by functional dependencies while
+taking the given constraint into account. As discussed in
+Chapter~\ref{cha:entailment} we opted to use the $OutsideIn(X)$ constaint solving
+algorithm also currently being used to in GHC.
+
+Given that the implementation has no significant alterations to the original
+design specified in the work of Vytiniotis et
+al.~\cite{outsideinx-modular-type-inference-with-local-assumptions} we can
+conclude that the formalization of functional dependencies specified in this
+thesis should be highly compatible with existing infrastructure related to
+constraint solving.
+
+
+
+\section{Conditions}
+
+The conditions specified in Chapter~\ref{cha:conditions} have unfortunately
+proven to be insufficient to ensure that every input that does not terminate is
+rejected. Consider the following example from Sulzmann et
+al.~\cite{fundeps-chrs}:
+
+\begin{verbatim}
+    class Mul a b c | a b -> c where
+      mul :: a -> b -> c
+
+    instance Mul a b c => Mul a [b] [c] where
+      mul = ...
+
+    f b x y = if b then mul x [y] else y
+\end{verbatim}
+
+Readers familiar with earlier works about functional dependencies might notice
+that this example violates the more conservative \textit{Coverage
+Condition}~\cite{fundeps-chrs} which we don't enforce. While it does satisfy the
+\textit{Liberal Coverage Condition} discussed in Section~\ref{sec:coverage} and
+the termination conditions discussed in Section~\ref{sec:termination}, this
+example fails to terminate\footnote{It does not terminate in our implementation
+and GHC with \texttt{UndecidableInstances}}. This indicates that the imposed
+termination conditions are insufficient and should be reconsidered.
+
+%TODO workout example loop

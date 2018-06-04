@@ -179,27 +179,24 @@ chapter = {},
 isbn = {},
 }
 
-@inproceedings{associated-types-with-class,
-author = {Peyton Jones, Simon},
-title = {Associated types with class},
-booktitle = {POPL '05: Proceedings of the 32nd ACM SIGPLAN-SIGACT sysposium on Principles of programming languages},
-year = {2005},
-month = {January},
-abstract = {
-
-In this paper, we explore an extension to Haskell type classes that allows a type class declaration to define data types as well as values (or methods). Similarly, an instance declaration gives a witness for such data types, as well as a witness for each method. It turns out that this extension directly supports the idea of a type-indexed type, and is useful in many applications, especially for self-optimising libraries that adapt their data representations and algorithms in a type-directed manner.
-Crucially, just as Haskell's existing type-class mechanism can be explained by translation into System F, so we can explain our extension by translation into System F, and we do so in full detail. This is a valuable property since it ensures that the addition of associated data types to an existing Haskell compiler leads to changes in the front end only. assoc
-In this paper, we explore an extension to Haskell type classes that allows a type class declaration to define data types as well as values (or methods). Similarly, an instance declaration gives a witness for such data types, as well as a witness for each method. It turns out that this extension directly supports the idea of a type-indexed type, and is useful in many applications, especially for self-optimising libraries that adapt their data representations and algorithms in a type-directed manner.
-
-Crucially, just as Haskell's existing type-class mechanism can be explained by translation into System F, so we can explain our extension by translation into System F, and we do so in full detail. This is a valuable property since it ensures that the addition of associated data types to an existing Haskell compiler leads to changes in the front end only.},
-publisher = {ACM Press},
-url = {https://www.microsoft.com/en-us/research/publication/associated-types-with-class/},
-address = {},
-pages = {1–13},
-journal = {},
-volume = {},
-chapter = {},
-isbn = {1-58113-830-X},
+@article{associated-types-with-class,
+ author = {Chakravarty, Manuel M. T. and Keller, Gabriele and Jones, Simon Peyton and Marlow, Simon},
+ title = {Associated Types with Class},
+ journal = {SIGPLAN Not.},
+ issue_date = {January 2005},
+ volume = {40},
+ number = {1},
+ month = jan,
+ year = {2005},
+ issn = {0362-1340},
+ pages = {1--13},
+ numpages = {13},
+ url = {http://doi.acm.org/10.1145/1047659.1040306},
+ doi = {10.1145/1047659.1040306},
+ acmid = {1040306},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {associated types, self-optimising libraries, type classes, type-directed translation, type-indexed types},
 }
 
 @inproceedings{type-checking-with-open-type-functions,
@@ -236,3 +233,21 @@ isbn = {},
  address = {New York, NY, USA},
  keywords = {haskell, kinds, polymorphism, promotion},
 }
+
+@inproceedings{vytiniotis,
+ author = {Vytiniotis, Dimitrios and Peyton Jones, Simon and Schrijvers, Tom},
+ title = {Let Should Not Be Generalized},
+ booktitle = {Proceedings of the 5th ACM SIGPLAN Workshop on Types in Language Design and Implementation},
+ series = {TLDI '10},
+ year = {2010},
+ isbn = {978-1-60558-891-9},
+ location = {Madrid, Spain},
+ pages = {39--50},
+ numpages = {12},
+ url = {http://doi.acm.org/10.1145/1708016.1708023},
+ doi = {10.1145/1708016.1708023},
+ acmid = {1708023},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {generalized algebraic data types, haskell, type classes, type families, type inference},
+} 
