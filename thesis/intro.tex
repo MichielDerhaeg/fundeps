@@ -8,41 +8,35 @@ programming language. This feature was quickly extended to allow for multiple
 type parameters. Type classes originally allowed us to express properties of a
 collection of types and now relations between types as well. Unfortunately, by using
 multi-parameter type classes, situations can easily arise where the type
-of one or several parameters can not be determined unambiguously. To resolve
-these ambiguities, Mark P. Jones introduced the notion of Functional Dependencies
+of one or several parameters can not be determined unambiguously. To address this issue,
+Mark P. Jones introduced the notion of Functional Dependencies
 \cite{Jones00typeclasses} between the type parameters of type classes, so one
 would be uniquely determined by the other and the ambiguities would be resolved.
-It is a technique that originated from relational database theory but applied to
+This feature originates from relational database theory, but---as Jones has shown---can also be applied to
 the design of type systems. It became a very popular type system feature that is
 used to date. Not just to resolve ambiguities, but also for the
 static enforcement of semantic properties and type-level programming.
 
 However, the implementation of this feature in GHC proved to be problematic and
-does not behave according to the specification.  Some programs that are entirely
-correct
-would be rejected by GHC's type checker because at the time it seemed to be
-impossible to translate the typing relation into System
+does not behave according to the specification. Programs that are correct according
+to specifications of functional dependencies
+have been rejected by GHC's type checker for years, since at the time of their development is was not known how to translate them into System
 F~\cite{systemf},
 a polymorphic
 lambda calculus often used by functional programming language compilers as an
-intermediate representation. No implementation uses pure System F to encode
-their source language. It is usually extended to make the translation more
-straightforward, readable or simply to support more advanced features. For
-example, algebraic datatypes are a common addition. In GHC specifically, the intermediate language has been extended
-with support for GADTs~\cite{PeytonJones06}, which seemed over-sophisticated extension to an
-intermediate representation at the time. Motivated by
-keeping the intermediate language as simple as possible, it was never extended
-to support Functional Dependencies and its implementation remained incomplete.
+intermediate representation. No language compiler uses pure System F to encode
+their source language in. It is usually extended to make the translation more
+straightforward, readable, or simply to support more advanced features. For
+example, algebraic datatypes are a common addition. In GHC specifically, the intermediate language was replaced in 2007
+by System $F_C$~\cite{Sulzmann:2007:SFT:1190315.1190324}, an extension of
+System F with type equality coercions and open, non-parametric type-level
+functions. This allowed for the accommodation of advanced features such as
+Generalized Algebraic Data Types (GADTs)~\cite{PeytonJones06} and type
+families~\cite{AssociatedTypeSynonyms}.
 
-To support features like type
-families~\cite{AssociatedTypeSynonyms}, it was proposed by
-Sulzmann et al. \cite{Sulzmann:2007:SFT:1190315.1190324} to extend System F with
-type equality coercions. This calculus is called System $F_C$ and currently used by
-GHC as the new intermediate representation. This new extension is expressive
-enough to express most of the more advanced type system features.
-
-Despite the continued popularity of Functional Dependencies it was never
-investigated if they could be implemented using the new representation until
+Though Functional Dependencies remain a popular feature, it was never
+investigated whether they can be translated into System $F_C$, until
 recently. Karachalias and Schrijvers \cite{Karachalias:2017:EFD:3156695.3122966}
 described a type inference algorithm for functional dependencies and a way to
 translate them into System $F_C$.
+
