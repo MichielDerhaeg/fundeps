@@ -1,2 +1,140 @@
 \chapter{Conclusion}
 \label{cha:conclusion}
+
+TODO i guess talk about results
+\begin{itemize}
+    \item successful implementation of the spec
+    \item spec of elaboration of evidence of $OutsideIn(X)$
+    \item validation of the spec?
+\end{itemize}
+
+\section{Future work}
+
+The implementation presented in this work consists of approximately 8300 lines
+of Haskell code. Considering that GHC consists of 90000 of Haskell code and
+65000 of C code at the time of writing, it is safe to say that the
+implementation presented in this work should be easier to understand and modify
+due to it's relative simplicity. This property makes it an ideal testbed for
+extensions of the language.
+
+\subsection{Skolemization}
+
+Consider the example from Section~\ref{sec:functional-dependencies}:
+\begin{verbatim}
+    class Collection c e | c -> e where
+      singleton :: e -> e
+    singleton2 e = singleton (singleton e)
+\end{verbatim}
+
+Without an explicit type signature, the type that would be inferred for
+\texttt{singleton2} would be:
+
+\begin{verbatim}
+    singleton2 :: (Collection F(a) F(F(a)), Collection a F(a))
+               => F(F(a)) -> a
+\end{verbatim}
+
+This is perfectly fine in theory but if this is shown to the user upon request
+or as part of an error it might cause some confusion if the user is not familiar
+with the internal workings.
+
+We propose to develop a skolemization procedure that would transform the type
+signature into an equivalent signature devoid of any FD-induced type families.
+We present a simple sketch of this procedure that would perhaps remind the
+reader of \textit{flattening} presented in Section~\ref{sec:canonicalization}:
+
+\[
+\begin{array}{l c l}
+    & & (Collection \; \highlight{F(a)} \; F(\highlight{F(a)}), Collection \; a
+    \; \highlight{F(a)}) \Rightarrow F(\highlight{F(a)}) \rightarrow a \\
+
+    [b \mapsto F(a)] &\rightsquigarrow& (Collection \; b \; \highlight{F(b)}, Collection \;
+    a \; b) \Rightarrow \highlight{F(b)} \rightarrow a \\
+
+    [c \mapsto F(b)] &\rightsquigarrow& (Collection \; b \; c, Collection \; a
+    \; b) \Rightarrow c \rightarrow a
+\end{array}
+\]
+
+We search for an occurrence of a type family application that contains no nested
+type families and substitute this type family application with a newly generated
+type variable. We repeat this operation until no type families can be found.
+For the \texttt{Collection} example we would first replace $F(a)$ with the newly
+generated $b$. During the second iteration we would replace $F(b)$ with $c$.
+
+%TODO can i steal a name like this?
+%alternative: Named Functional Dependencies
+\subsection{Putting a Name to Functional Dependencies}
+
+Mark P. Jones suggested in his original work about functional
+dependencies~\cite{Jones00typeclasses} to add the option for the programmer to
+annotate functional dependencies with a label. Consider the following example:
+
+\begin{verbatim}
+    class          C a b | f :: a -> b
+    class C a b => D a b | f :: a -> b
+\end{verbatim}
+
+Jones' original intention was to allow the programmer to indicate that class
+declaration of \texttt{D} inherits the functional dependency labeled by
+\texttt{f} from the superclass \texttt{C}. However, in modern formalizations
+this 'inheritance' is inferred automatically and the idea was not explored any
+further.
+
+Inspired by this idea and because the dependencies are represented internally as
+type families, these labels could be used to expose them to the user. Instead of
+writing \texttt{g :: C a b => a -> b} the user could refer to the dependency as
+the type-level functions they actually are and instead write \texttt{g :: C a (f
+a) => a -> f a}. Because we are merely exposing the internals to the user, this
+should be straightforward to implement. Therefore it could be interesting to
+investigate how useful this can be.
+
+\subsection{Interaction with Modern Features}
+
+The language we defined in this thesis is a subset of the dialect of Haskell
+that is currently being used at the time of writing. Many newer type system
+features have been added to GHC and other implementations since the inception of
+functional dependencies in the year 2000. If this formalization is to be
+integrated in industry standard implementations like GHC, it should first be
+investigated how it integrates alongside these newer features and how they
+interact.
+
+\subsubsection{Type Families}
+
+Given that the formalization used in this work uses type families internally, we
+expect that extending the implementation to support them in the source text
+should be straightforward. The constraint solver is already well-equipped to
+deal with them. Other components often assume that they don't appear
+in the source text and will need to be adapted, in particular the determinacy
+relation, discussed in Section~\ref{sec:determinacy}, and the conditions,
+discussed Chapter~\ref{cha:conditions}.
+
+Because type families and functional dependencies would then share their
+underlying framework, it would be an excellent opportunity to study and
+improve the interaction between the two features. Current implementations of
+functional dependencies have been proven to be difficult to integrate with type
+families due to the differences of their current formalizations. As a consequence,
+their interaction remains poorly understood to this day.
+
+%TODO include example? useful? it is funny though
+Consider the following example:
+
+\begin{verbatim}
+    class C a b | a -> b
+    type family F x
+
+    instance C a (F [b]) => C a [b]
+\end{verbatim}
+
+\begin{verbatim}
+    type Wat t = F t
+    instance C a (Wat [b]) => C a [b]
+\end{verbatim}
+
+\subsubsection{GADTs}
+
+Because $OutsideIn(X)$ has been explicitly designed to support GADTs, we expect
+this extension would also be straightforward to implement despite the fact that
+we omitted GADT support in the $OutsideIn(X)$ implementation present prototype
+compiler. We speculate that integrating this with functional dependencies is
+possible without too many complications.
