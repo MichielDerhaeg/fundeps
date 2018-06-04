@@ -1,8 +1,7 @@
 \section{Determinacy}
 \label{sec:determinacy}
 The determinacy relation is one of the key idea's of the formalization of
-functional dependencies used in the work of Karachalias et
-al.~\cite{Karachalias:2017:EFD:3156695.3122966}.  It takes the form of
+functional dependencies used in the work of Karachalias and Schrijvers~\cite{Karachalias:2017:EFD:3156695.3122966}.  It takes the form of
 $det(\overline{a},\overline{\pi}) = \theta$ and can be interpreted as follows:
 It produces a substitution that replaces the type variables of $\overline{\pi}$
 with entirely equivalent types that only use type variables from $\overline{a}$.
@@ -80,7 +79,7 @@ example:
 Computing the determinacy substitution $det(a, \{G \; a \; c, H \; c \; b \} )$
 would go as follows:
 \[
-\begin{array}{l l c l}
+\begin{array}{l@{\hspace{1mm}}l@{\hspace{1mm}}c@{\hspace{1mm}}l}
 a; \{\highlight{G \; a \; c}, H \; c \; b\} &\vdash_{D} \bullet
 &\rightsquigarrow& [c \mapsto F_G(a)]
 \\

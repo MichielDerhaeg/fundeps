@@ -3,12 +3,12 @@
 Like most systems similar to Hindley-Milner, type inference occurs in two
 distinct phases. The first involves constraint generation, and the second
 involves solving those constraints. The latter will be discussed in
-chapter~\ref{cha:entailment} about constraint entailment.
+detail in chapter~\ref{cha:entailment}.
 
-During constraint generation the Haskell code is simultaneously elaborated into
+During constraint generation the Haskell code is also elaborated into
 \systemfc. However, even though \systemfc is an explicitly typed language,
 the types it should be annotated with are not yet known. Therefore every
-expression will be assigned a "placeholder" unification type variable that might
+expression is assigned a ``placeholder'' type (also known as unification type variable) that might
 be substituted with the actual type after the constraints have been solved.
 
 A similar approach is used for type classes. As mentioned previously, type
@@ -65,8 +65,8 @@ several additions and simplifications. Type classes can have
 multiple type parameters instead of one. In class and instance declarations we
 differentiate between $\overline{a}$, the type variables that occur in the type
 class parameters, and $\overline{b}$, the type variables that solely occur in the
-context $\overline{\pi}$. Reason being that this doesn't have to be an issue if
-these $\overline{b}$ can be uniquely determined by functional dependencies.
+context $\overline{\pi}$. As we discuss later, variables $\overline{b}$ have to
+be uniquely determined by functional dependencies.
 
 Class declarations can now be annotated with functional dependencies of the form
 $a_1, \mathellipsis, a_n \rightarrow a_0$, where $a_1, \mathellipsis, a_n$ is
@@ -83,8 +83,8 @@ types and let expressions.
 %TODO more about type families?
 Monotypes have been extended with type family applications $F(\overline{\tau})$
 \cite{associated-types-with-class} similar to \systemfc. These are not
-allowed in the source text and are only used internally. Therefore, we also
-define type patterns denoted by $u$. These are simple monotypes that do not
+allowed in the source text and are only used internally. We also
+define type patterns $u$. These are simple monotypes that do not
 contain any type families. On top of monotypes we have qualified types and
 polytypes. Even though GHC allows types to be qualified with equality
 constraints in addition to type class constraints, we only allow class
@@ -118,7 +118,7 @@ arrow type constructor.
     \\
     \mathcal{S} &::= \bullet \mid \mathcal{S}, d : S &annotated \; constraint \;
     schemes
-    \\ 
+    \\
     \\
     \phi &::= \tau_1 \sim \tau_2 &equality \; constraint
     \\
@@ -151,20 +151,20 @@ means that type $\tau_1$ should be equal to $\tau_2$. As we will see in
 section~\ref{sec:instance-elaboration}, functional dependencies give rise to
 equality axioms, denoted by $\mathcal{A}$. These are simply the Haskell
 counterpart to \systemfc top-level equality axioms and are semantically
-equivalent, note that $g$ is an $F_C$ axiom variable in either case. Class
+equivalent; note that $g$ is an $F_C$ axiom variable in either case. Class
 constraints, equality constraints and constraint schemes can be annotated with
-evidence, which are dictionary variables, coercion variables and again
-dictionary variables respectively. Sets of these are denoted with the
-calligraphic $\mathcal{P}$, $\mathcal{E}$ and $\mathcal{S}$ respectively. A set
+evidence, which are dictionary variables, coercion variables, and
+dictionary variables, respectively. Sets of these are denoted with the
+calligraphic $\mathcal{P}$, $\mathcal{E}$, and $\mathcal{S}$, respectively. A set
 of both annotated class and equality constraints are denoted by $\mathcal{C}$.
 When these constraints are given constraints we use subscript $g$ and these can
 be annotated with full $\text{F}_\text{C}$ terms and coercions. This won't make
-a difference during constraint generation but has it's use during entailment.
+a difference during constraint generation but has its use during entailment.
 
-The program theory, denoted by $P$ is a triple of annotated constraint schemes,
+The program theory---denoted by $P$---is a triple of annotated constraint schemes,
 equality axioms and a set of local given constraints. It gathers the all of the
-constraints schemes and equality axioms from instance declarations and the local
-given constraints when under a qualified type or context.
+constraints schemes and equality axioms from instance declarations, as well as local
+given constraints introduced by qualified types and contexts.
 
 The typing environment is standard and stores types of term variables and type
 variables with their kinds.
@@ -323,7 +323,7 @@ For rule \texttt{TmCase}, we abuse the fact that our system allows for only very
 simple pattern matching. Every case is a simple pattern with single data
 constructor. This implies we can manually type check each constructor $K_i$ and
 verify that each has a return type with the same type constructor $T$. It allows
-us to create a single constraint $c : \tau_{scr} \sim T \; \overline{beta}$ for
+us to create a single constraint $c : \tau_{scr} \sim T \; \overline{\beta}$ for
 the type of the scrutinee $\tau_{scr}$ instead of a constraint for every case.
 Having a single annotated constraint allows us to use a single coercion variable
 $c$ to type cast the elaborated scrutinee $t_{scr}$.
@@ -369,7 +369,7 @@ In this example, the constraint \texttt{C Int b} and the functional dependency
 of the class \texttt{C} would give rise to the given equality constraint
 \texttt{$F_C$(Int) $\sim$ b}.
 
-Like most procedures in this chapter, it's result has a System $F_C$
+Like most procedures in this chapter, its result has a System $F_C$
 counterpart. It generates Match Contexts, which are case expressions with a
 single match and a hole.
 \begin{figure}[h]
@@ -444,12 +444,12 @@ variables and type class methods.
 Because type classes are represented by dictionaries in System $F_C$ at runtime,
 a class declaration gives rise to an $F_C$ data declaration for this dictionary.
 The type of the data constructor reflects what will be stored in this
-dictionary.  As expected it stores the instance method with type $v$ and the
-super class dictionaries of types $\overline{\tau}$.
+dictionary.  As expected, it stores the instance method with type $v$ and the
+superclass dictionaries of types $\overline{\tau}$.
 
-The method type of specified in the declaration does not entirely correspond
-with the actual method type. The resulting type is modified to include the type
-class of the declaration as a class constraint.
+The method type specified in the declaration does not entirely correspond with
+the actual method type. The resulting method type is modified to qualify over
+the type class it is a part of.
 
 The method implementation simply matches on the type class dictionary to extract
 the actual method within.
@@ -465,9 +465,9 @@ $\overline{b}$. These are type variables that appear the context
 $\overline{\pi}$ but not in the type class parameters $\overline{a}$. With
 functional dependencies these existential variables are not necessarily
 ambiguous. These existential types are put in the type class dictionary as well.
-More on ambiguousness is explained in chapter~\ref{cha:conditions}.
+More on ambiguity is explained in chapter~\ref{cha:conditions}.
 
-Notice that, unlike many previous formalizations of type classes, type class
+Unlike many previous formalizations of type classes, type class
 declarations to not extend the program theory for the reasons explained in
 section \ref{sec:match-contexts}.
 \begin{figure}
@@ -525,10 +525,10 @@ section \ref{sec:match-contexts}.
 
 \section{Instance Elaboration}
 \label{sec:instance-elaboration}
-Most of the heaving lifting and FD-related things are handled by match
-contexts~\ref{sec:conditions} and the superclass
-entailment~\ref{fig:superclass-entailment} and axiom
-generation~\ref{fig:axiomgen} rules.
+Most of the heavy lifting and FD-related things are handled by match
+contexts (Section~\ref{sec:match-contexts}), the superclass
+entailment (Figure~\ref{fig:superclass-entailment}), and axiom
+generation (Figure~\ref{fig:axiomgen}) rules.
 
 Note that the $tm$ judgement has been given a type signature instead of
 it being the result of the judgement. This is handled by the subsumption
