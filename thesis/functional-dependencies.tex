@@ -21,18 +21,20 @@ The following example is an instance declaration for lists of a polymorphic type
     instance Collection [a] a where
       singleton x = [x]
 \end{verbatim}
-
+%
 Using the methods of these type classes can prove to be quite problematic. The
 following example is a function that applies the \texttt{singleton} function
-twice to the given argument. Notice that the type signature contains a type
-\texttt{c1} that appears in the type class constraints but not in the right hand
-side of the type signature. No matter the context in which this function is
-used, it is impossible to uniquely determine type \texttt{c1}.
+twice to the given argument.
 
 \begin{verbatim}
     singleton2 :: (Collection c2 c1, Collection c1 e) => e => c2
     singleton2 e = singleton (singleton e)
 \end{verbatim}
+%
+Notice that the type signature contains a type
+\texttt{c1} that appears in the type class constraints but not in the right-hand
+side of the type signature. No matter the context in which this function is
+used, it is impossible to uniquely determine type \texttt{c1}.
 
 Even if there is only one available instance that could possibly satisfy these
 constraints and provide a type to assume the role of \texttt{c1}, the exact
@@ -45,7 +47,7 @@ unacceptable (the behavior of the program would be determined not by the program
 Single-parameter type classes can exhibit this behavior
 too but this issue is very prevalent with the
 multi-parameter variant. Therefore, a solution has been implemented: functional
-dependencies.
+dependencies:
 \begin{verbatim}
     class Collection c e | c -> e where
       singleton :: e -> c

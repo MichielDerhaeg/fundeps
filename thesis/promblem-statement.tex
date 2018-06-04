@@ -2,13 +2,13 @@
 \section{Problem Statement}
 \label{sec:problem-statement}
 Despite the popularity of functional dependencies, the feature remains unreliably
-implemented in GHC. Due to the lack expressiveness of the previous intermediate
+implemented in GHC. Due to the lack of expressiveness of the previous intermediate
 representation based on System F, it is impossible to elaborate (translate)
 Haskell programs that are entirely correct (well-typed and perfectly valid
 according to the specification) in GHC and are thus rejected by GHC's type checker.
 
 The following example illustrates such a case where GHC would reject a perfectly
-valid program.
+valid program:
 \begin{verbatim}
     class C a b | a -> b
     instance C Int Bool
@@ -16,7 +16,7 @@ valid program.
     f :: C Int b => b -> Bool
     f x = x
 \end{verbatim}
-
+%
 \texttt{f} is a function that simply returns its argument but has a rather
 exotic type signature. It contains a polymorphic type \texttt{b} and a type
 class constraint for \texttt{C Int b}. Due to the functional dependency in the
@@ -32,7 +32,7 @@ intermediate representation was extended to support type level functions similar
 to type families and explicit type equality coercions~\cite{Sulzmann:2007:SFT:1190315.1190324}. This new representation
 is called System $F_C$. Instead of it being another ad-hoc extension, it was a
 more general and powerful solution that could host a multitude of existing and
-future type system features, e.g. GADTs, while remaining relatively simple
+future type system features (e.g., GADTs) while remaining relatively simple
 and straightforward to translate to.
 
 The new representation features explicit type equality coercions, proofs that
@@ -47,15 +47,16 @@ System $F_C$.
 
 This thesis will present a fully functional implementation of the aforementioned
 algorithm and a description of important implementation-specific details and
-complications that may arise throughout the development of this implementation.
+complications that arose throughout the development of this implementation.
 
 Eventually, this implementation is not only aiming to implement support for functional dependencies,
 but GADTs and type families as well. So the interaction between these features
 and their implementations can be studied. Especially conflicts and complications
-that may arise during the development of all these features might be very
-interesting.
+that may arise during the development of all these features is of interest, can
+could be used in the future for the proper integration of Functional
+Dependencies in GHC.
 
-Firstly, this implementation will serve as a validation of the specification
-that might reveal potential inaccuracies. And secondly, as a feasibility study
+Firstly, this implementation serves as a validation of the specification
+that might reveal potential inaccuracies. Secondly, it serves as a feasibility study
 that shows that it is possible to fully implement functional dependencies by
 reusing the available framework that is currently in place in GHC.
