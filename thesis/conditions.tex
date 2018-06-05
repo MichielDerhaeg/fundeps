@@ -4,10 +4,10 @@
 Up until now we have only mentioned how to do type inference in the presence of
 functional dependencies. But functional dependencies are in essence a
 restriction imposed on instance declarations, a restriction we have yet to
-specify how to enforce. And as mentioned in the previous
+specify how to enforce. As mentioned in the previous
 chapter~\ref{cha:entailment}, certain restrictions have to be put in place on
 class and instance declarations to make sure type checking terminates.
-In this chapter we will discuss how to enforce these and other desirable
+In this chapter we discuss how to enforce these and other desirable
 properties usually found in Haskell implementations.
 
 \section{Termination}
@@ -15,9 +15,9 @@ properties usually found in Haskell implementations.
 
 \subsection{Directed acyclic graph}
 Before we type check class declarations, we have to verify that the superclass
-relations forms a directed acyclic graph. This is to ensure termination of the
+relation forms a directed acyclic graph. This is to ensure termination of the
 determinacy relation discussed in section~\ref{sec:determinacy} and the
-computation of match context discussed in section~\ref{sec:match-contexts}.
+computation of match contexts discussed in section~\ref{sec:match-contexts}.
 
 Both of these procedures compute the transitive closure of the superclass
 relation and if this relation would be represented by a cyclic graph, these
@@ -51,7 +51,7 @@ case when type checking class declarations.
 \subsection{Instance declarations}
 To ensure termination for class constraint entailment, in particular the
 $topreact_w$ rule for class constraints, we employ the termination condition of
-the the Paterson Conditions \cite{fundeps-chrs},~Def.~11. So given an instance
+the the Paterson Conditions \cite[Def.~11]{fundeps-chrs}. So given an instance
 declaration $instance \; \forall \overline{a}. \; \overline{\pi} \Rightarrow TC
 \; \overline{u}$:
 
@@ -88,9 +88,10 @@ $F'(\overline{\tau}') \subseteq \tau$:
 \section{Functional Dependency Property}
 
 To enforce the functional dependency property we impose two conditions. The
-\textit{Compatibility Condition} (Def 6.2
-\cite{Karachalias:2017:EFD:3156695.3122966}) and \textit{Unambiguous Witness
-Functions} (Def 6.4 \cite{Karachalias:2017:EFD:3156695.3122966}).
+\textit{Compatibility
+Condition}~\cite[Def.~6.2]{Karachalias:2017:EFD:3156695.3122966}) and
+\textit{Unambiguous Witness Functions}~\cite[Def
+6.4]{Karachalias:2017:EFD:3156695.3122966}.
 
 \subsection{Compatibility}
 
@@ -131,8 +132,7 @@ implementation of the definition of compatibility condition by Karachalias et
 al.~\cite{Karachalias:2017:EFD:3156695.3122966} is specified in
 figure~\ref{fig:compat}.
 
-This condition serves the same purpose as \textit{Consistency} (Def. 8
-\cite{fundeps-chrs}), originally defined by Jones~\cite{Jones00typeclasses}.
+This condition serves the same purpose as \textit{Consistency}~\cite[Def.~8]{fundeps-chrs}, originally defined by Jones~\cite{Jones00typeclasses}.
 It verifies for every functional dependency if the domain indeed determines the
 range for every pair of instance declarations. In other words, if for two
 instance declarations the domain of a functional dependency overlaps, the type
@@ -148,7 +148,7 @@ following example from being accepted by the type checker.
 
 Unlike the formalization of consistency, it uses the determinacy relation to see
 if the image of the dependency can be fully determined by also taking the
-instance context into account. Making this condition more liberal than the
+instance context into account, making this condition more liberal than the
 consistency condition.
 
 \subsection{Unambiguous Witness}
@@ -195,11 +195,11 @@ consistency condition.
 \end{array}
 \]
 
-Karachalias et al. defined this condition as follows: "For each functional
+Karachalias and Schrijvers define this condition as follows: ``For each functional
 dependency $fd_i \equiv \overline{a}^{i_n} \rightarrow a_{i_0}$ it is required
 that $det(fv(\overline{u}^{i_n}),\overline{\pi}') $ is non-ambiguous on
-$fv(u_{i_0})$"\cite{Karachalias:2017:EFD:3156695.3122966} (Def 6.4)
-Meaning that in regardless which order the determinacy relation derives the
+$fv(u_{i_0})$''~\cite[Def.~6.4]{Karachalias:2017:EFD:3156695.3122966}.
+This means that regardless the order in which the determinacy relation derives the
 witness derivation(i.e. the substitution) from $\overline{\pi}'$, the resulting
 substitution should be equivalent when applied to $fv(u_{i_0})$.
 
@@ -219,13 +219,12 @@ syntactically distinct types. This check verifies the absence of such two pairs.
 %TODO cite chrs second sentence?
 The last functional dependency related condition we will discuss is coverage.
 It verifies that determining the types in the domain fully determines the type
-in the range. We employ the \textit{Liberal Coverage Condition}(Def.
-15\cite{fundeps-chrs}), which is verified during axiom generation specified in
+in the range. We employ the \textit{Liberal Coverage Condition}~\cite[Def.~15]{fundeps-chrs}, which is verified during axiom generation specified in
 figure~\ref{fig:axiomgen} and not as an external check. It is implicitly
-verified by checking if the free variables of image of every generated axiom are
+verified by checking if the free variables of the image of every generated axiom are
 a subset of the free variables of the domain. It is easy to see that this is
-equivalent to the liberal coverage condition and instead the transitive closure
-is computed earlier by the determinacy relation.
+equivalent to the liberal coverage condition and the transitive closure
+is simply computed earlier by the determinacy relation.
 
 %TODO we could easily verify this externally like the axiom termination
 %check
@@ -287,9 +286,9 @@ unambContext(\overline{b},\overline{a},\overline{\pi}) = \overline{b} \subseteq
 dom(det(\overline{a},\overline{\pi}))
 \]
 
-For class and instance contexts we would have to verify if the type variables
-$\overline{b}$, that do not appear in the head $TC \; \overline{u}$ but only in
-the context $\overline{\pi}$, can be completely determined by $\overline{a}$.
+For class and instance contexts we have to verify that the type variables
+$\overline{b}$ that do not appear in the head $TC \; \overline{u}$ but only in
+the context $\overline{\pi}$ can be completely determined by $\overline{a}$.
 This is quite straightforward using the determinacy relation. If the determinacy
 relation creates a substitution for every variable in $\overline{b}$ we know
 that they can all be determined and the context is unambiguous.
@@ -354,14 +353,14 @@ always be the same. The semantics of type classes are defined in the methods of
 instance declarations and therefore for any given types the choice for an
 instance should always be the same. This implies it suffices to restrict
 instance declarations to be \textit{non-overlapping}. No instantiation of a type
-class constraint can possible match with the heads of two different instance
+class constraint can possibly match with the heads of two different instance
 declarations.
 %TODO simple example?
 
-This property is again verified for every instance declaration. By attempting to
-unify the types in the instance declaration with the corresponding types in
-every other previously defined instance declaration. If unification produces
-valid substitution than this would imply that there is an instantiation of the
+This property is again verified for every instance declaration. We attempt to
+unify the head of every instance declaration with the corresponding head of
+every other previously defined instance declaration. If unification produces a
+valid substitution, then there exists an instantiation of the
 constraint that can match both instance declarations and the program should be
 rejected. If no such substitution exists, unification fails and all is well.
 \begin{figure}
