@@ -436,7 +436,7 @@ In this example, the constraint \texttt{C Int b} and the functional dependency
 of the class \texttt{C} would give rise to the given equality constraint
 \texttt{$F_C$(Int) $\sim$ b}.
 
-Like most procedures in this chapter, it's result has a \systemfc
+Like most procedures in this chapter, its result has a \systemfc
 counterpart. It generates Match Contexts, which are case expressions with a
 single match and a hole.
 \begin{figure}[h]
@@ -517,12 +517,12 @@ for completion's sake but this does not serve any purpose for now.}.
 Because type classes are represented by dictionaries in System $F_C$ at runtime,
 a class declaration gives rise to an $F_C$ data declaration for this dictionary.
 The type of the data constructor reflects what will be stored in this
-dictionary.  As expected it stores the instance method with type $v$ and the
-super class dictionaries of types $\overline{\tau}$.
+dictionary. As expected, it stores the instance method with type $v$ and the
+superclass dictionaries of types $\overline{\tau}$.
 
-The method type of specified in the declaration does not entirely correspond
-with the actual method type. The resulting type is modified to include the type
-class of the declaration as a class constraint.
+The method type specified in the declaration does not entirely correspond with
+the actual method type. The resulting method type is modified to qualify over
+the type class it is a part of.
 
 The method implementation simply matches on the type class dictionary to extract
 the actual method within.
@@ -538,9 +538,9 @@ $\overline{b}$. These are type variables that appear the context
 $\overline{\pi}$ but not in the type class parameters $\overline{a}$. With
 functional dependencies these existential variables are not necessarily
 ambiguous. These existential types are put in the type class dictionary as well.
-More on ambiguousness is explained in chapter~\ref{cha:conditions}.
+More on ambiguity is explained in chapter~\ref{cha:conditions}.
 
-Notice that, unlike many previous formalizations of type classes, type class
+Unlike many previous formalizations of type classes, type class
 declarations to not extend the program theory for the reasons explained in
 section \ref{sec:match-contexts}.
 
@@ -594,10 +594,10 @@ section \ref{sec:match-contexts}.
 \caption{Instance Elaboration}
 \end{figure}
 
-Most of the heaving lifting and FD-related things are handled by match
-contexts~\ref{sec:conditions} and the superclass
-entailment~\ref{fig:superclass-entailment} and axiom
-generation~\ref{fig:axiomgen} rules.
+Most of the heavy lifting and FD-related things are handled by match
+contexts (Section~\ref{sec:match-contexts}), the superclass
+entailment (Figure~\ref{fig:superclass-entailment}), and axiom
+generation (Figure~\ref{fig:axiomgen}) rules.
 
 Note that the $tm$ judgement has been given a type signature instead of
 it being the result of the judgement. This is handled by the subsumption
