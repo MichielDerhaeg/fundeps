@@ -1,5 +1,5 @@
-Notes/TODO
-==========
+Notes
+=====
 
   * sprinkle it with freshener
 
@@ -33,9 +33,6 @@ Notes/TODO
     - does not terminate because conditions are insufficient, GHC has same
       issue with UndecidableInstances
 
-  * don't forget wel-formedness rules, etc for haskell and system fc in
-    appendices
-
   * parsing typats does not support arrows, maybe drop typats all together, it
     does not seem very useful because we parse polytypes with normal monotypes,
     lets not go half way, we immediately convert to monotypes anyway
@@ -51,19 +48,36 @@ Notes/TODO
   * does topreactCls_w need to happen after topreactEqw? or can they be merged?
     - do it -Shia Labeouf
 
-  * rule names required for solver rewrite rules?
+  * projection arrow
 
-  * fix inference syntax, does not correspond to rewrite rules
+  * projections in axioms
 
-  * mention let generalization in text
-
-  * cite that one paper about reasoning about type families in both directions
-    and talk about it in entailment
+Text TODOs
+==========
 
   * talk about flattening givens
 
   * talk about evidence reflected substitution (coTy)
 
-  * projection arrow
+  * mention no kinds in source
 
-  * projections in axioms
+  * don't forget wel-formedness rules, etc for haskell and system fc in
+    appendices
+
+  * rule names required for solver rewrite rules?
+
+  * cite that one paper about reasoning about type families in both directions
+    and talk about it in entailment
+
+  * better explain why match contexts, can't return coercions
+
+  * transitive closure superclass fds in det() and mention DAG, superclass
+    entailment
+
+  * are untouchables passed everywhere?
+    - subsumption needs untchs: abs
+    - superclass entailment needs untchs: abs
+
+  * fix inference syntax, does not correspond to rewrite rules
+
+  * mention rewrite rule patternguard syntax

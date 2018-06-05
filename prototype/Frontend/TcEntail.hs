@@ -91,7 +91,7 @@ coTy co a ty b_ty@(TyVar b)
   | a == b = (co, ty)
   | otherwise = (FcCoRefl (elabMonoTy b_ty), b_ty)
 coTy co a ty (TyApp ty1 ty2) =
-  (FcCoApp co1' co2', substVar a ty (TyApp ty1 ty2))
+  (FcCoApp co1' co2', substVar a ty (TyApp ty1 ty2)) -- TODO just use coty result
   where
     (co1' , _) = coTy co a ty ty1
     (co2' , _) = coTy co a ty ty2
