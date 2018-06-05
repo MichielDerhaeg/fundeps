@@ -55,10 +55,6 @@ Notes
 Text TODOs
 ==========
 
-  * talk about flattening givens
-
-  * talk about evidence reflected substitution (coTy)
-
   * mention no kinds in source
 
   * don't forget wel-formedness rules, etc for haskell and system fc in
@@ -79,5 +75,3 @@ Text TODOs
     - superclass entailment needs untchs: abs
 
   * fix inference syntax, does not correspond to rewrite rules
-
-  * mention rewrite rule patternguard syntax
