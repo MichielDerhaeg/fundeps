@@ -5,10 +5,10 @@ Every step the constraint entailment algorithm takes, a new piece of evidence is
 emitted that mirrors this action. It often produces enormous coercions for even
 the simplest of programs. This makes the resulting program more difficult to
 parse for humans and the coercions themselves almost impossible to comprehend.
-What makes matters even worse is that every time FD induced equalities are not
+What makes matters even worse is that every time FD-induced equalities are not
 required, these coercions would simply prove $a \sim a$ for any type $a$. They
 are essentially very complicated reflections, making them, and the type cast
-that uses them, completely useless.
+that uses them, entirely redundant.
 
 \begin{figure}
 \fbox{$\Gamma_{co} \vdash t \rightsquigarrow t'$}
@@ -47,7 +47,7 @@ that uses them, completely useless.
 To alleviate this problem, we employ a coercion simplification procedure that
 transforms these coercions to ones that are strictly smaller but entirely
 equivalent. This procedure is inspired by the coercion normalization procedure
-by Sulzmann et al.~\cite{Sulzmann:2007:SFT:1190315.1190324}. And like
+by Sulzmann et al.~\cite{Sulzmann:2007:SFT:1190315.1190324}. Like
 normalization, it consists of several rewrite rules specified in
 figure~\ref{fig:co-simpl}. We call it simplification instead of normalization
 because we employ a much smaller set of rules that only simplifies the coercions
@@ -67,6 +67,7 @@ different phase this version of coercion, typing does not need to type check
 anything or verify any well-formedness. We only attempt to derive the
 proposition. The specification of the simplified coercion typing is specified in
 Figure~\ref{fig:fc-co-type}
+% GEORGE: This paragraph is weird (quite unparseable, revise a bit)
 
 We make use of a simplified typing environment, specified in
 Figure~\ref{fig:co-env} and denoted by $\Gamma_{co}$. As type checking types is
