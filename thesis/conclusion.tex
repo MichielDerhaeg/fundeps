@@ -14,7 +14,7 @@ The implementation presented in this work consists of approximately 8300 lines
 of Haskell code. Considering that GHC consists of 90000 of Haskell code and
 65000 of C code at the time of writing, it is safe to say that the
 implementation presented in this work should be easier to understand and modify
-due to it's relative simplicity. This property makes it an ideal testbed for
+due to its relative simplicity. This property makes it an ideal testbed for
 extensions of the language.
 
 \subsection{Skolemization}
@@ -36,7 +36,7 @@ Without an explicit type signature, the type that would be inferred for
 
 This is perfectly fine in theory but if this is shown to the user upon request
 or as part of an error it might cause some confusion if the user is not familiar
-with the internal workings.
+with the internal workings of our implementation.
 
 We propose to develop a skolemization procedure that would transform the type
 signature into an equivalent signature devoid of any FD-induced type families.
@@ -44,7 +44,7 @@ We present a simple sketch of this procedure that would perhaps remind the
 reader of \textit{flattening} presented in Section~\ref{sec:canonicalization}:
 
 \[
-\begin{array}{l c l}
+\begin{array}{l@{\hspace{1mm}}c@{\hspace{1mm}}l}
     & & (Collection \; \highlight{F(a)} \; F(\highlight{F(a)}), Collection \; a
     \; \highlight{F(a)}) \Rightarrow F(\highlight{F(a)}) \rightarrow a \\
 
@@ -104,7 +104,7 @@ interact.
 Given that the formalization used in this work uses type families internally, we
 expect that extending the implementation to support them in the source text
 should be straightforward. The constraint solver is already well-equipped to
-deal with them. Other components often assume that they don't appear
+deal with them. Other components often assume that they do not appear
 in the source text and will need to be adapted, in particular the determinacy
 relation, discussed in Section~\ref{sec:determinacy}, and the conditions,
 discussed Chapter~\ref{cha:conditions}.
@@ -130,11 +130,13 @@ Consider the following example:
     type Wat t = F t
     instance C a (Wat [b]) => C a [b]
 \end{verbatim}
+% GEORGE: YOU SHOULD EXPLAIN WHAT'S THE
+% DEAL WITH THIS EXAMPLE IF YOU INCLUDE IT
 
 \subsubsection{GADTs}
 
 Because $OutsideIn(X)$ has been explicitly designed to support GADTs, we expect
 this extension would also be straightforward to implement despite the fact that
-we omitted GADT support in the $OutsideIn(X)$ implementation present prototype
-compiler. We speculate that integrating this with functional dependencies is
-possible without too many complications.
+we omitted GADT support in our prototype implementation of $OutsideIn(X)$. We
+speculate that integrating this with functional dependencies is possible
+without too many complications.
