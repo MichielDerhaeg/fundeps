@@ -1,0 +1,33 @@
+Type classes have become an essential part of the Haskell programming language
+ever since they have been introduced. This feature was quickly extended to allow
+for multiple type parameters. Unfortunately, by using multi-parameter type
+classes, situations can easily arise where the type of one or several parameters
+can not be determined unambiguously. To address this issue, Mark P. Jones
+introduced the notion of Functional Dependencies between the type parameters of
+type classes, so one would be uniquely determined by the other and the
+ambiguities would be resolved. It became a very popular type system feature that
+is used to date.  Not just to resolve ambiguities, but also for the static
+enforcement of semantic properties and type-level programming.
+
+Despite the popularity of functional dependencies, the feature remains
+unreliably implemented in GHC. Due to the lack of expressiveness of the
+intermediate representation based on System F, it is impossible to translate
+certain Haskell programs that are entirely correct into System F and are thus
+rejected by GHC's type checker.
+
+The intermediate language has since been replaced in 2007 by \systemfc, an
+extension of System F with explicit type equality coercions, proofs that could
+be constructed by the compiler, that witness type equalities. The possibility of
+implementing functional dependencies by elaborating them into \systemfc~was not
+fully explored any further until recently. Karachalias and
+Schrijvers\cite{Karachalias:2017:EFD:3156695.3122966} presented a type inference
+algorithm for functional dependencies and a way to elaborate them into
+\systemfc.
+
+This thesis will present a fully functional implementation of the aforementioned
+algorithm and a description of important implementation-specific details and
+complications that arose throughout the development of this implementation.
+Firstly, this implementation serves as a validation of the specification that
+has revealed several inaccuracies. Secondly, it serves as a feasibility study
+that shows that it is possible to fully implement functional dependencies by
+reusing the available framework that is currently in place in GHC.

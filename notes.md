@@ -75,3 +75,7 @@ Text TODOs
     - superclass entailment needs untchs: abs
 
   * fix inference syntax, does not correspond to rewrite rules
+
+  * remove fc operational semantics?
+
+  * replace "System $F_C$" with "\systemfc"

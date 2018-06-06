@@ -5,7 +5,8 @@ Despite the popularity of functional dependencies, the feature remains unreliabl
 implemented in GHC. Due to the lack of expressiveness of the previous intermediate
 representation based on System F, it is impossible to elaborate (translate)
 Haskell programs that are entirely correct (well-typed and perfectly valid
-according to the specification) in GHC and are thus rejected by GHC's type checker.
+according to the specification) into System F and are thus rejected by GHC's type
+checker.
 
 The following example illustrates such a case where GHC would reject a perfectly
 valid program:
@@ -30,7 +31,7 @@ valid. Despite that this program is entirely correct, the relationship between
 When support for type families and associated types was added to GHC, the
 intermediate representation was extended to support type level functions similar
 to type families and explicit type equality coercions~\cite{Sulzmann:2007:SFT:1190315.1190324}. This new representation
-is called System $F_C$. Instead of it being another ad-hoc extension, it was a
+is called \systemfc. Instead of it being another ad-hoc extension, it was a
 more general and powerful solution that could host a multitude of existing and
 future type system features (e.g., GADTs) while remaining relatively simple
 and straightforward to translate to.
@@ -40,10 +41,10 @@ could be constructed by the compiler, that witness type equalities. These
 coercions can be used to explicitly and safely type cast expressions.
 
 The possibility of implementing functional dependencies by elaborating them into
-System $F_C$ was not fully explored any further until recently. Karachalias and
+\systemfc~was not fully explored any further until recently. Karachalias and
 Schrijvers\cite{Karachalias:2017:EFD:3156695.3122966} presented a type
 inference algorithm for functional dependencies and a way to elaborate them into
-System $F_C$.
+\systemfc.
 
 This thesis will present a fully functional implementation of the aforementioned
 algorithm and a description of important implementation-specific details and
@@ -57,6 +58,6 @@ could be used in the future for the proper integration of Functional
 Dependencies in GHC.
 
 Firstly, this implementation serves as a validation of the specification
-that might reveal potential inaccuracies. Secondly, it serves as a feasibility study
+that has revealed several inaccuracies. Secondly, it serves as a feasibility study
 that shows that it is possible to fully implement functional dependencies by
 reusing the available framework that is currently in place in GHC.

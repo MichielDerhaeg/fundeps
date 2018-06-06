@@ -28,15 +28,15 @@ intermediate representation. No language compiler uses pure System F to encode
 their source language in. It is usually extended to make the translation more
 straightforward, readable, or simply to support more advanced features. For
 example, algebraic datatypes are a common addition. In GHC specifically, the intermediate language was replaced in 2007
-by System $F_C$~\cite{Sulzmann:2007:SFT:1190315.1190324}, an extension of
+by \systemfc~\cite{Sulzmann:2007:SFT:1190315.1190324}, an extension of
 System F with type equality coercions and open, non-parametric type-level
 functions. This allowed for the accommodation of advanced features such as
 Generalized Algebraic Data Types (GADTs)~\cite{PeytonJones06} and type
 families~\cite{AssociatedTypeSynonyms}.
 
 Though Functional Dependencies remain a popular feature, it was never
-investigated whether they can be translated into System $F_C$, until
+investigated whether they can be translated into \systemfc, until
 recently. Karachalias and Schrijvers \cite{Karachalias:2017:EFD:3156695.3122966}
 described a type inference algorithm for functional dependencies and a way to
-translate them into System $F_C$.
+translate them into \systemfc.
 

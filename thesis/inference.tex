@@ -7,13 +7,13 @@ involves solving those constraints. The latter will be discussed in
 chapter~\ref{cha:entailment} about constraint entailment.
 
 During constraint generation the Haskell code is simultaneously elaborated into
-\systemfc. However, even though \systemfc is an explicitly typed language,
+\systemfc. However, even though \systemfc~is an explicitly typed language,
 the types it should be annotated with are not yet known. Therefore every
 expression will be assigned a "placeholder" unification type variable that might
 be substituted with the actual type after the constraints have been solved.
 
 A similar approach is used for type classes. As mentioned previously, type
-classes are elaborated into \systemfc as dictionary terms that hold the class
+classes are elaborated into \systemfc~as dictionary terms that hold the class
 methods. Because these are also not yet known, placeholder dictionary variables
 are used instead.
 
