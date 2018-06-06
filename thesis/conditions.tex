@@ -8,7 +8,7 @@ specify how to enforce. As mentioned in the previous
 chapter~\ref{cha:entailment}, certain restrictions have to be put in place on
 class and instance declarations to make sure type checking terminates.
 In this chapter we discuss how to enforce these and other desirable
-properties usually found in Haskell implementations.
+properties usually enforced in Haskell implementations.
 
 \section{Termination}
 \label{sec:termination}
@@ -24,26 +24,18 @@ relation and if this relation would be represented by a cyclic graph, these
 functions would never terminate. We therefore simply enforce this is not the
 case when type checking class declarations.
 \begin{figure}
-\fbox{$cycleCheck(\overline{TC}, TC) = \bullet_\bot$}
 \begin{mathpar}
-\inferrule*[right=Cyclic]
-{
-    TC \in \overline{TC}
-}
-{
-    cycleCheck(\overline{TC}; TC) = \bot
-}
-\\
 \inferrule*[right=Acyclic]
 {
     TC \notin \overline{TC}
     \\
     class \; \forall{a}. \; \overline{TC' \; \overline{u}'}^m \Rightarrow TC \;
     \overline{u}
+    \\ 
+    \overline{acyclic(\overline{TC}, TC; TC_i')}^m
 }
 {
-    cycleCheck(\overline{TC}; TC) = \overline{cycleCheck(\overline{TC}, TC;
-    TC_i')}^m
+    acyclic(\overline{TC}; TC)
 }
 \end{mathpar}
 \end{figure}
@@ -246,12 +238,14 @@ type variable can never be determined.
 % TODO nicely explained in introduction, what do i explain here? do i repeat
 % myself?
 % TODO really unsatisfied with this
-In this classic example of ambiguity the type of \texttt{f} would be
-\texttt{(Show a, Read a) => String -> String}. \footnote{The type would be
-\texttt{String -> String} in GHCi, and therefore not ambiguous, because
-\texttt{a} would default to \texttt{()}.}. No matter the context in which
-\texttt{f} is used, the type of \texttt{a} can never be determined and is
-therefore ambiguous.
+In this classic example of ambiguity the type of \texttt{f} would
+be:\footnote{The type would be \texttt{String -> String} in GHCi, and therefore
+not ambiguous, because \texttt{a} would default to \texttt{()}.}
+\begin{verbatim}
+    (Show a, Read a) => String -> String
+\end{verbatim}
+No matter the context in which \texttt{f} is used, the type of \texttt{a} can
+never be determined and is therefore ambiguous.
 
 In these simple examples, checking for ambiguity would simply consist of
 checking if all of the type variables in the context would also appear in what
@@ -343,6 +337,7 @@ given class constraint $C \; a \; b$.
 %the free vars of sigma too? maybe not, they have to occur as part of type class
 %constraints
 
+\newpage
 \section{Coherence}
 
 This is the last property that needs an explicit check to be ensured and was

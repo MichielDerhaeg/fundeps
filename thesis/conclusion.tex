@@ -1,15 +1,22 @@
 \chapter{Conclusion}
 \label{cha:conclusion}
 
-This thesis presented an fully functional
-implementation\footnote{\url{https://github.com/MichielDerhaeg/fundeps}} of
-functional dependencies in a prototype compiler using the inference algorithm
+The main contribution of this thesis is a prototype compiler
+implementation\footnote{\url{https://github.com/MichielDerhaeg/fundeps}} with
+full support for functional dependencies. It uses the inference algorithm
 specified by Karachalias and
-Schrijvers~\cite{Karachalias:2017:EFD:3156695.3122966} and
+Schrijvers~\cite{Karachalias:2017:EFD:3156695.3122966} and the
 \textit{OutsideIn(X)}\cite{outsideinx-modular-type-inference-with-local-assumptions}
-constraint solver currenly in use by GHC. Additionally we provide a full
-specification of how \textit{OutsideIn(X)} generates evidence, which has never
-been done before to our knowlegde.
+constraint solver currenly being used by GHC.  This prototype performs type
+inference and translation into \systemfc. Furthermore, it type checks the
+generated \systemfc ~and simplifies it.
+
+By implementing this, we have evaluated the work of Karachalias and
+Schrijvers~\cite{Karachalias:2017:EFD:3156695.3122966} and addressed any issues
+that have been encountered. In doing so, we have provided compelling evidence
+for the feasibility of integration of the aforementioned inference algorithm in
+GHC. Additionally, we provide a full specification of how \textit{OutsideIn(X)}
+can generate evidence, which has never been done before to our knowlegde.
 
 \section{Future work}
 
@@ -18,7 +25,7 @@ of Haskell code. Considering that GHC consists of 90000 of Haskell code and
 65000 of C code at the time of writing, it is safe to say that the
 implementation presented in this work should be easier to understand and modify
 due to its relative simplicity. This property makes it an ideal testbed for
-extensions of the language.
+any further extensions of the language.
 
 \subsection{Skolemization}
 
@@ -65,9 +72,7 @@ type variable. We repeat this operation until no type families can be found.
 For the \texttt{Collection} example we would first replace $F(a)$ with the newly
 generated $b$. During the second iteration we would replace $F(b)$ with $c$.
 
-%TODO can i steal a name like this?
-%alternative: Named Functional Dependencies
-\subsection{Putting a Name to Functional Dependencies}
+\subsection{Named Functional Dependencies}
 
 Mark P. Jones suggested in his original work about functional
 dependencies~\cite{Jones00typeclasses} to add the option for the programmer to
