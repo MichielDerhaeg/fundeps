@@ -2,21 +2,21 @@
 \label{cha:entailment}
 %TODO rule names in spec
 In this chapter we describe a concrete constraint solver based on the
-$OutsideIn(X)$~\cite{outsideinx-modular-type-inference-with-local-assumptions}
+\textit{OutsideIn(X)}~\cite{outsideinx-modular-type-inference-with-local-assumptions}
 inference framework. It is based on the particular constraint solver for the
 constraint domain $X$ instantiated with
 \[
 X = \textit{type classes} + \textit{GADTs} + \textit{type families}
 \]
 presented in the same work. This solver will be referred to simply as
-$OutsideIn(X)$ from now on. Because our work does not consider $GADTs$ or other
+\textit{OutsideIn(X)} from now on. Because our work does not consider $GADTs$ or other
 features that might generate local constraints, the part of the solver that
 deals with those constraints is not implemented.
 
-$OutsideIn(X)$ was designed with generating evidence in mind but any concrete
-specification as to how has been omitted. This chapter contains a description of
-the implementation including how evidence is generated during constraint
-solving.
+\textit{OutsideIn(X)} was designed with generating evidence in mind but any
+concrete specification as to how has been omitted. This chapter contains a
+description of the implementation including how evidence is generated during
+constraint solving.
 
 \section{Motivation}
 \label{sec:motivation}

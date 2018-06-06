@@ -1,6 +1,5 @@
-\chapter{System $F_C$}
+\chapter{\systemfc}
 \label{cha:system-fc}
-%TODO subst $F_C$ with $\text{F}_\text{C}$ everywhere
 
 Most modern compiler implementations make use of intermediate representations
 (\textit{IRs}), languages used to encode the intermediary results of the
@@ -23,13 +22,13 @@ these mistakes which has proven to be incredibly useful. The author of this work
 has discovered the usefulness of this first-hand while implementing the
 algorithms discussed in the later chapters.
 
-In this chapter we will define and discuss a variant of System $F_C$, the    % we'll: too informal
+In this chapter we will define and discuss a variant of \systemfc, the    % we'll: too informal
 target language of the Glasgow Haskell Compiler (GHC). It is extended from System F in a few ways that
 make it able to support a multitude of advanced source-language type
 system features like type families, GADTs, and most relevant to us, Functional
 Dependencies.
 
-System $F_C$ extends the polymorphic lambda calculus with (a) explicit type equality
+\systemfc~extends the polymorphic lambda calculus with (a) explicit type equality
 witnesses---or proofs---called coercions, and (b) open, non-parametric type-level functions.
 
 \section{Syntax}
@@ -38,14 +37,15 @@ witnesses---or proofs---called coercions, and (b) open, non-parametric type-leve
 \small
 \[
 \begin{array}{l l r}
+    k &::= \star \mid k \rightarrow k &Kinds \\ \\
     v &::= a \;  \; | \;  \; T \;  \; | \;  \; v_1 \;  \; | \;  \; v_2  \; | \;
-    \highlight{F(\overline{v})}  \; | \;  \forall a. v  \; | \; \highlight{\psi
+    \highlight{F(\overline{v})}  \; | \;  \forall (a : k). v  \; | \; \highlight{\psi
     \Rightarrow v} &\textit{Types}\\ \\
     \highlight{\gamma} &::= \highlight{\langle v \rangle \; | \; \text{sym} \; \gamma \; | \;
     \text{left} \; \gamma \; | \; \text{right} \; \gamma \; | \; \gamma_1
     \fctrans
     \gamma_2 \; | \; \psi \Rightarrow \gamma} &\textit{Coercions} \\
-    \; &\quad \highlight{| \; \; F(\overline{\gamma}) \; | \; \forall a . \; \gamma \; | \;
+    \; &\quad \highlight{| \; \; F(\overline{\gamma}) \; | \; \forall (a : k) . \; \gamma \; | \;
     \gamma_1 [\gamma_2] \; | \; g \; \overline{v} \; | \; c \; | \; \gamma_1 @
     \gamma_2 \; | \; \gamma_1 \; \gamma_2} \\ \\
     \highlight{\psi} &::= \highlight{v_1 \sim v_2} &\textit{Propositions}\\ \\
@@ -57,23 +57,23 @@ witnesses---or proofs---called coercions, and (b) open, non-parametric type-leve
     \textbf{let} \; x : v = t_1 \; \textbf{in} \; t_2 \\ \\
     p &::= K \; \highlight{(\overline{b : k})} \; \highlight{(\overline{c : \psi})} \;
     (\overline{x \highlight{: v}}) &\textit{Patterns}\\ \\
-    decl &::= \textbf{data} \; T \; \overline{a} \; \textbf{where} \; K : v
+    decl &::= \textbf{data} \; T \; (\overline{a : k}) \; \textbf{where} \; K : v
          &\textit{Declarations}\\
          &\quad | \; \; \textbf{let} \; x : v = t \\
-         &\quad | \; \; \highlight{\textbf{type} \; F(\overline{a})} \\
-         &\quad | \; \; \highlight{\textbf{axiom} \; g \; \overline{a} :
+         &\quad | \; \; \highlight{\textbf{type} \; F(\overline{a : k}) : k} \\
+         &\quad | \; \; \highlight{\textbf{axiom} \; g \; \overline{(a : k)} :
          F(\overline{u}) \sim \; v} \\ \\
     pgm &::= \overline{decl} &Programs \\ \\
     \Gamma &::= \bullet \mid \Gamma, \; a : k \mid \Gamma, \; x : v \mid \Gamma,
-    \; \highlight{c : \gamma} \mid \Gamma, \; \highlight{g \; \overline{a} :
+    \; \highlight{c : \gamma} \mid \Gamma, \; \highlight{g \; (\overline{a : k}) :
     F(\overline{v}) \sim v} &Typing \; Environments
 \end{array}
 \]
-\caption{System $F_C$ syntax}
+\caption{\systemfc~syntax}
 \label{fc-syntax}
 \end{figure}
 
-The syntax of System $F_C$ is given in Figure~\ref{fc-syntax}.
+The syntax of \systemfc~is given in Figure~\ref{fc-syntax}.
 The highlighted parts are the components of the language which are extensions of
 standard System F with data types.
 
@@ -81,23 +81,64 @@ standard System F with data types.
 
 Unlike Haskell and other Hindley-Milner\cite{hindley}\cite{damas-milner} based
 systems, we do not discriminate
-between polytypes, qualified types or monotypes. System $F_C$, like System F, is
+between polytypes, qualified types or monotypes. \systemfc, like System F, is
 impredicative and types like $(\forall a. \; a \rightarrow a) \rightarrow
 (\forall a. \; a \rightarrow a)$ are allowed. Type abstractions and
 quantification can appear in arbitrarily nested positions in a type. We denote type \textit{variables}
 with $a$, type \textit{constructors} with $T$. Type \textit{abstractions} take the form
-$\forall a. \; v$, and type \textit{application} is denoted as $v_1 \; v_2$. Unique to System $F_C$
-are \textit{type family applications}, denoted by $F(\overline{v})$, and
+$\forall a. \; v$, and type \textit{application} is denoted as $v_1 \; v_2$.
+Unique to \systemfc
+~are \textit{type family applications}, denoted by $F(\overline{v})$, and
 \textit{qualified} types, denoted by $\phi \Rightarrow v$. Unlike with type
 applications and type constructors, type family applications are defined with
 all of their parameters. Type families are always required to be fully
 saturated, 'partial' type family applications are not allowed.\footnote{The
 reason this is enforced is explained in detail in the original
-publication of System $F_C$~\cite{Sulzmann:2007:SFT:1190315.1190324}.}
+publication of \systemfc~\cite{Sulzmann:2007:SFT:1190315.1190324}.}
 
 The typing rules for type well-formedness are specified in
 Figure~\ref{fig:fc-type}
 
+\begin{figure}
+\fbox{$\Gamma \vdash_{ty} v : k$}
+% TYPES
+\begin{mathpar}
+%TyVar
+\inferrule*[right=Tyvar]
+{a : k \in \Gamma}
+{\Gamma \vdash_{ty} a : k}
+\quad
+%TyQual TODO prop psi?
+\inferrule*[right=TyQual]
+{\Gamma \vdash_{pr} \psi \qquad \Gamma \vdash_{ty} v : k}
+{\Gamma \vdash_{ty} \psi \Rightarrow v : k}
+\quad
+%TyCon
+\inferrule*[right=TyCon]
+{T : k \in \Gamma}
+{\Gamma \vdash_{ty} T : k}
+\\
+%TyApp
+\inferrule*[right=TyApp]
+{\Gamma \vdash_{ty} v_1 : k1 \rightarrow k_2 \qquad \Gamma \vdash_{ty} v_2 : k_1}
+{\Gamma \vdash_{ty} v_1 v_2 : k_2}
+\quad
+%TyAll
+\inferrule*[right=TyAll]
+{\Gamma , a \vdash_{ty} v : \star \qquad a \notin fv(\Gamma)}
+{\Gamma \vdash_{ty} \forall a . v : \star}
+\\
+%TyFam
+\inferrule*[right=TyFam]
+{
+  \textbf{type} \; F(\overline{a : k}) : k
+  \\
+  \vdash_{ty} v_i : k_i}
+{\Gamma \vdash_{ty} F(\overline{v}) : k'}
+\end{mathpar}
+\caption{\systemfc~Type Well-formedness}
+\label{fig:fc-type}
+\end{figure}
 \subsection{Coercions}
 
 Coercions, denoted by $\gamma$, are the main interesting addition to the target
@@ -129,356 +170,6 @@ newly introduced variables, the typing environment $\Gamma$ also keeps track
 of these variables. The typing rules for coercions are specified in
 Figure~\ref{fig:fc-co}.
 
-\subsection{Propositions}
-
-Propositions, denoted by $\psi$, could be described as the types of coercions.
-Similarly to types classifying terms and kinds classifying types, propositions
-classify coercions.  The well-formednes of propositions is specified in
-Figure~\ref{fig:fc-prop}. In essence, an equality between two types is well-formed
-if both types are well-formed.
-
-\subsection{Terms}
-
-Terms have three notable extensions. Coercion abstraction, denoted by $\Lambda(c
-: \psi). \; t$, coercion application, denoted by $t \; \gamma$, and explicit
-type casts, denoted by $t \triangleright \gamma$. The typing rules are specified
-in Figure~\ref{fig:fc-term}. The first two allow us to explicitly pass coercions
-and are quite straightforward.
-
-The most noteworthy are the type casts. Given a coercion $\gamma : v_1 \sim v_2$
-and a term $t$ of type $v_1$ we can explicitly cast the type of $t$ to
-$v_2$ using $\gamma$, the proof that $v_1$ is equal to $v_2$.
-Notice that type equality in System $F_C$ is non-syntactic: we can use a term
-of type $v_1$ where we expect a term of a syntactically distinct type $v_2$ as
-long as we can prove that $v_1$ is equal to $v_2$ by other means.
-% GEORGE: I am not sure if you need to mention this. Your explanation is
-% already very difficult for someone that does not know much about type
-% systems, System F and System FC. I think you are going too deep. Use examples
-% maybe to help.
-
-\subsection{Patterns}
-
-Patterns can now introduce existential type variables and local equality
-constraints, elevating them to the level of expressiveness of GADTs.
-Such patterns bring these existential type variables $\overline{b}$ annotated
-with their kinds $\overline{k}$ into scope. The local type equalities, denoted
-by $\overline{\phi}$, are made accessible by bringing their accompanying
-coercion variables $\overline{c}$ into scope as well. Thus, they can be used by
-explicit type casts in the right-hand side of a pattern match. Lastly, note the subtle addition of explicit type
-annotations $\overline{v}$ to the term variables $\overline{x}$. This choice makes
-type checking as simple as possible (type checking needs linear time in the size of the program) at the cost of making elaboration
-slightly more tedious. The typing of patterns is specified in rule \texttt{Alt}
-in Figure~\ref{fig:fc-term} for pattern match case alternatives.
-
-\subsection{Declarations}
-
-GADT syntax is used for data type declarations: data constructors are defined by
-their annotated type signature instead of the types of their individual
-parameters like how algebraic data types would be defined in Haskell.
-
-%TODO mention somewhere that type families are *open* type functions
-Type family declarations are quite straightforward, they simply define the name
-of the declared family, its arity, the kinds of its parameters, and the kind of
-its result.
-
-%TODO don't want to mention type patterns, not really enforced anywhere in the
-%implementation
-Equality axioms, as the name suggests, axiomatically define type equalities
-between type family applications $F(\overline{v})$ and some other type $v$. As
-mentioned earlier, type casts allow for the use of non-syntactic equalities.
-Axioms on the other hand provide a way of introducing these non-syntactic
-equalities. Axioms are annotated with a axiom variable $g$ so we can refer to
-these axioms in coercions. The type variables $\overline{a}$ in the declaration
-indicate that axioms can be used for any instantiation for $\overline{a}$, or in
-other words, they are polymorphic.
-
-Top-level value bindings are entirely standard.
-
-%TODO declaration typing
-
-\section{Type checking}
-
-System $F_C$ is by design very straightforward to type check, no type inference
-is required of any kind and can be done by a single traversal of the program.
-One of the properties that contributes to this is that System $F_C$ typing is
-syntax-directed; there is a single typing rule for every syntactic component.
-Indeed, every typing rule corresponds to a single function clause in our
-implementation.
-
-Note that in Figure~\ref{fig:fc-term} rule \texttt{TmCase}, the type of the case
-scrutinee would be passed to the typing rule of \texttt{Alt} as an input.
-Meaning that $T \; \overline{v}_a$ should be an input for the implementation of
-the \texttt{Alt} rule.
-
-\section{Elaboration Example}
-
-The next example illustrates how the broken example from
-Section~\ref{sec:problem-statement} can be correctly elaborated into System
-$F_C$. Everything that appears after a $\rightsquigarrow$ represents the
-generated System $F_C$ code.
-
-\begin{verbatim}
-    class C a b | a -> b
-\end{verbatim}
-
-$\qquad\rightsquigarrow$ \textbf{type} $FC$ $a$
-
-$\qquad\rightsquigarrow$ \textbf{data} $CDict$ $a$ $b$ \textbf{where}
-
-$\qquad\qquad$ $CDict$ $::$ $(FC \; a \sim b)
-\Rightarrow$ $CDict$ $a$ $b$
-
-\begin{verbatim}
-    instance C Int Bool
-\end{verbatim}
-
-$\qquad\rightsquigarrow$ \textbf{axiom} $g$ : $FC$ $Int$ $\sim$ $Bool$
-
-$\qquad\rightsquigarrow$ \textbf{let} $d$ : $CDict$ $Int$ $Bool$
-
-$\qquad\qquad\quad$ = $CDict$ $Int$ $Bool$ $(g : FC$ $Int \sim Bool)$
-
-\begin{verbatim}
-    f :: C Int b => b -> Bool
-    f x = x
-\end{verbatim}
-
-$\qquad\rightsquigarrow$ let $f$ = $\Lambda b. \; \lambda (d : CDict \; Int \;
-b). \;\lambda (x : b). \; \text{case} \; d \; \text{of}$
-
-$\hspace{3.5cm} CDict \; (c : FC \; Int \sim b ) \rightarrow x \triangleright
-(\text{sym} \; c) \fctrans g$
-\\
-
-Type classes are not a part of the \systemfc syntax and therefore need to be
-encoded somehow. They are translated to so called ``dictionaries''.  These are
-values that contain the functions of the method implementations of the instance
-declaration. These dictionaries are explicitly passed around as parameters to
-functions with type class constraints so their methods can be available to them
-at runtime. In \systemfc however, these dictionaries could be used to store
-coercions as well.
-
-Every functional dependency of a type class declaration gives rise to a type
-family declaration for a type family that maps the domain of the dependency to
-the range.  The functional dependency in the class declaration of \texttt{C}
-will generate a type family declaration ``\textbf{type}~$FC$~$a$'' to represent
-the functional dependency.
-
-The class declaration itself will generate a data declaration for the dictionary
-with a single data constructor to store functional-dependency-related type
-equalities and method implementations. It should also store the dictionaries of
-the super classes and any existential type variables introduced by those (this
-will be explained further in Section~\ref{sec:class-elaboration}).
-A coercion that proves the equality of $FC$ $a$ and $b$, denoted by
-$FC$ $a \sim b$ in the type signature, should be stored by the dictionary
-$CDict$ generated for the type class \texttt{C}.
-
-The instance declaration for \texttt{C Int Bool} generates a top-level axiom
-$g$ which states that $FC$ $Int$ is indeed equal to $Bool$. The instance
-declaration also generates a dictionary value that would contain the method
-implementations of the instance, if it had any, and the top-level axiom as a
-coercion constant.
-
-In the elaboration of the function \texttt{f}, the polymorphic type \texttt{b}
-becomes an explicit type parameter. This is the case for plain System $F$ as well,
-which captures parametric polymorphic in explicit type abstraction.
-The type class constraint becomes a
-normal term parameter that holds the corresponding dictionary. Lastly,
-\texttt{f} takes the user-specified argument \texttt{x} of type \texttt{b}.
-
-The function body of $f$ pattern matches against the dictionary to expose the
-coercion within, which is used by the compiler to construct a coercion to
-explicitly cast $x$ from \texttt{b} to \texttt{Bool}.
-
-The ``sym'' in the coercion changes the orientation of the equality and the
-``$\fctrans$'' witnesses transitivity of two coercions. Here we annotate every
-component of the coercion with its proposition to make it clear how the
-final proposition is derived:
-
-\[
-\quad\quad((\text{sym} \; (c : FC \; Int \sim b)) : b \sim FC \; Int) ; (g : FC
-\; Int \sim Bool) ) : b \sim Bool
-\]
-
-This means that the coercion proves the equality of $b$ and $Bool$ and
-\texttt{x} can be cast safely using a type cast $\triangleright$ and the
-generated coercion.
-
-% TODO other typing rules, declarations, etc
-\begin{figure}[h]
-\fbox{$\Gamma \vdash_{tm} t : v$}
-% TERM
-$$
-%TmCast
-\inferrule*[right=TmCast]
-{P;\Gamma \vdash_{tm} t : v_1 \\ P;\Gamma \vdash_{co} \gamma : v_1 \sim v_2}
-{P;\Gamma \vdash_{tm} t \triangleright \gamma : v_2}
-$$
-$$
-%TmVar
-\inferrule*[right=TmVar]
-{x : v \in \Gamma}
-{\Gamma \vdash_{tm} x : v}
-$$
-$$
-%TmCon
-\inferrule*[right=TmCon]
-{K : v \in \Gamma}
-{\Gamma \vdash_{tm} K : v}
-$$
-$$
-%TmAbs
-\inferrule*[right=TmAbs]
-{x \notin dom(\Gamma) \qquad \Gamma \vdash_{ty} v_1 : \star \qquad \Gamma , x : v_1
-\vdash_{tm} t : v_2}
-{\Gamma \vdash_{tm} \lambda(x : v_1). t : v_1 \rightarrow v_2}
-$$
-$$
-%TmApp
-\inferrule*[right=TmApp]
-{\Gamma \vdash_{tm} t_1 : v_2 \rightarrow v_1 \qquad \Gamma \vdash_{tm} t_2 : v_2 }
-{\Gamma \vdash_{tm} t_1 \; t_2 : v_1}
-$$
-$$
-%TmTyApp
-\inferrule*[right=TmTyApp]
-{\Gamma \vdash_{tm} t : \forall (a : k). v \qquad \Gamma \vdash_{ty} v_1 : k}
-{\Gamma \vdash_{tm} t \; v_1 : [a \mapsto v_1]v}
-$$
-$$
-%TmTyAbs
-\inferrule*[right=TmTyAbs]
-{a \notin dom(\Gamma) \\ \Gamma , a : k \vdash_{tm} t : v}
-{\Gamma \vdash_{tm} \Lambda(a : k). t: \forall(a : k). v}
-$$
-$$
-%TmCoAbs
-\inferrule*[right=TmCoAbs]
-{
-    c \notin dom(\Gamma)
-    \\
-    \Gamma \vdash_{pr} \psi
-    \\
-    \Gamma, c : \psi \vdash_{tm} t : v
-}
-{
-    \Gamma \vdash_{tm} \Lambda(c : \psi). \; t : \psi \Rightarrow v
-}
-$$
-$$
-%TmCoApp
-\inferrule*[right=TmCoApp]
-{
-    \Gamma \vdash_{tm} t : \psi \Rightarrow v
-    \\
-    \Gamma \vdash_{co} \gamma : \psi
-}
-{
-    \Gamma \vdash_{tm} t \; \gamma : v
-}
-$$
-$$
-%TmLet
-\inferrule*[right=TmLet]
-{
-    x \notin dom(\Gamma)
-    \\
-    \Gamma, x : v_1 \vdash_{tm} t_1 : v_1
-    \\
-    \Gamma \vdash_{ty} v_1 : \star
-    \\
-    \Gamma, x : v_1 \vdash_{tm} t_2 : v_2
-}
-{
-    \Gamma \vdash_{tm} (\textbf{let} \; x : v_1 = t_1 \; \textbf{in} \; t_2) : v_2
-}
-$$
-$$
-%TmCase
-% TODO mention v_scr is input for alt rule
-\inferrule*[right=TmCase]
-{
-    \Gamma \vdash_{tm} t_{scr} : v_{scr}
-    \\
-    \overline{\Gamma \vdash_{alt} p \rightarrow t : v_{scr} \rightarrow v}
-}
-{
-    \Gamma \vdash_{tm} \textbf{case} \; t_{scr} \; \textbf{of} \; \overline{p
-    \rightarrow t} : v
-}
-$$
-$$
-%Alt
-\inferrule*[right=Alt]
-{
-    (K : \forall (\overline{a : k}) (\overline{b' : k'}) . \; \overline{\psi} \Rightarrow
-    \overline{v} \rightarrow T \; \overline{a}) \in \Gamma
-    \\
-    \theta = [\overline{a} \mapsto \overline{v}_a, \overline{b'} \mapsto
-    \overline{b}]
-    \\
-    \overline{b}, \overline{c}, \overline{x} \notin dom(\Gamma)
-    \\
-    \Gamma, (\overline{b : k'}), (\overline{c : \theta(\psi)}), (\overline{x :
-    \theta(v)}) \vdash_{tm} t : v_2
-}
-{
-    \Gamma \vdash_{alt} K \; (\overline{b : k'}) \; (\overline{c : \theta(\psi)})
-    \; (\overline{x : \theta(v)}) \rightarrow t : T \; \overline{v}_a
-    \rightarrow v_2
-}
-$$
-\caption{System $F_C$ Term Typing}
-\label{fig:fc-term}
-\end{figure}
-
-\begin{figure}
-\fbox{$\Gamma \vdash_{ty} v : k$}
-% TYPES
-\begin{mathpar}
-%TyVar
-\inferrule*[right=Tyvar]
-{a : k \in \Gamma}
-{\Gamma \vdash_{ty} a : k}
-\\
-%TyQual TODO prop psi?
-\inferrule*[right=TyQual]
-{\Gamma \vdash_{pr} \psi \qquad \Gamma \vdash_{ty} v : k}
-{\Gamma \vdash_{ty} \psi \Rightarrow v : k}
-\\
-%TyCon
-\inferrule*[right=TyCon]
-{T : k \in \Gamma}
-{\Gamma \vdash_{ty} T : k}
-\\
-%TyApp
-\inferrule*[right=TyApp]
-{\Gamma \vdash_{ty} v_1 : k1 \rightarrow k_2 \qquad \Gamma \vdash_{ty} v_2 : k_1}
-{\Gamma \vdash_{ty} v_1 v_2 : k_2}
-\\
-%TyAll
-\inferrule*[right=TyAll]
-{\Gamma , a \vdash_{ty} v : \star \qquad a \notin fv(\Gamma)}
-{\Gamma \vdash_{ty} \forall a . v : \star}
-\\
-%TyFam TODO no theory(P) in my fc juist environment \Gamma ?
-\inferrule*[right=TyFam]
-{F(\overline{k}) : k' \in \Gamma \qquad \Gamma \vdash_{ty} v_i : k_i}
-{\Gamma \vdash_{ty} F(\overline{v}) : k'}
-\end{mathpar}
-\caption{System $F_C$ Type Well-formedness}
-\label{fig:fc-type}
-\end{figure}
-\begin{figure}
-\fbox{$\Gamma \vdash_{pr} \psi$}
-$$
-%Prop
-\inferrule*[right=Prop]
-{\Gamma \vdash_{ty} v_1 : k \qquad \Gamma \vdash_{ty} v_2 : k}
-{\Gamma \vdash_{pr} v_1 \sim v_2}
-$$
-\label{fig:fc-prop}
-\end{figure}
 \begin{figure}
 \fbox{$\Gamma \vdash_{co} \gamma : \psi$}
 \begin{mathpar}
@@ -490,7 +181,7 @@ $$
 {
     \Gamma \vdash_{co} c : \psi
 }
-\\
+\quad
 %CoAx
 \inferrule*[right=CoAx]
 {
@@ -511,7 +202,7 @@ $$
 {
     \Gamma \vdash_{co} \langle v \rangle : v \sim v
 }
-\\
+\quad
 %CoSym
 \inferrule*[right=CoSym]
 {
@@ -553,7 +244,7 @@ $$
 {
     \Gamma \vdash_{co} \text{left} \; \gamma : v_1 \sim v_3
 }
-\\
+\quad
 %CoRight
 \inferrule*[right=CoRight]
 {
@@ -566,7 +257,7 @@ $$
 %CoFam
 \inferrule*[right=CoFam]
 {
-    (F : \overline{k} \rightarrow k') \in \Gamma
+    \textbf{type} \; F(\overline{a : k}) : k
     \\
     \overline{\Gamma \vdash_{co} \gamma : v_1 \sim v_2}
     \\
@@ -630,10 +321,463 @@ $$
     \Gamma \vdash_{co} \gamma_1 @ \gamma_2 : v_1 \sim v_2
 }
 \end{mathpar}
-\caption{System $F_C$ Coercion Typing}
+\caption{\systemfc~Coercion Typing}
 \label{fig:fc-co}
 \end{figure}
+\subsection{Propositions}
 
+Propositions, denoted by $\psi$, could be described as the types of coercions.
+Similarly to types classifying terms and kinds classifying types, propositions
+classify coercions.  The well-formednes of propositions is specified in
+Figure~\ref{fig:fc-prop}. In essence, an equality between two types is well-formed
+if both types are well-formed.
 
-\section{Operational Semantics}
-%TODO mention but refer to paper
+\begin{figure}
+\fbox{$\Gamma \vdash_{pr} \psi$}
+$$
+%Prop
+\inferrule*[right=Prop]
+{\Gamma \vdash_{ty} v_1 : k \qquad \Gamma \vdash_{ty} v_2 : k}
+{\Gamma \vdash_{pr} v_1 \sim v_2}
+$$
+\caption{\systemfc~Proposition Well-formedness}
+\label{fig:fc-prop}
+\end{figure}
+
+\subsection{Terms}
+
+Terms have three notable extensions. Coercion abstraction, denoted by $\Lambda(c
+: \psi). \; t$, coercion application, denoted by $t \; \gamma$, and explicit
+type casts, denoted by $t \triangleright \gamma$. The typing rules are specified
+in Figure~\ref{fig:fc-term}. The first two allow us to explicitly pass coercions
+and are quite straightforward.
+
+The most noteworthy are the type casts. Given a coercion $\gamma : v_1 \sim v_2$
+and a term $t$ of type $v_1$ we can explicitly cast the type of $t$ to
+$v_2$ using $\gamma$, the proof that $v_1$ is equal to $v_2$.
+Notice that type equality in \systemfc~is non-syntactic: we can use a term
+of type $v_1$ where we expect a term of a syntactically distinct type $v_2$ as
+long as we can prove that $v_1$ is equal to $v_2$ by other means.
+% GEORGE: I am not sure if you need to mention this. Your explanation is
+% already very difficult for someone that does not know much about type
+% systems, System F and System FC. I think you are going too deep. Use examples
+% maybe to help.
+
+\begin{figure}
+\fbox{$\Gamma \vdash_{tm} t : v$}
+% TERM
+\begin{mathpar}
+%TmCast
+\inferrule*[right=TmCast]
+{P;\Gamma \vdash_{tm} t : v_1 \\ P;\Gamma \vdash_{co} \gamma : v_1 \sim v_2}
+{P;\Gamma \vdash_{tm} t \triangleright \gamma : v_2}
+\quad
+%TmVar
+\inferrule*[right=TmVar]
+{x : v \in \Gamma}
+{\Gamma \vdash_{tm} x : v}
+\\
+%TmCon
+\inferrule*[right=TmCon]
+{K : v \in \Gamma}
+{\Gamma \vdash_{tm} K : v}
+\quad
+%TmAbs
+\inferrule*[right=TmAbs]
+{x \notin dom(\Gamma) \qquad \Gamma \vdash_{ty} v_1 : \star \qquad \Gamma , x : v_1
+\vdash_{tm} t : v_2}
+{\Gamma \vdash_{tm} \lambda(x : v_1). t : v_1 \rightarrow v_2}
+\\
+%TmApp
+\inferrule*[right=TmApp]
+{\Gamma \vdash_{tm} t_1 : v_2 \rightarrow v_1 \qquad \Gamma \vdash_{tm} t_2 : v_2 }
+{\Gamma \vdash_{tm} t_1 \; t_2 : v_1}
+\\
+%TmTyApp
+\inferrule*[right=TmTyApp]
+{\Gamma \vdash_{tm} t : \forall (a : k). v \qquad \Gamma \vdash_{ty} v_1 : k}
+{\Gamma \vdash_{tm} t \; v_1 : [a \mapsto v_1]v}
+\\
+%TmTyAbs
+\inferrule*[right=TmTyAbs]
+{a \notin dom(\Gamma) \\ \Gamma , a : k \vdash_{tm} t : v}
+{\Gamma \vdash_{tm} \Lambda(a : k). t: \forall(a : k). v}
+\\
+%TmCoAbs
+\inferrule*[right=TmCoAbs]
+{
+    c \notin dom(\Gamma)
+    \\
+    \Gamma \vdash_{pr} \psi
+    \\
+    \Gamma, c : \psi \vdash_{tm} t : v
+}
+{
+    \Gamma \vdash_{tm} \Lambda(c : \psi). \; t : \psi \Rightarrow v
+}
+\\
+%TmCoApp
+\inferrule*[right=TmCoApp]
+{
+    \Gamma \vdash_{tm} t : \psi \Rightarrow v
+    \\
+    \Gamma \vdash_{co} \gamma : \psi
+}
+{
+    \Gamma \vdash_{tm} t \; \gamma : v
+}
+\\
+%TmLet
+\inferrule*[right=TmLet]
+{
+    x \notin dom(\Gamma)
+    \\
+    \Gamma, x : v_1 \vdash_{tm} t_1 : v_1
+    \\
+    \Gamma \vdash_{ty} v_1 : \star
+    \\
+    \Gamma, x : v_1 \vdash_{tm} t_2 : v_2
+}
+{
+    \Gamma \vdash_{tm} (\textbf{let} \; x : v_1 = t_1 \; \textbf{in} \; t_2) : v_2
+}
+\\
+%TmCase
+\inferrule*[right=TmCase]
+{
+    \Gamma \vdash_{tm} t_{scr} : v_{scr}
+    \\
+    \overline{\Gamma \vdash_{alt} p \rightarrow t : v_{scr} \rightarrow v}
+}
+{
+    \Gamma \vdash_{tm} \textbf{case} \; t_{scr} \; \textbf{of} \; \overline{p
+    \rightarrow t} : v
+}
+\\
+%Alt
+\inferrule*[right=Alt]
+{
+  \textbf{data} \; T \; (\overline{a : k}) \; \textbf{where} \; K : \forall (\overline{a : k}) (\overline{b' : k'}) . \; \overline{\psi} \Rightarrow
+    \overline{v} \rightarrow T \; \overline{a}
+    \\
+    \theta = [\overline{a} \mapsto \overline{v}_a, \overline{b'} \mapsto
+    \overline{b}]
+    \\
+    \overline{b}, \overline{c}, \overline{x} \notin dom(\Gamma)
+    \\
+    \Gamma, (\overline{b : k'}), (\overline{c : \theta(\psi)}), (\overline{x :
+    \theta(v)}) \vdash_{tm} t : v_2
+}
+{
+    \Gamma \vdash_{alt} K \; (\overline{b : k'}) \; (\overline{c : \theta(\psi)})
+    \; (\overline{x : \theta(v)}) \rightarrow t : T \; \overline{v}_a
+    \rightarrow v_2
+}
+\end{mathpar}
+\caption{\systemfc~Term Typing}
+\label{fig:fc-term}
+\end{figure}
+
+\subsection{Patterns}
+
+Patterns can now introduce existential type variables and local equality
+constraints, elevating them to the level of expressiveness of GADTs.
+Such patterns bring these existential type variables $\overline{b}$ annotated
+with their kinds $\overline{k}$ into scope. The local type equalities, denoted
+by $\overline{\phi}$, are made accessible by bringing their accompanying
+coercion variables $\overline{c}$ into scope as well. Thus, they can be used by
+explicit type casts in the right-hand side of a pattern match. Lastly, note the subtle addition of explicit type
+annotations $\overline{v}$ to the term variables $\overline{x}$. This choice makes
+type checking as simple as possible (type checking needs linear time in the size of the program) at the cost of making elaboration
+slightly more tedious. The typing of patterns is specified in rule \texttt{Alt}
+in Figure~\ref{fig:fc-term} for pattern match case alternatives.
+
+\subsection{Declarations}
+
+GADT syntax is used for data type declarations: data constructors are defined by
+their annotated type signature instead of the types of their individual
+parameters like how algebraic data types would be defined in Haskell.
+
+%TODO mention somewhere that type families are *open* type functions
+Type family declarations are quite straightforward, they simply define the name
+of the declared family, its arity, the kinds of its parameters, and the kind of
+its result.
+
+%TODO don't want to mention type patterns, not really enforced anywhere in the
+%implementation
+Equality axioms, as the name suggests, axiomatically define type equalities
+between type family applications $F(\overline{v})$ and some other type $v$. As
+mentioned earlier, type casts allow for the use of non-syntactic equalities.
+Axioms on the other hand provide a way of introducing these non-syntactic
+equalities. Axioms are annotated with a axiom variable $g$ so we can refer to
+these axioms in coercions. The type variables $\overline{a}$ in the declaration
+indicate that axioms can be used for any instantiation for $\overline{a}$, or in
+other words, they are polymorphic.
+
+Top-level value bindings are entirely standard.
+
+%TODO declaration typing
+
+\section{Type checking}
+
+\systemfc~is by design very straightforward to type check, no type inference
+is required of any kind and can be done by a single traversal of the program.
+One of the properties that contributes to this is that \systemfc~typing is
+syntax-directed; there is a single typing rule for every syntactic component.
+Indeed, every typing rule corresponds to a single function clause in our
+implementation.
+
+Note that in Figure~\ref{fig:fc-term} rule \texttt{TmCase}, the type of the case
+scrutinee would be passed to the typing rule of \texttt{Alt} as an input.
+Meaning that $T \; \overline{v}_a$ should be an input for the implementation of
+the \texttt{Alt} rule.
+
+\section{Elaboration Example}
+
+The next example illustrates how the broken example from
+Section~\ref{sec:problem-statement} can be correctly elaborated into \systemfc.
+Everything that appears after a $\rightsquigarrow$ represents the
+generated \systemfc~code.
+
+\begin{verbatim}
+    class C a b | a -> b
+\end{verbatim}
+
+$\qquad\rightsquigarrow$ \textbf{type} $FC$ $a$
+
+$\qquad\rightsquigarrow$ \textbf{data} $CDict$ $a$ $b$ \textbf{where}
+
+$\qquad\qquad$ $CDict$ $::$ $(FC \; a \sim b)
+\Rightarrow$ $CDict$ $a$ $b$
+
+\begin{verbatim}
+    instance C Int Bool
+\end{verbatim}
+
+$\qquad\rightsquigarrow$ \textbf{axiom} $g$ : $FC$ $Int$ $\sim$ $Bool$
+
+$\qquad\rightsquigarrow$ \textbf{let} $d$ : $CDict$ $Int$ $Bool$
+
+$\qquad\qquad\quad$ = $CDict$ $Int$ $Bool$ $(g : FC$ $Int \sim Bool)$
+
+\begin{verbatim}
+    f :: C Int b => b -> Bool
+    f x = x
+\end{verbatim}
+
+$\qquad\rightsquigarrow$ let $f$ = $\Lambda b. \; \lambda (d : CDict \; Int \;
+b). \;\lambda (x : b). \; \text{case} \; d \; \text{of}$
+
+$\hspace{3.5cm} CDict \; (c : FC \; Int \sim b ) \rightarrow x \triangleright
+(\text{sym} \; c) \fctrans g$
+\\
+
+Type classes are not a part of the \systemfc~syntax and therefore need to be
+encoded somehow. They are translated to so called ``dictionaries''.  These are
+values that contain the functions of the method implementations of the instance
+declaration. These dictionaries are explicitly passed around as parameters to
+functions with type class constraints so their methods can be available to them
+at runtime. In \systemfc however, these dictionaries could be used to store
+coercions as well.
+
+Every functional dependency of a type class declaration gives rise to a type
+family declaration for a type family that maps the domain of the dependency to
+the range.  The functional dependency in the class declaration of \texttt{C}
+will generate a type family declaration ``\textbf{type}~$FC$~$a$'' to represent
+the functional dependency.
+
+The class declaration itself will generate a data declaration for the dictionary
+with a single data constructor to store functional-dependency-related type
+equalities and method implementations. It should also store the dictionaries of
+the super classes and any existential type variables introduced by those (this
+will be explained further in Section~\ref{sec:class-elaboration}).
+A coercion that proves the equality of $FC$ $a$ and $b$, denoted by
+$FC$ $a \sim b$ in the type signature, should be stored by the dictionary
+$CDict$ generated for the type class \texttt{C}.
+
+The instance declaration for \texttt{C Int Bool} generates a top-level axiom
+$g$ which states that $FC$ $Int$ is indeed equal to $Bool$. The instance
+declaration also generates a dictionary value that would contain the method
+implementations of the instance, if it had any, and the top-level axiom as a
+coercion constant.
+
+In the elaboration of the function \texttt{f}, the polymorphic type \texttt{b}
+becomes an explicit type parameter. This is the case for plain System $F$ as well,
+which captures parametric polymorphic in explicit type abstraction.
+The type class constraint becomes a
+normal term parameter that holds the corresponding dictionary. Lastly,
+\texttt{f} takes the user-specified argument \texttt{x} of type \texttt{b}.
+
+The function body of $f$ pattern matches against the dictionary to expose the
+coercion within, which is used by the compiler to construct a coercion to
+explicitly cast $x$ from \texttt{b} to \texttt{Bool}.
+
+The ``sym'' in the coercion changes the orientation of the equality and the
+``$\fctrans$'' witnesses transitivity of two coercions. Here we annotate every
+component of the coercion with its proposition to make it clear how the
+final proposition is derived:
+
+\[
+\quad\quad((\text{sym} \; (c : FC \; Int \sim b)) : b \sim FC \; Int) ; (g : FC
+\; Int \sim Bool) ) : b \sim Bool
+\]
+
+This means that the coercion proves the equality of $b$ and $Bool$ and
+\texttt{x} can be cast safely using a type cast $\triangleright$ and the
+generated coercion.
+
+% TODO other typing rules, declarations, etc
+\begin{figure}
+\fbox{$\Gamma \vdash_{co} \gamma : \psi$}
+\begin{mathpar}
+%CoVar
+\inferrule*[right=CoVar]
+{
+    (c : \psi) \in \Gamma
+}
+{
+    \Gamma \vdash_{co} c : \psi
+}
+\quad
+%CoAx
+\inferrule*[right=CoAx]
+{
+    (g \; (\overline{a : k}) : v_1 \sim v_2) \in \Gamma
+    \\
+    \overline{\Gamma \vdash_{ty} v : k}
+}
+{
+    \Gamma \vdash_{co} g \; \overline{v} : [\overline{a} \mapsto \overline{v}]v_1
+    \sim [\overline{a} \mapsto \overline{v}]v_2
+}
+\\
+%CoRefl
+\inferrule*[right=CoRefl]
+{
+    \Gamma \vdash_{ty} v : k
+}
+{
+    \Gamma \vdash_{co} \langle v \rangle : v \sim v
+}
+\quad
+%CoSym
+\inferrule*[right=CoSym]
+{
+    \Gamma \vdash_{co} \gamma : v_1 \sim v_2
+}
+{
+    \Gamma \vdash_{co} \text{sym} \; \gamma : v_2 \sim v_1
+}
+\\
+%CoTrans
+\inferrule*[right=CoTrans]
+{
+    \Gamma \vdash_{co} \gamma_1 : v_1 \sim v_2
+    \\
+    \Gamma \vdash_{co} \gamma_2 : v_2 \sim v_3
+}
+{
+    \Gamma \vdash_{co} \gamma_1 \fctrans \gamma_2 : v_1 \sim v_3
+}
+\\
+%CoApp
+\inferrule*[right=CoApp]
+{
+    \Gamma \vdash_{ty} v_1 \; v_3 : k
+    \\
+    \Gamma \vdash_{co} \gamma_1 : v_1 \sim v_2
+    \\
+    \Gamma \vdash_{co} \gamma_2 : v_3 \sim v_4
+}
+{
+    \Gamma \vdash_{co} \gamma_1 \; \gamma_2 : v_1 \; v_3 \sim v_2 \; v_4
+}
+\\
+%CoLeft
+\inferrule*[right=CoLeft]
+{
+    \Gamma \vdash_{co} \gamma : v_1 \; v_2 \sim v_3 \; v_4
+}
+{
+    \Gamma \vdash_{co} \text{left} \; \gamma : v_1 \sim v_3
+}
+\quad
+%CoRight
+\inferrule*[right=CoRight]
+{
+    \Gamma \vdash_{co} \gamma : v_1 \; v_2 \sim v_3 \; v_4
+}
+{
+    \Gamma \vdash_{co} \text{right} \; \gamma : v_2 \sim v_4
+}
+\\
+%CoFam
+\inferrule*[right=CoFam]
+{
+    \textbf{type} \; F(\overline{a : k}) : k
+    \\
+    \overline{\Gamma \vdash_{co} \gamma : v_1 \sim v_2}
+    \\
+    \overline{\Gamma \vdash_{ty} v_1 : k}
+}
+{
+    \Gamma \vdash_{co} F(\overline{\gamma}) : F(\overline{v_1}) \sim
+    F(\overline{v_2})
+}
+\\
+%CoAbs
+\inferrule*[right=CoAbs]
+{
+    \Gamma, a : k \vdash_{co} \gamma : v_1 \sim v_2
+    \\
+    \Gamma, a : k \vdash_{ty} v_1 : k_1
+    \\
+    (a : k) \notin dom(\Gamma)
+}
+{
+    \Gamma \vdash_{co} \forall a. \; \gamma : \forall. a \; v_1 \sim \forall. a
+    \; v_2
+}
+\\
+%CoInst
+\inferrule*[right=CoInst]
+{
+    \Gamma \vdash_{co} \forall a. \; \gamma_1 : \forall. a \; v_1 \sim \forall. a
+    \; v_2
+    \\
+    \Gamma \vdash_{co} \gamma_2 : v_3 \sim v_4
+    \\
+    \Gamma \vdash_{ty} v3 : k
+}
+{
+    \Gamma \vdash_{co} \gamma_1 [\gamma_2] : [a \mapsto v_3]v_1 \sim [a \mapsto
+    v_4]v_2
+}
+\\
+%CoQual
+\inferrule*[right=CoQual]
+{
+    \Gamma \vdash_{pr} \psi
+    \\
+    \Gamma \vdash_{co} \gamma : v_1 \sim v_2
+}
+{
+    \Gamma \vdash_{co} \psi \Rightarrow \gamma : (\psi \Rightarrow v_1) \sim
+    (\psi \Rightarrow v_2)
+}
+\\
+%CoQual
+\inferrule*[right=CoQInst]
+{
+    \Gamma \vdash_{co} \gamma_1 : (\psi \Rightarrow v_1) \sim
+    (\psi \Rightarrow v_2)
+    \\
+    \Gamma \vdash_{co} \gamma_2 : \psi
+}
+{
+    \Gamma \vdash_{co} \gamma_1 @ \gamma_2 : v_1 \sim v_2
+}
+\end{mathpar}
+\caption{\systemfc~Coercion Typing}
+\label{fig:fc-co}
+\end{figure}

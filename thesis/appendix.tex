@@ -1,6 +1,67 @@
-\chapter{Typing Rules}
+\chapter{Additional Judgements}
+\section{$\text{F}_\text{C}$ Declaration and Program Typing}
 \begin{figure}
-%TODO move to appendix
+\fbox{$\Gamma \vdash_d decl \; \Gamma'$}
+\begin{mathpar}
+\inferrule*[right=Data]
+{
+  \Gamma, (\overline{a : k}) (\overline{b : k}) \vdash_{pr} \psi_i
+  \\
+  \Gamma, (\overline{a : k}) (\overline{b : k}) \vdash_{ty} v_j
+}
+{
+  \Gamma \vdash_{d} (\textbf{data} \; T \; (\overline{a : k}) \; \textbf{where} \; K :
+  \forall (\overline{a : k}) (\overline{b : k}). \; \overline{\psi} \Rightarrow \overline{v}
+  \rightarrow T \; \overline{a}) : \bullet
+}
+\\
+\inferrule*[right=Family]
+{
+  ~
+}
+{
+  \Gamma \vdash_{d} (\textbf{type} \; F(\overline{a : k}) : k) : \bullet
+}
+\\
+\inferrule*[right=Axiom]
+{
+  \Gamma, (\overline{a : k}) \vdash_{ty} v_i
+  \\
+  \Gamma, (\overline{a : k}) \vdash_{ty} v
+  \\
+  g \notin dom(\Gamma)
+}
+{
+  \Gamma \vdash_{d} (\textbf{axiom} \; g \; (\overline{a : k}) : F(\overline{v}) \sim v)
+  : \{g \; (\overline{a : k}) : F(\overline{v}) \sim v\}
+}
+\\
+\inferrule*[right=Value]
+{
+  \Gamma \vdash_{tm} t : v
+  \\
+  x \notin dom(\Gamma)
+}
+{
+  \Gamma \vdash_{d} (\textbf{let} \; x : v = t) : \{x : v\}
+}
+\end{mathpar}
+\caption{Declaration Typing}
+\end{figure}
+\begin{figure}
+\fbox{$\vdash_{pgm}^{fc} \overline{decl}$}
+\begin{mathpar}
+\inferrule*[right=Program]
+{
+\Gamma \vdash_d \; decl
+}
+{
+\vdash_{pgm}^{fc} \overline{decl}
+}
+\end{mathpar}
+\end{figure}
+\section{Simplified Coercion Typing}
+\begin{figure}
 \fbox{$\Gamma_{co} \vdash_{co} \gamma : \psi$}
 \begin{mathpar}
 \inferrule*[right=TyCoVar]
