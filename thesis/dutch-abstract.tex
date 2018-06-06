@@ -1,0 +1,52 @@
+\textit{Type classes} zijn een van de meest populaire functies van Haskell en
+hebben van wijdverspreid gebruik genoten sinds hun ontwerp door Wadler en Blott.
+Niet lang na hun introductie in Haskell-compilers, werden \textit{type classes}
+met één parameter uitgebreid met ondersteuning voor meerdere typeparameters.
+Waardoor de expressieve kracht van \textit{class constraints} ging van simpele
+predikaten op types tot de relaties daartussen.
+
+Helaas kunnen er zich gemakkelijk situaties voordoen door het gebruik van
+\textit{type classes} met meerdere parameters waarbij het type van één of
+meerdere van de parameters niet ondubbelzinnig kan worden bepaald. Om dit
+probleem aan te pakken introduceerde Mark P. Jones het concept van
+\textit{Functional Dependencies} tussen de typeparameters van \textit{type
+classes}, opdat de één uniek zou kunnen worden bepaald door de ander and de
+ambiguiteiten opgelost zouden zijn.  \textit{Functional dependencies} zijn zeer
+populair geworden en worden tot op de dag van vandaag gebruikt, niet gewoon om
+ambiguiteiten op te lossen, maar ook voor het statisch afdwingen van semantische
+eigenschappen en om te programmeren met types.
+
+Helaas, ondanks de populariteit van deze \textit{functional dependencies},
+blijft deze component van de taal onbetrouwbaar geïmplementeerd in de primaire
+Haskell-compiler, GHC. De oorzaak van dit probleem is de niet-parametrische aard
+van dit concept, wat niet kan worden vertaald naar simpele parametrische
+polymorfisme.
+
+Desondanks is de tussenrepresentatie van GHC sindsdien aanzienlijk veranderd
+sinds de introductie van \textit{functional dependencies} in het jaar 2000 om te
+voorzien voor een verscheidendheid van type-gerelateerde functionaliteit.
+Namelijk in 2007 was de tussentaal van GHC vervangen door \systemfc, een
+uitbreiding van System F met expliciete bewijzen van gelijkheid tussen types,
+die we \textit{coercions} noemen. De mogelijkheid om \textit{functional
+dependencies} te implementeren door ze te vertalen in deze meer expressieve
+calculus is tot voor kort niet volledig onderzocht. In 2017 presenteerden
+Karachalias en Schrijvers \textit{type inference} algoritme voor
+\textit{functional dependencies} en een manier om werk ze uit in \systemfc.
+
+Deze thesis legt een implementatie voor van het bovengenoemde algoritme en een
+gedetailleerd overzicht van belangrijke implementatiespecifieke details en
+complicaties die zich hebben voorgedaan tijdens de implementatie van
+\textit{functional dependencies}.
+%
+Het doel van deze implementatie is tweevoudig.
+%
+Ten eerste dient het als een validatie en evaluatie van de specificatie van
+Karachalias en Schrijvers. Inderdaad, onze implementatie heeft er verschillende
+onthuld onnauwkeurigheden in de specificatie van het algoritme; we laten zien
+hoe ze kunnen worden aangepakt.
+%
+Ten tweede dient het als een haalbaarheidsstudie, gericht op het kwantificeren
+van de uitdagingen dat kan zich voordoen bij het integreren van functionele
+afhankelijkheden in de stroom Haskell ecosysteem. We laten zien dat de benodigde
+veranderingen minimaal zijn door het type inferentieraamwerk dat momenteel in
+GHC aanwezig is.
