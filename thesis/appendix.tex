@@ -1,17 +1,190 @@
-\chapter{Additional Judgements}
-\section{$\text{F}_\text{C}$ Declaration and Program Typing}
+\chapter{Additional Source Judgements}
+
+\begin{figure}
+\fbox{$\Gamma \vdash_{ty} \sigma$}
+\begin{mathpar}
+\inferrule*[right=WfVar]
+{
+  a \in \Gamma
+}
+{
+  \Gamma \vdash_{ty} a
+}
+\quad
+\inferrule*[right=WfCon]
+{
+}
+{
+  \Gamma \vdash_{ty} T
+}
+\quad
+\inferrule*[right=WfQual]
+{
+  \Gamma \vdash_{ty} \sigma
+  \\
+  \Gamma \vdash_{ct} \pi
+}
+{
+  \Gamma \vdash_{ty} \pi \Rightarrow \sigma
+}
+\\
+\inferrule*[right=WfFam]
+{
+  \Gamma \vdash_{ty} \tau_i
+}
+{
+  \Gamma \vdash_{ty} F(\overline{\tau})
+}
+\quad
+\inferrule*[right=WfApp]
+{
+  \Gamma \vdash_{ty} \tau_1
+  \\
+  \Gamma \vdash_{ty} \tau_2
+}
+{
+  \Gamma \vdash_{ty} \tau_1 \; \tau_2
+}
+\quad
+\inferrule*[right=WfAll]
+{
+  \Gamma, a \vdash_{ty} \sigma
+  \\
+  a \notin fv(\Gamma)
+}
+{
+  \Gamma \vdash_{ty} \forall a. \; \sigma
+}
+\end{mathpar}
+\caption{Type Well-formedness}
+\end{figure}
+\begin{figure}
+\begin{mathpar}
+\inferrule*[right=WfEq]
+{
+  \Gamma \vdash_{ty} \tau_1
+  \\
+  \Gamma \vdash_{ty} \tau_2
+}
+{
+  \Gamma \vdash_{ct} \tau_1 \sim \tau_2
+}
+\quad
+\inferrule*[right=WfCls]
+{
+  \Gamma \vdash_{ty} \tau_i
+}
+{
+  \Gamma \vdash_{ct} TC \; \overline{\tau}
+}
+\end{mathpar}
+\caption{Constraint Well-formedness}
+\end{figure}
+
+\begin{figure}
+\fbox{$\Gamma \vdash_{ty} \sigma \rightsquigarrow v$}
+\begin{mathpar}
+\inferrule*[right=ETyVar]
+{
+  a \in \Gamma
+}
+{
+  \Gamma \vdash_{ty} a \rightsquigarrow a
+}
+\quad
+\inferrule*[right=ETyCon]
+{
+}
+{
+  \Gamma \vdash_{ty} T \rightsquigarrow T
+}
+\\
+\inferrule*[right=ETyQual]
+{
+  \Gamma \vdash_{ty} \sigma \rightsquigarrow v
+  \\
+  \Gamma \vdash_{cc} \pi_i \rightsquigarrow v_i
+}
+{
+  \Gamma \vdash_{ty} \overline{\pi} \Rightarrow \sigma \rightsquigarrow \overline{v}
+  \rightarrow v
+}
+\\
+\inferrule*[right=ETyFam]
+{
+  \Gamma \vdash_{ty} \tau_i \rightsquigarrow v_i
+}
+{
+  \Gamma \vdash_{ty} F(\overline{\tau}) \rightsquigarrow F(\overline{v})
+}
+\quad
+\inferrule*[right=ETyApp]
+{
+  \Gamma \vdash_{ty} \tau_1 \rightsquigarrow v_1
+  \\
+  \Gamma \vdash_{ty} \tau_2 \rightsquigarrow v_2
+}
+{
+  \Gamma \vdash_{ty} \tau_1 \; \tau_2 \rightsquigarrow v_1 \; v_2
+}
+\\
+\inferrule*[right=ETyAll]
+{
+  \Gamma, a \vdash_{ty} \sigma \rightsquigarrow v
+  \\
+  a \notin fv(\Gamma)
+}
+{
+  \Gamma \vdash_{ty} \forall a. \; \sigma \rightsquigarrow \forall a. \; v
+}
+\end{mathpar}
+\caption{Type Translation}
+\end{figure}
+
+\begin{figure}
+\fbox{$\Gamma \vdash_{eq} \phi \rightsquigarrow \psi$}
+\begin{mathpar}
+\inferrule*[right=EEqCt]
+{
+  \Gamma \vdash_{ty} \tau_1 \rightsquigarrow v_1
+  \\
+  \Gamma \vdash_{ty} \tau_2 \rightsquigarrow v_2
+}
+{
+  \Gamma \vdash_{eq} \tau_1 \sim \tau_2 \rightsquigarrow v_1 \sim v_2
+}
+\end{mathpar}
+\caption{Equality Constraint Translation}
+\end{figure}
+
+\begin{figure}
+\fbox{$\Gamma \vdash_{eq} \pi \rightsquigarrow v$}
+\begin{mathpar}
+\inferrule*[right=EClsCt]
+{
+  \Gamma \vdash_{ty} \tau_i \rightsquigarrow v_i
+}
+{
+  \Gamma \vdash_{ct} TC \; \overline{\tau} \rightsquigarrow T_{TC} \;
+  \overline{v}
+}
+\end{mathpar}
+\caption{Class Constraint Translation}
+\end{figure}
+
+\chapter{Additional $\text{F}_\text{C}$ Judgements}
 \begin{figure}
 \fbox{$\Gamma \vdash_d decl \; \Gamma'$}
 \begin{mathpar}
 \inferrule*[right=Data]
 {
-  \Gamma, (\overline{a : k}) (\overline{b : k}) \vdash_{pr} \psi_i
+  \Gamma, (\overline{a : k}) (\overline{b : k'}) \vdash_{pr} \psi_i
   \\
-  \Gamma, (\overline{a : k}) (\overline{b : k}) \vdash_{ty} v_j
+  \Gamma, (\overline{a : k}) (\overline{b : k'}) \vdash_{ty} v_j
 }
 {
   \Gamma \vdash_{d} (\textbf{data} \; T \; (\overline{a : k}) \; \textbf{where} \; K :
-  \forall (\overline{a : k}) (\overline{b : k}). \; \overline{\psi} \Rightarrow \overline{v}
+  \forall (\overline{a : k}) (\overline{b : k'}). \; \overline{\psi} \Rightarrow \overline{v}
   \rightarrow T \; \overline{a}) : \bullet
 }
 \\
@@ -48,19 +221,7 @@
 \end{mathpar}
 \caption{Declaration Typing}
 \end{figure}
-\begin{figure}
-\fbox{$\vdash_{pgm}^{fc} \overline{decl}$}
-\begin{mathpar}
-\inferrule*[right=Program]
-{
-\Gamma \vdash_d \; decl
-}
-{
-\vdash_{pgm}^{fc} \overline{decl}
-}
-\end{mathpar}
-\end{figure}
-\section{Simplified Coercion Typing}
+
 \begin{figure}
 \fbox{$\Gamma_{co} \vdash_{co} \gamma : \psi$}
 \begin{mathpar}
