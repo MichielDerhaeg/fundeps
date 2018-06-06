@@ -11,35 +11,34 @@ are essentially very complicated reflections, making them, and the type cast
 that uses them, entirely redundant.
 
 \begin{figure}
-\fbox{$\Gamma_{co} \vdash t \rightsquigarrow t'$}
+\fbox{$\Gamma_{co} \vdash_{s} t \rightsquigarrow t'$}
 \[
 \begin{array}{l c l}
-\Gamma_{co} \vdash_{?} t \triangleright \langle \tau \rangle &\rightsquigarrow& t\\
+\Gamma_{co} \vdash_s t \triangleright \langle \tau \rangle &\rightsquigarrow& t\\
 \\
-\Gamma_{co} \vdash \gamma \\
-\guard \Gamma_{co} \vdash_{co} \rightsquigarrow \tau \sim \tau &\rightsquigarrow& \langle \tau
-\rangle
+\Gamma_{co} \vdash_s \gamma &\rightsquigarrow& \langle \tau \rangle\\
+\where \Gamma_{co} \vdash_{co} \tau \sim \tau
 \\
-\Gamma_{co} \vdash \langle \tau \rangle \fctrans \gamma &\rightsquigarrow& \gamma
+\Gamma_{co} \vdash_s \langle \tau \rangle \fctrans \gamma &\rightsquigarrow& \gamma
 \\
-\Gamma_{co} \vdash \gamma \fctrans \langle \tau \rangle &\rightsquigarrow& \gamma
+\Gamma_{co} \vdash_s \gamma \fctrans \langle \tau \rangle &\rightsquigarrow& \gamma
 \\
-\Gamma_{co} \vdash \langle \tau_1 \rangle \; \langle \tau_2 \rangle
+\Gamma_{co} \vdash_s \langle \tau_1 \rangle \; \langle \tau_2 \rangle
 &\rightsquigarrow& \langle \tau_1 \; \tau_2 \rangle
 \\
-\Gamma_{co} \vdash \text{sym} \; (\text{sym} \; \gamma)) &\rightsquigarrow& \gamma
+\Gamma_{co} \vdash_s \text{sym} \; (\text{sym} \; \gamma)) &\rightsquigarrow& \gamma
 \\
-\Gamma_{co} \vdash \text{sym} \; (\langle \tau \rangle) &\rightsquigarrow& \langle \tau \rangle
+\Gamma_{co} \vdash_s \text{sym} \; (\langle \tau \rangle) &\rightsquigarrow& \langle \tau \rangle
 \\
 %TODO this one is done in the oppisite direction in the fc paper
-\Gamma_{co} \vdash \text{sym} \; \gamma_1 \fctrans \text{sym} ; \gamma_2
+\Gamma_{co} \vdash_s \text{sym} \; \gamma_1 \fctrans \text{sym} ; \gamma_2
 &\rightsquigarrow& \text{sym} \; (\gamma_1 \fctrans \gamma_2)
 \\
-\Gamma_{co} \vdash F(\overline{\gamma}) \fctrans F(\overline{\gamma}')
+\Gamma_{co} \vdash_s F(\overline{\gamma}) \fctrans F(\overline{\gamma}')
 &\rightsquigarrow& F(\overline{\gamma_i \fctrans \gamma_i'})
 \end{array}
 \]
-\caption{Coercion Simplification}
+\caption{Coercion Simplification Rules}
 \label{fig:co-simpl}
 \end{figure}
 
@@ -55,26 +54,32 @@ instead of reducing it to some normal form. These rules have proven to be highly
 effective and sufficient so no effort has been made to implement full
 normalization.
 
-However, this would be trivial given that all of the surrounding framework is in
-place, which includes type-aware rewrite rules. This means we can take the type
-of a coercion (the proposition) into account. This implies that we need to do
-some sort of type checking during coercion simplification.  Simplification is
-implemented as a separate operation, completely independent from type checking.
-To be able to determine the proposition of a coercion and type-aware coercion
-rewriting, a simplified implementation of the coercion typing rules specified in
-Figure~\ref{fig:fc-co-type} is. Because actual type checking occurs in a
-different phase this version of coercion, typing does not need to type check
-anything or verify any well-formedness. We only attempt to derive the
-proposition. The specification of the simplified coercion typing is specified in
-Figure~\ref{fig:fc-co-type}
-% GEORGE: This paragraph is weird (quite unparseable, revise a bit)
+However, this is trivial given that all of the surrounding framework is in
+place. This includes support for type-aware rewrite rules, these are rules that
+take the type (the proposition) of a coercion into account. For example:
+\[
+\begin{array}{l}
+\Gamma_{co} \vdash_s \gamma \rightsquigarrow \langle \tau \rangle\\
+\where \Gamma_{co} \vdash_{co} \tau \sim \tau
+\end{array}
+\]
+This rule checks if the coercion $\gamma$ proves an equality between two
+syntactic equivalent types. This indicates that this coercion can be replaced by
+a reflection. In order to be able to perform coercion typing we need to
+do something similar to what is specified in Figure~\ref{fig:fc-co} from
+Chapter~\ref{cha:system-fc}. However, we would like to keep coercion
+simplification a separate operation, completely independent from \systemfc ~type
+checking. Therefore, we present a simplified form of coercion typing, specified
+in Figure~\ref{fig:fc-co-type} in the appendix. This version does not verify
+well-formedness of any kind and only performs the necessary operations to the
+derive the proposition from the coercion.
 
-We make use of a simplified typing environment, specified in
-Figure~\ref{fig:co-env} and denoted by $\Gamma_{co}$. As type checking types is
-not required and determining syntactic equality of types or observing their
-structure does not require any context or environment, it suffices to only keep
-track of coercion variables brought into scope and axiom variables defined by
-axiom declarations.
+The simplified coercion typing makes use of a simplified typing environment,
+specified in Figure~\ref{fig:co-env} and denoted by $\Gamma_{co}$. As type
+checking types is not required and determining syntactic equality of types or
+observing their structure does not require any context or environment, it
+suffices to only keep track of coercion variables brought into scope and axiom
+variables defined by axiom declarations.
 
 \begin{figure}
 \[
