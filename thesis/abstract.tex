@@ -1,33 +1,45 @@
-Type classes have become an essential part of the Haskell programming language
-ever since they have been introduced. This feature was quickly extended to allow
-for multiple type parameters. Unfortunately, by using multi-parameter type
-classes, situations can easily arise where the type of one or several parameters
-can not be determined unambiguously. To address this issue, Mark P. Jones
-introduced the notion of Functional Dependencies between the type parameters of
-type classes, so one would be uniquely determined by the other and the
-ambiguities would be resolved. It became a very popular type system feature that
-is used to date.  Not just to resolve ambiguities, but also for the static
-enforcement of semantic properties and type-level programming.
+Type classes are one of the most popular features of Haskell and have enjoyed
+widespread use since their design by Wadler and Blott. Not long after their
+introduction in Haskell compilers, single-parameter type classes were extended
+with support for multiple type parameters, lifting the expressive power of
+class constraints from simple predicates on types to relations between them.
 
-Despite the popularity of functional dependencies, the feature remains
-unreliably implemented in GHC. Due to the lack of expressiveness of the
-intermediate representation based on System F, it is impossible to translate
-certain Haskell programs that are entirely correct into System F and are thus
-rejected by GHC's type checker.
+Unfortunately, by using multi-parameter type classes, situations can easily
+arise where the type of one or several parameters can not be determined
+unambiguously. To address this issue, Mark P. Jones introduced the notion of
+Functional Dependencies between the type parameters of type classes, so that
+one would be uniquely determined by the other and the ambiguities would be
+resolved. Functional dependencies became a very popular type system feature
+that is used to date, not just for resolving ambiguities but also for the
+static enforcement of semantic properties and type-level programming.
 
-The intermediate language has since been replaced in 2007 by \systemfc, an
-extension of System F with explicit type equality coercions, proofs that could
-be constructed by the compiler, that witness type equalities. The possibility of
-implementing functional dependencies by elaborating them into \systemfc~was not
-fully explored any further until recently. Karachalias and
-Schrijvers\cite{Karachalias:2017:EFD:3156695.3122966} presented a type inference
-algorithm for functional dependencies and a way to elaborate them into
-\systemfc.
+Unfortunately, despite the popularity of functional dependencies, the feature
+remains unreliably implemented in the major Haskell compiler, GHC. The source
+of this problem is the non-parametric nature of the feature, which cannot be
+translated into plain parametric polymorphism.
 
-This thesis will present a fully functional implementation of the aforementioned
-algorithm and a description of important implementation-specific details and
-complications that arose throughout the development of this implementation.
-Firstly, this implementation serves as a validation of the specification that
-has revealed several inaccuracies. Secondly, it serves as a feasibility study
-that shows that it is possible to fully implement functional dependencies by
-reusing the available framework that is currently in place in GHC.
+Nevertheless, the intermediate language of GHC has significantly changed since
+the introduction of functional dependencies in 2000, to accommodate a multitude
+of type-level features. Notably, in 2007 the intermediate language of GHC was
+replaced by System FC, an extension of System F with explicitly type equality
+proofs, known as coercions. The possibility of implementing functional
+dependencies by translating them into this more expressive calculus has not
+been fully explored until recently, when Karachalias and Schrijvers presented
+in 2017 a type inference algorithm for functional dependencies and a way to
+elaborate them into System FC.
+
+This thesis presents an implementation of the aforementioned algorithm and a
+detailed overview of important implementation-specific details and
+complications that arose throughout the development of functional dependencies.
+%
+The goal of this implementation is twofold.
+%
+Firstly, it serves as a validation and evaluation of the specification of
+Karachalias and Schrijvers. Indeed, our implementation has revealed several
+inaccuracies in the algorithm specification; we show how they can be addressed.
+%
+Secondly, it serves as a feasibility study, aiming to quantify the challenges
+that might arise when integrating functional dependencies into the current
+Haskell eco-system. We show that the needed changes are minimal, by reusing the
+type inference framework that is currently in place in GHC.
+
