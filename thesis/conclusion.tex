@@ -2,9 +2,12 @@
 \label{cha:conclusion}
 
 The main contribution of this thesis is a prototype compiler
-implementation\footnote{\url{https://github.com/MichielDerhaeg/fundeps}} with
-full support for functional dependencies. It uses the inference algorithm
-specified by Karachalias and
+implementation\footnote{Available at
+\url{https://github.com/MichielDerhaeg/fundeps}. The starting point of our
+implementation was the prototype implementation of \emph{Quantified Class
+Constraints}~\cite{quantcs}, as implemented by Gert-Jan Bottu and
+Georgios Karachalias.} with full support for functional dependencies. It uses
+the inference algorithm specified by Karachalias and
 Schrijvers~\cite{Karachalias:2017:EFD:3156695.3122966} and the
 \textit{OutsideIn(X)}\cite{outsideinx-modular-type-inference-with-local-assumptions}
 constraint solver currenly being used by GHC.  This prototype performs type
