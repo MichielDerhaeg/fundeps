@@ -73,7 +73,7 @@ information and \textit{given} constraints, a set of untouchable (rigid) type va
 $\overline{a}_{utch}$, (that is, variables the constraint solver is not allowed
 to unify), and a set of \textit{wanted} constraints $\mathcal{C}$ the constraint solver is expected to resolve.
 
-Notice that the original version of $OutsideIn(X)$ uses \textit{touchable} variables instead, a set of
+Notice that the original version of \textit{OutsideIn(X)} uses \textit{touchable} variables instead, a set of
 type variables the constraint solver \textit{is} allowed to unify. We have opted to do
 the opposite; this is simply a matter of taste and has no interesting
 consequences.
@@ -134,6 +134,10 @@ rule_t(input)
 \\\guard conditions &=& output
 \end{array}
 \]
+
+We denote single annotated constraints, class constraints and equality
+constraints, as part of the input and output with $\mathcal{Q}$ and the given
+variety with $\mathcal{Q}_g$.
 
 \subsection{Substituting with Evidence}
 \begin{figure}
