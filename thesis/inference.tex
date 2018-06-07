@@ -170,8 +170,15 @@ equality axioms and a set of local given constraints. It gathers the all of the
 constraints schemes and equality axioms from instance declarations and the local
 given constraints when under a qualified type or context.
 
+Type substitutions are denoted by $\theta$ and when applied, replace
+type variables with monotypes. Evidence substitutions, denoted by $\eta$,
+replace placeholder dictionary variables and coercion variables to concrete
+dictionary terms and type equality coercions.
+
 The typing environment is standard and stores types of term variables and type
 variables.
+
+Lastly, we use $d$ to denote \systemfc ~dictionary term variables.
 
 \input{determinacy}
 
@@ -201,7 +208,7 @@ variables.
 {
     \Gamma \vdash_{tm} x : \theta(\tau) \rightsquigarrow x \; \overline{\alpha}
     \; \theta(\overline{b}) \; \overline{d} \; | \; \overline{d :
-    \theta(\pi)}, \overline{F_{TC}(\overline{\tau}^{i_n}) \sim \tau_{i_0}}
+    \theta(\pi)}, \overline{F_{TC}(\overline{\tau}^{n}) \sim \tau_{0}}
 }
 \\
 % TmAbs
@@ -597,7 +604,7 @@ Section~\ref{sec:match-contexts}.
     (f : \forall \overline{a'} \overline{b'}. \; TC \; \overline{a'}
     \Rightarrow \overline{\pi'} \Rightarrow \tau) \in \Gamma
     \\
-    P_I, d_I : S_I; \Gamma_I \vdash_{tm} e : [\overline{a'} \mapsto
+    P_I, d_I : S_I; \Gamma_I ; \overline{a}\overline{b} \vdash_{tm} e : [\overline{a'} \mapsto
     \overline{u}] (\forall \overline{b'}. \; \overline{\pi'} \Rightarrow \tau)
     \rightsquigarrow t
     \\
@@ -609,7 +616,7 @@ Section~\ref{sec:match-contexts}.
     \mbox{$\begin{array}{l@{\hspace{.1cm}}c@{\hspace{.1cm}}l}
     \overline{decl_c} &=&
     [ \overline{\textbf{axiom} \; P_{ax}}\\
-    & &, d_I : \forall
+    & &, \textbf{let} \; d_I : \forall
     \overline{a} \overline{b}. \;  \overline{\tau} \rightarrow T_{TC} \;
     \overline {u}
     = \Lambda \overline{a} \overline{b}. \; \lambda\overline{(d :
@@ -627,12 +634,22 @@ Section~\ref{sec:match-contexts}.
 \caption{Instance Elaboration}
 \end{figure}
 
-Most of the heavy lifting and FD-related things are handled by match
-contexts (Section~\ref{sec:match-contexts}), the superclass
-entailment (Figure~\ref{fig:superclass-entailment}), and axiom
-generation (Figure~\ref{fig:axiomgen}) rules.
+Most of the heavy lifting and FD-related concepts are handled by match contexts
+(Section~\ref{sec:match-contexts}), the superclass entailment
+(Figure~\ref{fig:superclass-entailment}), and axiom generation
+(Figure~\ref{fig:axiomgen}) rules.
 
-Note that the $tm$ judgement has been given a type signature instead of
+Most importantly, it creates a top-level let-binding $d_I$ for the instance
+that, amongst other things, includes the elaborated method. And along with the
+generated axioms, a constraint scheme $S_I$ is put in the program theory
+annotated with $d_I$ as evidence of this instance declaration that can be used
+later on by the entailment algorithm. This is always a let-binding of a
+dictionary term. For example, \texttt{instance Eq a => Eq [a]} creates a
+function that takes a dictionary for \texttt{Eq a} as an argument to create a
+dictionary for \texttt{Eq [a]}. Indeed, we have to provide evidence for
+\texttt{Eq a} to be able to retrieve evidence for \texttt{Eq [a]}.
+
+Note that the $\vdash_{tm}$ judgement has been given a type signature instead of
 it being the result of the judgement. This is handled by the subsumption
 rule specified by Figure~\ref{fig:subsumption}.
 \subsection{Axiom Generation}
@@ -743,11 +760,11 @@ stored in the GADT dictionary of the instance declaration.
 \label{sec:subsumption}
 
 \begin{figure}
-\fbox{$P; \Gamma \vdash_{tm} e : \sigma \rightsquigarrow t$}
+\fbox{$P; \Gamma ; a_{utch} \vdash_{tm} e : \sigma \rightsquigarrow t$}
 \begin{mathpar}
 \inferrule*[right=Subsumption]
 {
-    \Gamma \vdash_{tm} e : \tau_1 \rightsquigarrow t \mid \mathcal{P}; \mathcal{E}
+    \Gamma \vdash_{tm} e : \tau_1 \rightsquigarrow t \mid \mathcal{C}
     \\
     \Gamma \vdash_{ty} (\forall \overline{a}. \; \overline{\pi} \Rightarrow
     \tau_2)
@@ -759,11 +776,11 @@ stored in the GADT dictionary of the instance declaration.
     \Gamma \vdash_{\mathbb{E}} (\overline{d : \pi}) \rightsquigarrow \mathbb{E}
     \mid P_{\mathbb{E}} \mid \Gamma_{\mathbb{E}}
     \\
-    P, (\overline{d : \pi}),P_{\mathbb{E}} \vDash \mathcal{P}, \mathcal{E},
+    P, (\overline{d : \pi}),P_{\mathbb{E}} ; a_{utch} \vDash \mathcal{C},
     (c : \tau_1 \sim \tau_2) \rightsquigarrow \bullet; \theta; \eta
 }
 {
-    P; \Gamma \vdash_{tm} e : (\forall \overline{a}. \; \overline{\pi}
+    P; \Gamma ; a_{utch} \vdash_{tm} e : (\forall \overline{a}. \; \overline{\pi}
     \Rightarrow \tau_2) \rightsquigarrow \Lambda \overline{a}. \;
     \lambda(\overline{d : \tau}). \; \mathbb{E}[\theta(\eta(t \triangleright c))]
 }
