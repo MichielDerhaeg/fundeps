@@ -28,7 +28,7 @@ The functional dependency of the class \texttt{C} gives rise to a type family
 $F_C$ which can be used to refer to the type variable $d$ using the type
 variable $c$. The instance declaration gives rise to an axiom $g$ that states
 that $F_C(Int)$ is equal to $Bool$. This could be used to guide type inference, if
-the inference algorithm decides that that $a$ is equal to $Int$, it can use the
+the inference algorithm decides that that $c$ is equal to $Int$, it can use the
 axiom $g$ to determine that $F_C(c)$, and indirectly $d$, should be equal to
 $Bool$. A second use of this relation is to verify if type variables can be
 determined by the given type variables and class constraints. One simply needs
@@ -68,7 +68,7 @@ produced for any type class constraint.
 For every type class constraint, for every instantiated functional dependency,
 if the range of the dependency has not yet been determined but the domain can be
 determined, we update the substitution to map the range to the type family
-application of the types in the domain of the dependency. Consider the following
+applied to the types of the domain of the dependency. Consider the following
 example:
 \[
 \begin{array}{l}
@@ -167,8 +167,8 @@ type constructor but a variable so in this case we would require something more
 general.
 
 If our Haskell-like system and our version of \systemfc~were to be extended
-with kind polymorphism~\cite{yorgey}, we could instead use a version of the
-$project$ function that would be more practical and support these cases. This
+with kind polymorphism~\cite{yorgey}, we can instead use a version of the
+$project$ function that is more practical and does support these cases. This
 version of $project$ is specified in Figure~\ref{fig:poly-project}. Instead of
 defining projection type families for every type constructor we would only have
 to generate exactly two. $L$ and $R$ project the left and right component

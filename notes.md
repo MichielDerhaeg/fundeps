@@ -55,12 +55,7 @@ Notes
 Text TODOs
 ==========
 
-  * mention no kinds in source
-
-  * don't forget wel-formedness rules, etc for haskell and system fc in
-    appendices
-
-  * rule names required for solver rewrite rules?
+  * fc example no kinds
 
   * cite that one paper about reasoning about type families in both directions
     and talk about it in entailment
@@ -75,7 +70,3 @@ Text TODOs
     - superclass entailment needs untchs: abs
 
   * fix inference syntax, does not correspond to rewrite rules
-
-  * remove fc operational semantics?
-
-  * replace "System $F_C$" with "\systemfc"

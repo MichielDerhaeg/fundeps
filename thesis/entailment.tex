@@ -90,7 +90,7 @@ compiler has to give up and present an error to the user.
 
 Most importantly, the result of the entailment relation comes in the form of a
 type substitution and an evidence solution to be applied to the elaborated
-\systemfc term to replace the placeholder variables with the inferred types,
+\systemfc ~term to replace the placeholder variables with the inferred types,
 coercions, and dictionary terms.
 
 The strategy the solver employs involves computing the fixed point of a set of
@@ -676,7 +676,7 @@ abstracted over type variables to the instantiated types. This why the free type
 variables from the wanted or given constraints are included as untouchables. So
 the substitution does not end up mapping type variables in the constraint to
 those from the program theory because these may never end up in the resulting
-\systemfc code. The axiom or constraint scheme does not match if
+\systemfc ~code. The axiom or constraint scheme does not match if
 unification fails.
 
 The top-level reaction rules are the only rules allowed to introduce additional
