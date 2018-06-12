@@ -170,10 +170,10 @@ equality axioms and a set of local given constraints. It gathers the all of the
 constraints schemes and equality axioms from instance declarations and the local
 given constraints when under a qualified type or context.
 
-Type substitutions are denoted by $\theta$ and when applied, replace
-type variables with monotypes. Evidence substitutions, denoted by $\eta$,
-replace placeholder dictionary variables and coercion variables to concrete
-dictionary terms and type equality coercions.
+Type substitutions are denoted by $\theta$ and when applied, replace type
+variables with monotypes. Evidence substitutions, denoted by $\eta$, replace
+placeholder dictionary variables and coercion variables with concrete dictionary
+terms and type equality coercions.
 
 The typing environment is standard and stores types of term variables and type
 variables.
@@ -641,13 +641,13 @@ Most of the heavy lifting and FD-related concepts are handled by match contexts
 
 Most importantly, it creates a top-level let-binding $d_I$ for the instance
 that, amongst other things, includes the elaborated method. And along with the
-generated axioms, a constraint scheme $S_I$ is put in the program theory
-annotated with $d_I$ as evidence of this instance declaration that can be used
-later on by the entailment algorithm. This is always a let-binding of a
+generated axioms, a constraint scheme $S_I$ is put in the program theory,
+annotated with $d_I$ as evidence of this instance declaration so it can be used
+later on by the entailment algorithm. This is not always a let-binding of a
 dictionary term. For example, \texttt{instance Eq a => Eq [a]} creates a
-function that takes a dictionary for \texttt{Eq a} as an argument to create a
+function that takes a dictionary for \texttt{Eq a} as an argument that creates a
 dictionary for \texttt{Eq [a]}. Indeed, we have to provide evidence for
-\texttt{Eq a} to be able to retrieve evidence for \texttt{Eq [a]}.
+\texttt{Eq a} to be able to derive evidence for \texttt{Eq [a]}.
 
 Note that the $\vdash_{tm}$ judgement has been given a type signature instead of
 it being the result of the judgement. This is handled by the subsumption
