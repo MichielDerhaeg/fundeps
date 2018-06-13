@@ -114,18 +114,15 @@ lookupMethodName x = ask >>= \ctx -> case lookupCtx ctx x of
 rnTyVar :: PsTyVarWithKind -> RnM RnTyVar
 rnTyVar (a :| kind) = flip mkRnTyVar kind <$> rnSym (symOf a)
 
--- | Rename a type pattern and collect the bound variables
-rnTyPat :: PsTyPat -> RnM RnTyPat
-rnTyPat (HsTyConPat tc)      = HsTyConPat <$> lookupTyCon tc
-rnTyPat (HsTyAppPat ty1 ty2) = HsTyAppPat <$> rnTyPat ty1 <*> rnTyPat ty2
-rnTyPat (HsTyVarPat a)       = HsTyVarPat <$> lookupCtxM a
-
 -- | Rename a monotype
 rnMonoTy :: PsMonoTy -> RnM RnMonoTy
 rnMonoTy (TyCon tc)      = TyCon <$> lookupTyCon tc
 rnMonoTy (TyApp ty1 ty2) = TyApp <$> rnMonoTy ty1 <*> rnMonoTy ty2
 rnMonoTy (TyVar psa)     = TyVar <$> lookupCtxM psa
-rnMonoTy  TyFam {}       = error "TODO"
+rnMonoTy TyFam {} =
+  throwErrorM $
+  text "Renamer" <> colon <+>
+  text "type families in the source language are not supported"
 
 -- | Rename a qualified type
 rnQualTy :: PsQualTy -> RnM RnQualTy
@@ -256,10 +253,10 @@ rnClsDecl (ClsD bs cs cls as fundeps method method_ty) = do
 
 -- | Rename an instance declaration
 rnInsDecl :: PsInsDecl -> RnM RnInsDecl
-rnInsDecl (InsD as cs cls_name typats method_name method_tm) = do
+rnInsDecl (InsD as cs cls_name tys method_name method_tm) = do
   rn_cls_name     <- rnClass cls_name
   rn_as           <- mapM rnTyVar as
-  rn_tys          <- extendCtxM (labelOf as) rn_as (mapM rnTyPat typats)
+  rn_tys          <- extendCtxM (labelOf as) rn_as (mapM rnMonoTy tys)
   rn_cs           <- extendCtxM (labelOf as) rn_as (mapM rnClsCt cs)
   rn_method_name  <- lookupMethodName method_name
 

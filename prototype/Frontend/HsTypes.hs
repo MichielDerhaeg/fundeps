@@ -142,29 +142,6 @@ instance (Symable a, PrettyPrint a) => PrettyPrint (HsPat a) where
   ppr (HsPat dc xs) = ppr dc <+> hsep (map ppr xs)
   needsParens _     = True
 
--- * Type Patterns
--- ------------------------------------------------------------------------------
-
--- | Type Pattern
-data HsTyPat a = HsTyConPat (HsTyCon a)             -- ^ Type Constructor pattern
-               | HsTyAppPat (HsTyPat a) (HsTyPat a) -- ^ Type Application pattern
-               | HsTyVarPat (HsTyVar a)             -- ^ Type Variable pattern
-
--- | Parsed/renamed monotype
-type PsTyPat = HsTyPat Sym
-type RnTyPat = HsTyPat Name
-
-type HsTyVarWithKind a = Ann (HsTyVar a) Kind
-
-type PsTyVarWithKind = HsTyVarWithKind Sym
-type RnTyVarWithKind = HsTyVarWithKind Name
-
--- | Cast a type pattern to a monotype (drop kind annotations)
-hsTyPatToMonoTy :: HsTyPat a -> MonoTy a
-hsTyPatToMonoTy (HsTyConPat tc)           = TyCon tc
-hsTyPatToMonoTy (HsTyAppPat pat1 pat2)    = TyApp (hsTyPatToMonoTy pat1) (hsTyPatToMonoTy pat2)
-hsTyPatToMonoTy (HsTyVarPat a)            = TyVar a
-
 -- * Type Families
 -- ------------------------------------------------------------------------------
 
@@ -252,6 +229,10 @@ isTyPattern TyCon {} = True
 isTyPattern (TyApp ty1 ty2) = isTyPattern ty1 && isTyPattern ty2
 isTyPattern TyVar {} = True
 isTyPattern TyFam {} = False
+
+type HsTyVarWithKind a = Ann (HsTyVar a) Kind
+type PsTyVarWithKind = HsTyVarWithKind Sym
+type RnTyVarWithKind = HsTyVarWithKind Name
 
 -- * Smart constructors
 -- ------------------------------------------------------------------------------
@@ -369,7 +350,7 @@ data ClsDecl a = ClsD { cabs    :: [HsTyVarWithKind a] -- ^ TODO
 data InsDecl a = InsD { iabs  :: [HsTyVarWithKind a] -- ^ TODO
                       , icons :: ClsCs a             -- ^ Constraints
                       , iname :: Class a             -- ^ Class name
-                      , ivars :: [HsTyPat a]         -- ^ Instance type
+                      , ivars :: [MonoTy a]          -- ^ Instance types
                       , imena :: HsTmVar a           -- ^ Method name
                       , imetm :: Term a }            -- ^ Method term
 
@@ -508,11 +489,6 @@ tExtendGivenEq theory eq_cs =
 instance ContainsFreeTyVars (Ann DictVar RnClsCt) RnTyVar where
   ftyvsOf (_ :| ct) = ftyvsOf ct
 
--- GEORGE: Careful. This does not check that the kinds are the same for every
--- occurence of a type variable.
-instance Eq a => ContainsFreeTyVars (HsTyPat a) (HsTyVar a) where
-  ftyvsOf = ftyvsOf . hsTyPatToMonoTy
-
 instance Eq a => ContainsFreeTyVars (MonoTy a) (HsTyVar a) where
   ftyvsOf = nub . ftyvsOfMonoTy
     where
@@ -630,14 +606,6 @@ instance (Symable a, PrettyPrint a) => PrettyPrint (Term a) where
   needsParens (TmCase {}) = True
   needsParens (TmVar  {}) = False
   needsParens (TmCon  {}) = False
-
--- | Pretty print type patterns
-instance (Symable a, PrettyPrint a) => PrettyPrint (HsTyPat a) where
-  ppr = ppr . hsTyPatToMonoTy
-
-  needsParens (HsTyConPat {}) = False
-  needsParens (HsTyAppPat {}) = True
-  needsParens (HsTyVarPat {}) = False
 
 -- | Pretty print monotypes
 instance (Symable a, PrettyPrint a) => PrettyPrint (MonoTy a) where

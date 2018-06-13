@@ -334,8 +334,7 @@ extendCtxKindAnnotatedTysM ann_as = extendCtxM as (map kindOf as)
 -- ------------------------------------------------------------------------------
 
 elabInsDecl :: Theory -> RnInsDecl -> TcM ([FcAxiomDecl], FcValBind, Theory)
-elabInsDecl theory (InsD ab_s ins_cs cls typats method method_tm) = do
-  let tys = hsTyPatToMonoTy <$> typats
+elabInsDecl theory (InsD ab_s ins_cs cls tys method method_tm) = do
   let head_ct = ClsCt cls tys
   let as = ftyvsOf tys
   let bs = labelOf ab_s \\ as
@@ -356,7 +355,9 @@ elabInsDecl theory (InsD ab_s ins_cs cls typats method method_tm) = do
 
   axioms <- generateAxioms ins_scheme
   unless (all (termCheckAxiom) axioms) $
-    throwErrorM $ text "term axiom"
+    throwErrorM $
+    text "The instance declaration does not satisfy the termination conditions"
+    <> colon $$ ppr ins_scheme
 
   let i_theory = theory `tExtendAxioms`   axioms
                         `tExtendGivenCls` ann_ins_cs

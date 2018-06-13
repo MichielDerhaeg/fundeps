@@ -144,7 +144,7 @@ pInstDecl  =  indent $ (\as ctx cls ty (m,tm) -> InsD as ctx cls ty m tm)
           <*> pClassAbs
           <*> pClassCts
           <*> pClass
-          <*> some pPrimTyPat
+          <*> some pPrimTy
           <*  symbol "where"
           <*> (pTmVar <&> (symbol "=" *> pTerm))
 
@@ -210,16 +210,6 @@ pPrimTy = parens pMonoTy <|> TyCon <$> pTyCon <|> TyVar <$> pTyVar
 pMonoTy :: PsM PsMonoTy
 pMonoTy = chainr1 (chainl1 pPrimTy (pure TyApp))
                   (mkPsArrowTy <$ symbol "->")
-
--- | Parse a primitive type pattern
-pPrimTyPat  :: PsM PsTyPat -- TODO parse arrows?
-pPrimTyPat  =  HsTyConPat <$> pTyCon
-           <|> parens (try pTyPat)
-           <|> HsTyVarPat <$> pTyVar
-
--- | Parse a type pattern
-pTyPat :: PsM PsTyPat
-pTyPat = chainl1 pPrimTyPat (pure HsTyAppPat)
 
 -- | Parse a kind
 pKind :: PsM Kind
