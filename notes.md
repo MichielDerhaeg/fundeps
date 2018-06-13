@@ -14,9 +14,6 @@ Notes
 
   * write readme
 
-  * does topreactCls_w need to happen after topreactEqw? or can they be merged?
-    - do it -Shia Labeouf
-
   * Value Binding Translation
     - do nosig recursion
     - check if untouchable hack is no longer required

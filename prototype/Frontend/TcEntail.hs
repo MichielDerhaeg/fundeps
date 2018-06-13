@@ -513,9 +513,8 @@ ctxList func (ty:tys) =
   ctxList (\tys' -> func $ ty : tys') tys
 ctxList _ [] = Nothing
 
--- split up from Eq case because this need to happen last
-topreactWantedCls :: Theory -> WantedCt -> MaybeT EntailM WantedCs
-topreactWantedCls theory (WantedClsCt (d :| ClsCt cls tys)) = do
+topreactWanted :: Theory -> WantedCt -> MaybeT EntailM WantedCs
+topreactWanted theory (WantedClsCt (d :| ClsCt cls tys)) = do
   untchs <- getUntchs
   fmap WantedClsCt <$> go (untchs <> ftyvsOf tys) (theory_schemes theory)
   where
@@ -536,10 +535,7 @@ topreactWantedCls theory (WantedClsCt (d :| ClsCt cls tys)) = do
         addSolvTmSubst ev_subst
         return ann_cls_cs
       | otherwise = go untchs schemes
-topreactWantedCls _ _ = empty
-
-topreactWantedEq :: Theory -> WantedCt -> MaybeT EntailM WantedCs
-topreactWantedEq theory (WantedEqCt (c :| TyFam f tys :~: ty)) = do
+topreactWanted theory (WantedEqCt (c :| TyFam f tys :~: ty)) = do
   untchs <- getUntchs
   fmap WantedEqCt <$> go (untchs <> ftyvsOf (ty:tys)) (theory_axioms theory)
   where
@@ -552,7 +548,7 @@ topreactWantedEq theory (WantedEqCt (c :| TyFam f tys :~: ty)) = do
         addSolvCoSubst $ c |-> FcCoTrans (FcCoAx g sub_as) (FcCoVar c')
         return [c' :| substInMonoTy ty_subst ty' :~: ty]
       | otherwise = go untchs axioms
-topreactWantedEq _ _ = empty
+topreactWanted _ _ = empty
 
 topreactGiven :: Theory -> GivenCt -> MaybeT EntailM GivenCs
 topreactGiven theory (GivenEqCt (co :| TyFam f tys :~: ty)) = do
@@ -627,8 +623,7 @@ solver theory = canonPhase
 
     tryWanteds givens wanteds  =  tryRuleSquared interactWanted wanteds
                               <|> tryRuleProduct simplify givens wanteds
-                              <|> tryRule (topreactWantedEq theory) wanteds
-                              <|> tryRule (topreactWantedCls theory) wanteds
+                              <|> tryRule (topreactWanted theory) wanteds
 
 -- SIMPLES rule
 entail :: [RnTyVar] -> Theory -> WantedCs -> TcM (AnnClsCs, HsTySubst, EvSubst)
