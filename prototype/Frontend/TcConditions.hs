@@ -172,11 +172,10 @@ checkUnambWitness :: CtrScheme -> TcM ()
 checkUnambWitness scheme@(CtrScheme _bs cs (ClsCt cls tys)) = do
   as <- lookupClsParams cls
   fds <- lookupClsFundeps cls
-  forM_ fds $ \(Fundep ais ai0) -> do
+  forM_ fds $ \(Fundep ais _ai0) -> do
     let subst = buildSubst (zipExact as tys)
-    let ui0:uis = substInMonoTy subst . TyVar <$> ai0 : ais
+    let uis = substInMonoTy subst . TyVar <$> ais
     det_subst <- determinacy (ftyvsOf uis) cs
-    let det_subst_dom = substDom det_subst
     unless (go mempty (destructSubst det_subst)) $
       throwErrorM $
       text "Unambiguous witness condition violated for" <> colon <+> ppr scheme
