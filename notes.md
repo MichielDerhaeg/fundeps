@@ -17,8 +17,6 @@ Notes
   * does topreactCls_w need to happen after topreactEqw? or can they be merged?
     - do it -Shia Labeouf
 
-  * interation limit for solver
-
   * Value Binding Translation
     - do nosig recursion
     - check if untouchable hack is no longer required
