@@ -15,7 +15,8 @@ import           Utils.Unique
 import           Utils.Utils
 import           Utils.Var
 
-import           Data.List         (nub, (\\))
+import           Control.Arrow  (first, second)
+import           Data.List      (nub, (\\))
 import           Data.Semigroup
 
 -- * Type Constructors
@@ -245,6 +246,13 @@ isHsArrowTy (TyApp (TyApp (TyCon tc) ty1) ty2)
   | isArrowTyCon tc   = Just (ty1, ty2)
 isHsArrowTy _other_ty = Nothing
 
+-- | Checks if the type contains no type families
+isTyPattern :: RnMonoTy -> Bool
+isTyPattern TyCon {} = True
+isTyPattern (TyApp ty1 ty2) = isTyPattern ty1 && isTyPattern ty2
+isTyPattern TyVar {} = True
+isTyPattern TyFam {} = False
+
 -- * Smart constructors
 -- ------------------------------------------------------------------------------
 
@@ -448,6 +456,11 @@ data GivenCt
   | GivenClsCt GivenClsCt
 
 type GivenCs = [GivenCt]
+
+partitionWantedCs :: WantedCs -> ([WantedEqCt], [WantedClsCt])
+partitionWantedCs (WantedEqCt ct:cs) = first (ct :) $ partitionWantedCs cs
+partitionWantedCs (WantedClsCt ct:cs) = second (ct :) $ partitionWantedCs cs
+partitionWantedCs [] = ([], [])
 
 -- | TODO doc
 data Axiom = Axiom

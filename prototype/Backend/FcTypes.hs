@@ -264,6 +264,9 @@ fcTyConApp tc tys = fcTyApp (FcTyCon tc) tys
 fcTyQual :: [FcProp] -> FcType -> FcType
 fcTyQual psis ty = foldr FcTyQual ty psis
 
+-- | Uncurried version of data constructor FcCoApp
+fcCoApp :: FcCoercion -> [FcCoercion] -> FcCoercion
+fcCoApp = foldl FcCoApp
 -- * Terms
 -- ----------------------------------------------------------------------------
 data FcTerm = FcTmAbs FcTmVar FcType FcTerm         -- ^ Term abstraction: lambda x : ty . tm

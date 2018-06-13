@@ -40,10 +40,8 @@ import           Control.Monad.Trans.Maybe
 import           Data.List                 ((\\))
 import           Data.Semigroup
 
-partitionWantedCs :: WantedCs -> ([WantedEqCt], [WantedClsCt])
-partitionWantedCs (WantedEqCt ct:cs) = first (ct :) $ partitionWantedCs cs
-partitionWantedCs (WantedClsCt ct:cs) = second (ct :) $ partitionWantedCs cs
-partitionWantedCs [] = ([], [])
+-- * Entailment Monad
+-- ------------------------------------------------------------------------------
 
 type EntailM = StateT EntailState TcM
 
@@ -60,30 +58,38 @@ data EntailState = EntailState
   , iteration     :: !Word
   }
 
+-- | Get the set of untouchable variables
 getUntchs :: MonadState EntailState m => m [RnTyVar]
 getUntchs = gets untouchables
 
+-- | Mark a type variable as untouchable
 addUntch :: MonadState EntailState m => RnTyVar -> m ()
 addUntch a = modify $ \s -> s { untouchables = a : untouchables s }
 
+-- | Add a substitution to the flatting type substitution
 addFlatTySubst :: MonadState EntailState m => HsTySubst -> m ()
 addFlatTySubst subst =
   modify $ \s -> s {flat_ty_subst = subst <> flat_ty_subst s}
 
+-- | Add a substitution to the flatting evidence substitution
 addFlatEvSubst :: MonadState EntailState m => EvSubst -> m ()
 addFlatEvSubst subst =
   modify $ \s -> s {flat_ev_subst = subst <> flat_ev_subst s}
 
+-- | Add a substitution to the solution evidence substitution
 addSolvEvSubst :: MonadState EntailState m => EvSubst -> m ()
 addSolvEvSubst subst =
   modify $ \s -> s {solv_ev_subst = subst <> solv_ev_subst s}
 
+-- | Add a coercion substitution to the solution evidence substitution
 addSolvCoSubst :: MonadState EntailState m => FcCoSubst -> m ()
 addSolvCoSubst = addSolvEvSubst . coToEvSubst
 
+-- | Add a coercion substitution to the solution evidence substitution
 addSolvTmSubst :: MonadState EntailState m => FcTmSubst -> m ()
 addSolvTmSubst = addSolvEvSubst . tmToEvSubst
 
+-- | Increment the amount of iterations, throw an error if it's above a certain threshold
 incrementIteration :: (MonadState EntailState m, MonadError CompileError m) => m ()
 incrementIteration = do
   s <- get
@@ -96,9 +102,10 @@ incrementIteration = do
   where
     maxIterations = 1000
 
--- | Substitute an equality within a type and generate a coercion.
--- This is weird, type type signature could be more precise.
--- Instead of returning what we passed and throwing it away.
+-- * Evidence adapting substitution
+-- ------------------------------------------------------------------------------
+
+-- | Type substitution with evidence
 coTy :: FcCoercion -> RnTyVar -> RnMonoTy -> RnMonoTy -> (FcCoercion, RnMonoTy)
 coTy co a ty b_ty@(TyVar b)
   | a == b = (co, ty)
@@ -115,6 +122,7 @@ coTy co a ty tyfam@(TyFam f tys) =
   where
     crcs = fst . coTy co a ty <$> tys
 
+-- | Type substitution in a class constraint with evidence
 coCt ::
      (MonadState TcEnv m, MonadError CompileError m)
   => FcCoercion
@@ -128,41 +136,48 @@ coCt co a ty ct@(ClsCt cls tys) = do
   where
     crcs = fst . coTy co a ty <$> tys
 
-fcCoApp :: FcCoercion -> [FcCoercion] -> FcCoercion -- TODO move to FcTypes
-fcCoApp = foldl FcCoApp
+-- * Canonicalization Utilities
+-- ------------------------------------------------------------------------------
 
+-- | Check if given constraint is canonical
 canCheckGivens :: (MonadError CompileError m, MonadState EntailState m) => GivenCs -> m ()
 canCheckGivens = mapM_ canCheckGiven
   where
     canCheckGiven (GivenEqCt  (_ :| ct)) = canCheckEqCt  ct
     canCheckGiven (GivenClsCt (_ :| ct)) = canCheckClsCt ct
 
+-- | Check if wanted constraint is canonical
 canCheckWanteds :: (MonadError CompileError m, MonadState EntailState m) => WantedCs -> m ()
 canCheckWanteds = mapM_ canCheckWanted
   where
     canCheckWanted (WantedEqCt  (_ :| ct)) = canCheckEqCt  ct
     canCheckWanted (WantedClsCt (_ :| ct)) = canCheckClsCt ct
 
+-- | Check if equality constraint is canonical
 canCheckEqCt :: (MonadError CompileError m, MonadState EntailState m) => EqCt -> m ()
 canCheckEqCt ct@(TyVar a :~: ty) = do
   untchs <- getUntchs
   unless
-    (isOrphan ty && a `notElem` ftyvsOf ty && smallerThan untchs (TyVar a) ty) $
+    (isTyPattern ty && a `notElem` ftyvsOf ty && orient untchs (TyVar a) ty) $
     canonFail ct
 canCheckEqCt ct@(TyFam _f tys :~: ty) =
-  unless (all isOrphan (ty : tys)) $ canonFail ct
+  unless (all isTyPattern (ty : tys)) $ canonFail ct
 canCheckEqCt ct = canonFail ct
 
+-- | Check if class constraint is canonical
 canCheckClsCt :: (MonadError CompileError m, MonadState EntailState m) => RnClsCt -> m ()
-canCheckClsCt ct@(ClsCt _cls tys) = unless (all isOrphan tys) $ canonFail ct
+canCheckClsCt ct@(ClsCt _cls tys) = unless (all isTyPattern tys) $ canonFail ct
 
+-- | Error for if a non-canonical constraint is detected
 canonFail :: (PrettyPrint ct, MonadError CompileError m) => ct -> m ()
 canonFail ct =
   throwErrorM $
   text "Canonicity check failed on constraint" <+> colon <+> ppr ct
 
-smallerThan :: [RnTyVar] -> RnMonoTy -> RnMonoTy -> Bool
-smallerThan untchs = go
+-- | Returns true if the orientation of the given is preferred by
+-- canonicalization.
+orient :: [RnTyVar] -> RnMonoTy -> RnMonoTy -> Bool
+orient untchs = go
   where
     -- F tys < ty when ty /= G tys'
     go TyFam {} TyVar {} = True
@@ -181,13 +196,45 @@ smallerThan untchs = go
 
     go _ _ = False
 
--- | Checks if the type contains no type families
-isOrphan :: RnMonoTy -> Bool
-isOrphan TyCon {} = True
-isOrphan (TyApp ty1 ty2) = isOrphan ty1 && isOrphan ty2
-isOrphan TyVar {} = True
-isOrphan TyFam {} = False
+newtype FamCtx = FamCtx { applyFamCtx :: RnMonoTy -> RnMonoTy }
+newtype TyCtx  = TyCtx  { applyTyCtx  :: RnMonoTy -> RnMonoTy }
+newtype ClsCtx = ClsCtx { applyClsCtx :: RnMonoTy -> RnClsCt  }
 
+-- | Extract a type familie out of a type family application
+nestedFamFam :: RnMonoTy -> Maybe (FamCtx, RnMonoTy)
+nestedFamFam =
+  \case
+    (TyFam f tys) -> first FamCtx <$> ctxList (TyFam f) tys
+    _ -> Nothing
+
+-- | Extract a nested type familie out of monotype
+nestedFamTy :: RnMonoTy -> Maybe (TyCtx, RnMonoTy)
+nestedFamTy ty = first TyCtx <$> ctxTy id ty
+
+-- | Extract a nested type familie out of a class constraint
+nestedFamCls :: RnClsCt -> Maybe (ClsCtx, RnMonoTy)
+nestedFamCls (ClsCt cls tys) = first ClsCtx <$> ctxList (ClsCt cls) tys
+
+ctxTy :: (RnMonoTy -> t) -> RnMonoTy -> Maybe (RnMonoTy -> t, RnMonoTy)
+ctxTy func =
+  \case
+    TyApp ty1 ty2 ->
+      ctxTy (func . flip TyApp ty2) ty1 <|> ctxTy (func . TyApp ty1) ty2
+    TyFam f tys
+      | all isTyPattern tys -> Just (func, TyFam f tys)
+      | otherwise -> ctxList (func . TyFam f) tys
+    _ -> Nothing
+
+ctxList :: ([RnMonoTy] -> t) -> [RnMonoTy] -> Maybe (RnMonoTy -> t, RnMonoTy)
+ctxList func (ty:tys) =
+  ctxTy (\ty' -> func $ ty' : tys) ty <|>
+  ctxList (\tys' -> func $ ty : tys') tys
+ctxList _ [] = Nothing
+
+-- * Rewrite Rules
+-- ------------------------------------------------------------------------------
+
+-- | Interact wanted constraints
 interactWanted :: WantedCt -> WantedCt -> MaybeT EntailM WantedCs
 interactWanted (WantedEqCt (c1 :| ct1@(TyVar a :~: ty1)))
                (WantedEqCt (c2 :|      TyVar b :~: ty2))
@@ -240,6 +287,7 @@ interactWanted (WantedClsCt (d1 :| ClsCt cls1 tys1))
       [WantedClsCt (d1 :| ClsCt cls1 tys1)]
 interactWanted _ _ = empty
 
+-- | Interact given constraints
 interactGiven :: GivenCt -> GivenCt -> MaybeT EntailM GivenCs
 interactGiven (GivenEqCt (co1 :| ct1@(TyVar a :~: ty1)))
               (GivenEqCt (co2 :|      TyVar b :~: ty2))
@@ -282,6 +330,7 @@ interactGiven (GivenClsCt ( tm1 :|  ct1@(ClsCt cls1 tys1)))
   return [GivenClsCt (tm1 :| ct1)]
 interactGiven _ _ = empty
 
+-- | Simplify wanted constraints using given constraints
 simplify :: GivenCt -> WantedCt -> MaybeT EntailM WantedCs
 simplify (GivenEqCt  (co :| TyVar a :~: ty1))
          (WantedEqCt (c  :| TyVar b :~: ty2))
@@ -327,6 +376,7 @@ simplify (GivenClsCt  (tm :| ClsCt cls1 tys1))
   return mempty
 simplify _ _ = empty
 
+-- | Canonicalize wanted constraints
 canonicalizeWanted :: WantedCt -> MaybeT EntailM WantedCs
 canonicalizeWanted (WantedEqCt (c :| ct)) = do
   untchs <- getUntchs
@@ -349,13 +399,13 @@ canonicalizeWanted (WantedEqCt (c :| ct)) = do
         text "Entailment" <> colon <+> text "failed to unify" <> colon <+> ppr ct
     -- OCCCHECKW
     go _ (TyVar a :~: ty)
-      | a `elem` ftyvsOf ty, isOrphan ty
+      | a `elem` ftyvsOf ty, isTyPattern ty
       , not (eqMonoTy (TyVar a) ty) =
         throwErrorM $
         text "Entailment" <> colon <+> text "inifite type" <> colon <+> ppr ct
     -- ORIENTW
     go untchs (ty1 :~: ty2)
-      | smallerThan untchs ty2 ty1 = do
+      | orient untchs ty2 ty1 = do
         c' <- freshFcCoVar
         addSolvCoSubst $ c |-> FcCoSym (FcCoVar c')
         return [c' :| (ty2 :~: ty1)]
@@ -402,6 +452,7 @@ canonicalizeWanted (WantedClsCt (d :| cls_ct))
       [WantedEqCt (c' :| (fam_ty :~: TyVar beta)), WantedClsCt (d' :| ctx_beta)]
 canonicalizeWanted _ = empty
 
+-- | Canonicalize given constraints
 canonicalizeGiven :: GivenCt -> MaybeT EntailM GivenCs
 canonicalizeGiven (GivenEqCt (co :| ct)) = do
   untchs <- getUntchs
@@ -423,7 +474,7 @@ canonicalizeGiven (GivenEqCt (co :| ct)) = do
         text "Entailment" <> colon <+> text "inifite type" <> colon <+> ppr ct
     -- ORIENTG
     go untchs (ty1 :~: ty2)
-      | smallerThan untchs ty2 ty1 = return [FcCoSym co :| ty2 :~: ty1]
+      | orient untchs ty2 ty1 = return [FcCoSym co :| ty2 :~: ty1]
     -- FFLATGL
     go _ (search_ty :~: ty)
       | Just (ctx, fam_ty@(TyFam f _tys)) <- nestedFamFam search_ty = do
@@ -481,38 +532,7 @@ canonicalizeGiven (GivenClsCt (tm :| cls_ct))
       ]
 canonicalizeGiven _ = empty
 
-newtype FamCtx = FamCtx { applyFamCtx :: RnMonoTy -> RnMonoTy }
-newtype TyCtx  = TyCtx  { applyTyCtx  :: RnMonoTy -> RnMonoTy }
-newtype ClsCtx = ClsCtx { applyClsCtx :: RnMonoTy -> RnClsCt  }
-
-nestedFamFam :: RnMonoTy -> Maybe (FamCtx, RnMonoTy)
-nestedFamFam =
-  \case
-    (TyFam f tys) -> first FamCtx <$> ctxList (TyFam f) tys
-    _ -> Nothing
-
-nestedFamTy :: RnMonoTy -> Maybe (TyCtx, RnMonoTy)
-nestedFamTy ty = first TyCtx <$> ctxTy id ty
-
-nestedFamCls :: RnClsCt -> Maybe (ClsCtx, RnMonoTy)
-nestedFamCls (ClsCt cls tys) = first ClsCtx <$> ctxList (ClsCt cls) tys
-
-ctxTy :: (RnMonoTy -> t) -> RnMonoTy -> Maybe (RnMonoTy -> t, RnMonoTy)
-ctxTy func =
-  \case
-    TyApp ty1 ty2 ->
-      ctxTy (func . flip TyApp ty2) ty1 <|> ctxTy (func . TyApp ty1) ty2
-    TyFam f tys
-      | all isOrphan tys -> Just (func, TyFam f tys)
-      | otherwise -> ctxList (func . TyFam f) tys
-    _ -> Nothing
-
-ctxList :: ([RnMonoTy] -> t) -> [RnMonoTy] -> Maybe (RnMonoTy -> t, RnMonoTy)
-ctxList func (ty:tys) =
-  ctxTy (\ty' -> func $ ty' : tys) ty <|>
-  ctxList (\tys' -> func $ ty : tys') tys
-ctxList _ [] = Nothing
-
+-- | React wanted constraints with top-level information
 topreactWanted :: Theory -> WantedCt -> MaybeT EntailM WantedCs
 topreactWanted theory (WantedClsCt (d :| ClsCt cls tys)) = do
   untchs <- getUntchs
@@ -550,6 +570,7 @@ topreactWanted theory (WantedEqCt (c :| TyFam f tys :~: ty)) = do
       | otherwise = go untchs axioms
 topreactWanted _ _ = empty
 
+-- | React given constraints with top-level information
 topreactGiven :: Theory -> GivenCt -> MaybeT EntailM GivenCs
 topreactGiven theory (GivenEqCt (co :| TyFam f tys :~: ty)) = do
   untchs <- getUntchs
@@ -567,6 +588,9 @@ topreactGiven theory (GivenEqCt (co :| TyFam f tys :~: ty)) = do
 -- We don't need a class case here
 topreactGiven _ _ = empty
 
+-- * The Constraint Solver
+-- ------------------------------------------------------------------------------
+
 -- order matters in interaction rules, hence the `flip`
 tryRuleSquared :: Alternative f => (a -> a -> f b) -> [a] -> f (b, [a])
 tryRuleSquared _ []      = empty
@@ -580,6 +604,7 @@ tryRuleProduct _ []     _   = empty
 tryRuleProduct f (x:xs) ys  =  tryRule (f x) ys
                            <|> tryRuleProduct f xs ys
 
+-- | Fully canonicalize a set of given constraints
 fullCanonGivens :: GivenCs -> EntailM GivenCs
 fullCanonGivens givens = do
   Just canon_givens <-
@@ -587,6 +612,7 @@ fullCanonGivens givens = do
   canCheckGivens canon_givens
   return canon_givens
 
+-- | Fully canonicalize a set of wanted constraints
 fullCanonWanteds :: WantedCs -> EntailM WantedCs
 fullCanonWanteds wanteds = do
   Just canon_wanteds <-
@@ -594,6 +620,7 @@ fullCanonWanteds wanteds = do
   canCheckWanteds canon_wanteds
   return canon_wanteds
 
+-- | The main constraint solver, applies rewrite rules until none apply
 solver :: Theory -> WantedCs -> EntailM WantedCs
 solver theory = canonPhase
   where
@@ -625,23 +652,7 @@ solver theory = canonPhase
                               <|> tryRuleProduct simplify givens wanteds
                               <|> tryRule (topreactWanted theory) wanteds
 
--- SIMPLES rule
-entail :: [RnTyVar] -> Theory -> WantedCs -> TcM (AnnClsCs, HsTySubst, EvSubst)
-entail untchs theory wanteds = do
-  (residuals, EntailState _ flat_ty flat_ev solv_ev _) <-
-    runEntailT untchs (solver theory wanteds)
-  let (eq_cs, cls_cs) =
-        (substInAnnEqCs flat_ty *** substInAnnClsCs flat_ty) $
-        partitionWantedCs residuals
-  (ty_subst, co_subst) <- eqCsToSubst untchs eq_cs
-  let flat_solv_ev =
-        substTyInEvidence (elabHsTySubst flat_ty) $
-        substEvInEvidence flat_ev solv_ev
-  return
-    ( substInAnnClsCs ty_subst cls_cs
-    , ty_subst
-    , coToEvSubst co_subst <> flat_solv_ev)
-
+-- | Turns a normalized set of wanted constraints into a type substitution
 eqCsToSubst :: MonadError CompileError m => [RnTyVar] -> AnnEqCs -> m (HsTySubst, FcCoSubst)
 eqCsToSubst _untchs [] = return mempty
 eqCsToSubst untchs eqs
@@ -659,3 +670,21 @@ eqCsToSubst untchs eqs
     step (c :| ty :~: TyVar v)
       | v `notElem` untchs = Just (v |-> ty, c |-> FcCoRefl (elabMonoTy ty))
     step _ = Nothing
+
+-- | Constraint entailment, solves a set of wanted constraints, generates a
+-- type substitution, an evidence substitution, and a set of residual class constraints
+entail :: [RnTyVar] -> Theory -> WantedCs -> TcM (AnnClsCs, HsTySubst, EvSubst)
+entail untchs theory wanteds = do
+  (residuals, EntailState _ flat_ty flat_ev solv_ev _) <-
+    runEntailT untchs (solver theory wanteds)
+  let (eq_cs, cls_cs) =
+        (substInAnnEqCs flat_ty *** substInAnnClsCs flat_ty) $
+        partitionWantedCs residuals
+  (ty_subst, co_subst) <- eqCsToSubst untchs eq_cs
+  let flat_solv_ev =
+        substTyInEvidence (elabHsTySubst flat_ty) $
+        substEvInEvidence flat_ev solv_ev
+  return
+    ( substInAnnClsCs ty_subst cls_cs
+    , ty_subst
+    , coToEvSubst co_subst <> flat_solv_ev)
