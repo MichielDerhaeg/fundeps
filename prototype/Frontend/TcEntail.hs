@@ -50,13 +50,14 @@ type EntailM = StateT EntailState TcM
 runEntailT :: [RnTyVar] -> EntailM a -> TcM (a, EntailState)
 runEntailT untchs = flip runStateT init_entail
   where
-    init_entail = EntailState untchs mempty mempty mempty
+    init_entail = EntailState untchs mempty mempty mempty 0
 
 data EntailState = EntailState
   { untouchables  :: [RnTyVar]
   , flat_ty_subst :: HsTySubst
   , flat_ev_subst :: EvSubst
   , solv_ev_subst :: EvSubst
+  , iteration     :: !Word
   }
 
 getUntchs :: MonadState EntailState m => m [RnTyVar]
@@ -82,6 +83,18 @@ addSolvCoSubst = addSolvEvSubst . coToEvSubst
 
 addSolvTmSubst :: MonadState EntailState m => FcTmSubst -> m ()
 addSolvTmSubst = addSolvEvSubst . tmToEvSubst
+
+incrementIteration :: (MonadState EntailState m, MonadError CompileError m) => m ()
+incrementIteration = do
+  s <- get
+  let i = iteration s
+  if i >= maxIterations
+    then throwErrorM $
+         text "Entailment" <> colon <+>
+           text "max iteration depth reached, possible termination issue"
+    else put $ s {iteration = i + 1}
+  where
+    maxIterations = 1000
 
 -- | Substitute an equality within a type and generate a coercion.
 -- This is weird, type type signature could be more precise.
@@ -596,6 +609,7 @@ solver theory = canonPhase
     givensPhase givens wanteds =
       runMaybeT (tryGivens givens) >>= \case
         Just (new_givens, rest) -> do
+          incrementIteration
           givens' <- (<> rest) <$> fullCanonGivens new_givens
           givensPhase givens' wanteds
         Nothing -> wantedsPhase givens wanteds
@@ -606,6 +620,7 @@ solver theory = canonPhase
     wantedsPhase givens wanteds =
       runMaybeT (tryWanteds givens wanteds) >>= \case
         Just (new_wanteds, rest) -> do
+          incrementIteration
           wanteds' <- (<> rest) <$> fullCanonWanteds new_wanteds
           wantedsPhase givens wanteds'
         Nothing -> return wanteds
@@ -618,7 +633,7 @@ solver theory = canonPhase
 -- SIMPLES rule
 entail :: [RnTyVar] -> Theory -> WantedCs -> TcM (AnnClsCs, HsTySubst, EvSubst)
 entail untchs theory wanteds = do
-  (residuals, EntailState _ flat_ty flat_ev solv_ev) <-
+  (residuals, EntailState _ flat_ty flat_ev solv_ev _) <-
     runEntailT untchs (solver theory wanteds)
   let (eq_cs, cls_cs) =
         (substInAnnEqCs flat_ty *** substInAnnClsCs flat_ty) $
