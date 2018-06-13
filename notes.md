@@ -20,8 +20,6 @@ Notes
 
   * parse quantified type contexts better
 
-  - remove type patterns from impl, it's a theoretical construct
-
   * ~~finish wanted FD constraint generation~~
     - general transClose FD relation
 
