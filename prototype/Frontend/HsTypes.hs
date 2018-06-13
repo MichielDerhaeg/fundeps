@@ -159,7 +159,7 @@ data HsTyFamInfo = HsTFInfo
   , hs_tf_kind      :: Kind      -- ^ Return kind
   }
 
--- * Types and Constraints
+-- * Types
 -- ------------------------------------------------------------------------------
 
 -- | Monotype
@@ -304,7 +304,7 @@ eqMonoTy (TyFam f1 tys1) (TyFam f2 tys2) =
   f1 == f2 && and (zipWithExact eqMonoTy tys1 tys2)
 eqMonoTy _ _ = False
 
--- * Constraints
+-- * Class Constraints
 -- ------------------------------------------------------------------------------
 
 -- | Class constraint(s)
@@ -318,14 +318,6 @@ type PsClsCs = ClsCs Sym
 -- | Renamed class constraint(s)
 type RnClsCt = ClsCt Name
 type RnClsCs = ClsCs Name
-
--- | TODO
-data TyCt = TyClsCt RnClsCt | TyEqCt EqCt
-type TyCs = [TyCt]
-
--- | Class constraint scheme
-data CtrScheme = CtrScheme [RnTyVarWithKind] RnClsCs RnClsCt
-
 
 -- * Programs and Declarations
 -- ------------------------------------------------------------------------------
@@ -389,9 +381,8 @@ type RnValBind = ValBind Name
 -- * Additional Syntax For Type Inference And Elaboration
 -- ------------------------------------------------------------------------------
 
--- | Type constraint(s) (equality and class)
-data TypeCt = EqualityCt EqCt | ClassCt RnClsCt
-type TypeCs = [TypeCt]
+-- | Class constraint scheme
+data CtrScheme = CtrScheme [RnTyVarWithKind] RnClsCs RnClsCt
 
 -- | Equality constraint(s)
 data EqCt = RnMonoTy :~: RnMonoTy
@@ -741,13 +732,6 @@ instance (Symable a, PrettyPrint a) => PrettyPrint (Fundep a) where
     hsep (fmap ppr as) <+>
     colorDoc yellow (text "->") <+>
     ppr b
-
-  needsParens _ = False
-
--- | Pretty print type constraints
-instance PrettyPrint TypeCt where
-  ppr (EqualityCt ct) = ppr ct
-  ppr (ClassCt ct)    = ppr ct
 
   needsParens _ = False
 

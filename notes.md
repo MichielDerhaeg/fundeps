@@ -3,8 +3,6 @@ Notes
 
   * clean and document new components!!!
 
-  * clean out old definitions like type constraints and unification vars
-
   * revise/group conditions
 
   * revise programs, list of decls instead
@@ -23,3 +21,4 @@ Notes
   * ~~finish wanted FD constraint generation~~
     - general transClose FD relation
 
+  * test automation

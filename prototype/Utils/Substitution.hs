@@ -68,10 +68,6 @@ instance SubstVar RnTyVar RnMonoTy CtrScheme where
     | a `elem` fmap labelOf as = error "substTyVarInScheme: Shadowing"
     | otherwise = CtrScheme as (substVar a ty cs) (substVar a ty ct)
 
-instance SubstVar RnTyVar RnMonoTy TypeCt where
-  substVar a ty (ClassCt ct)    = ClassCt $ substVar a ty ct
-  substVar a ty (EqualityCt ct) = EqualityCt $ substVar a ty ct
-
 instance SubstVar RnTyVar RnMonoTy AnnTypeCt where
   substVar a ty (AnnClsCt ct) = AnnClsCt $ fmap (substVar a ty) ct
   substVar a ty (AnnEqCt  ct) = AnnEqCt  $ fmap (substVar a ty) ct
@@ -338,14 +334,6 @@ substInTyVars subst = map (substInTyVar subst)
 -- | Apply a type substitution to a program theory
 substInProgramTheory :: HsTySubst -> ProgramTheory -> ProgramTheory
 substInProgramTheory subst = (fmap . fmap) (substInScheme subst)
-
--- | Apply a type substitution to a type constraint
-substInTypeCt :: HsTySubst -> TypeCt -> TypeCt
-substInTypeCt = sub_rec
-
--- | Apply a type substitution to type constraints
-substInTypeCs :: HsTySubst -> TypeCs -> TypeCs
-substInTypeCs subst = fmap (substInTypeCt subst)
 
 -- | Apply a type substitution to a constraint scheme
 substInScheme :: HsTySubst -> CtrScheme -> CtrScheme
