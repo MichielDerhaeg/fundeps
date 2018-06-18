@@ -17,5 +17,17 @@ instance forall (a :: *). C (List a) a where
 -- TODO: We actually need to extend this example, to see whether the equality
 -- constraint from the superclass becomes available. We'll talk about it.
 
-\x. x
+data Int = MkInt
+data Bool = True | False
 
+instance D Int Bool where
+  d = \x. True
+
+instance C Int Bool where
+  c = \x. True
+
+f :: forall (b :: *). C Int b => b -> Bool
+  = \x. x
+
+f2 :: forall (e :: *). forall (c1 :: *). forall (c2 :: *). C c2 c1 => C c1 e => c2 -> e
+   = \x. c (c x)

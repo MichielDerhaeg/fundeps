@@ -1,5 +1,7 @@
 module Frontend.FunDep
   ( determinacy
+  , instantiateFDs
+  , instantiateFDsClose
   ) where
 
 import           Frontend.TcMonad
@@ -11,6 +13,7 @@ import           Utils.PrettyPrint
 import           Utils.Substitution
 import           Utils.Utils
 import           Utils.Var
+import           Utils.Kind
 
 import           Control.Monad (forM)
 import           Data.Either   (partitionEithers)
@@ -29,14 +32,10 @@ determinacy as cls_cs = go cls_cs mempty
       if null new_substs then return ty_subst else
         go residual_cs (ty_subst <> mconcat new_substs)
 
-    det_step ty_subst ct@(ClsCt cls tys) = do
-      as' <- lookupClsParams cls
-      fds <- lookupClsFundeps cls
-      fd_fams <- lookupClsFDFams cls
-      let cls_var_subst = buildSubst $ zipExact as' tys
+    det_step ty_subst ct = do
+      inst_fds <- instantiateFDsClose ct
       new_subst <- fmap mconcat $
-        forM (zip fds fd_fams) $ \(Fundep bs b0, fam) -> do
-          let (t0:ts) = substInMonoTy cls_var_subst . TyVar <$> (b0 : bs)
+        forM inst_fds $ \(fam, ts, t0) -> do
           let refined_ts = substInMonoTy ty_subst <$> ts
           let as_dom = as <> substDom ty_subst
           if any (`elem` as_dom) (ftyvsOf t0) ||
@@ -73,3 +72,35 @@ projection ty proj_ty =
     tf_error =
       throwErrorM $
       text "projection" <+> colon <+> text "encountered type family"
+
+-- | Instantiates the FD's of the given class constraint.
+-- Returns 1) the corresponding type family
+--         2) the instantiated domain
+--         3) the instantiated range
+instantiateFDs :: RnClsCt -> TcM [(RnTyFam, [RnMonoTy], RnMonoTy)]
+instantiateFDs (ClsCt cls tys) = do
+  as <- lookupClsParams cls
+  fds <- lookupClsFundeps cls
+  fd_fams <- lookupClsFDFams cls
+  let cls_var_subst = buildSubst $ zipExact as tys
+  return $ zipWithExact (f cls_var_subst) fds fd_fams
+  where
+    f subst (Fundep bs b0) fam =
+      (fam, substInMonoTy subst . TyVar <$> bs, substInMonoTy subst $ TyVar b0)
+
+-- | Instantiates the FD's of the given class constraint,
+-- including those of the superclass relation.
+instantiateFDsClose :: RnClsCt -> TcM [(RnTyFam, [RnMonoTy], RnMonoTy)]
+instantiateFDsClose ct@(ClsCt cls tys) = do
+  inst_fds <- instantiateFDs ct
+  bs       <- lookupClsExist cls
+  super_cs <- lookupClsSuper cls
+  as       <- lookupClsParams cls
+  bs' <- mapM freshRnTyVar (kindOf <$> bs)
+  more_inst_fds <-
+    fmap concat $
+    forM super_cs $ \(ClsCt cls' tys') -> do
+      let subst = buildSubst $ zipExact as tys <> zipExact bs (TyVar <$> bs')
+      let inst_cs = ClsCt cls' (substInMonoTy subst <$> tys')
+      instantiateFDsClose inst_cs
+  return $ inst_fds <> more_inst_fds
