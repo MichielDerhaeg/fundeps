@@ -25,20 +25,13 @@ fcSimplify pgm = fromMaybe pgm (simplifyFcProgram pgm)
 -- | Repeatedly simplify a System Fc program until no rules apply.
 -- Returns `Nothing` if it can't be simplified anymore.
 simplifyFcProgram :: FcProgram -> Maybe FcProgram
-simplifyFcProgram pgm = flip evalStateT (SimplEnv mempty)
-                      $ flip runReaderT mempty
-                      $ do buildSimplEnv pgm
-                           keep go pgm
+simplifyFcProgram (FcProgram decls) = flip evalStateT (SimplEnv mempty)
+                                    $ flip runReaderT mempty
+                                    $ do buildSimplEnv decls
+                                         FcProgram <$> keep (doAltList go) decls
   where
-    go (FcPgmTerm tm)            = FcPgmTerm           <$> simplifyFcTerm tm
-    go (FcPgmDataDecl  decl pgm') = FcPgmDataDecl  decl <$> go pgm'
-    go (FcPgmAxiomDecl decl pgm') = FcPgmAxiomDecl decl <$> go pgm'
-    go (FcPgmFamDecl   decl pgm') = FcPgmFamDecl   decl <$> go pgm'
-    go (FcPgmValDecl (FcValBind f ty tm) pgm') = doAlt2 pat
-      simplifyFcTerm tm
-      go pgm'
-      where
-        pat tm' = FcPgmValDecl (FcValBind f ty tm')
+    go (FcValBind f ty tm) = FcValBind f ty <$> simplifyFcTerm tm
+    go _decl = empty
 
 simplifyFcTerm :: FcTerm -> SimplifyM FcTerm
 simplifyFcTerm = go
@@ -155,16 +148,13 @@ newtype SimplEnv = SimplEnv { unSimplEnv :: AssocList FcAxVar FcAxiomInfo }
 
 type SimplifyM = (ReaderT FcCoCtx (StateT SimplEnv Maybe))
 
-buildSimplEnv :: FcProgram -> SimplifyM ()
-buildSimplEnv (FcPgmTerm _tm)         = return ()
-buildSimplEnv (FcPgmFamDecl _tm pgm)  = buildSimplEnv pgm
-buildSimplEnv (FcPgmValDecl _tm pgm)  = buildSimplEnv pgm
-buildSimplEnv (FcPgmDataDecl _tm pgm) = buildSimplEnv pgm
-buildSimplEnv (FcPgmAxiomDecl (FcAxiomDecl g as f tys ty) pgm) = do
-  modify (\(SimplEnv l) -> SimplEnv (extendAssocList g info l))
-  buildSimplEnv pgm
+buildSimplEnv :: [FcDecl] -> SimplifyM ()
+buildSimplEnv = mapM_ go
   where
-    info = FcAxiomInfo g as f tys ty
+    go (FcAxiomDecl g as f tys ty) =
+      modify
+        (\(SimplEnv l) -> SimplEnv (extendAssocList g (FcAxiomInfo g as f tys ty) l))
+    go _decl = return ()
 
 typeOfCo :: FcCoercion -> SimplifyM FcProp
 typeOfCo (FcCoVar c) = lookupCoVar c

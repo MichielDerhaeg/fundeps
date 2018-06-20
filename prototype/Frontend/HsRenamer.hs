@@ -327,10 +327,8 @@ rnValBind (ValBind a m_ty tm) = do
 
 -- | Rename a program
 rnProgram :: PsProgram -> RnM (RnProgram, RnCtx)
-rnProgram (PgmExp tm) = do
-  rn_tm  <- rnTerm tm
-  rn_ctx <- ask
-  return (PgmExp rn_tm, rn_ctx)
+rnProgram PgmEnd = do
+  (,) PgmEnd <$> ask
 rnProgram (PgmCls cls_decl pgm) = do
   (rn_cls_decl, ext_ctx) <- rnClsDecl cls_decl
   (rn_pgm, rn_ctx)       <- local (const ext_ctx) $ rnProgram pgm

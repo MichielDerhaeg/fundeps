@@ -34,7 +34,7 @@ hsParse contents path =
     Left err -> Left (CompileError HsParser (text (parseErrorPretty' contents err)))
     Right p  -> Right p
   where
-    parser = sc *> pProgram <* eof
+    parser = sc *> pProgram
 
 -- * The Lexer and Utilities
 -- ------------------------------------------------------------------------------
@@ -123,7 +123,7 @@ pProgram  =  PgmCls  <$> pClsDecl  <*> pProgram
          <|> PgmInst <$> pInstDecl <*> pProgram
          <|> PgmData <$> pDataDecl <*> pProgram
          <|> PgmVal  <$> pValBind  <*> pProgram
-         <|> PgmExp  <$> pTerm
+         <|> PgmEnd  <$ eof
 
 -- | Parse a class declaration
 pClsDecl :: PsM PsClsDecl

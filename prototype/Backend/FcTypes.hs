@@ -343,34 +343,32 @@ fcDictApp tm ds = foldl FcTmApp tm (map FcTmVar ds)
 -- * Programs and declarations
 -- ----------------------------------------------------------------------------
 
+data FcDecl
 -- | Data Type Declaration
-data FcDataDecl = FcDataDecl { fdata_decl_tc   :: FcTyCon                 -- ^ Type Constructor
-                             , fdata_decl_tv   :: [FcTyVar]               -- ^ Universal Type variables
-                             , fdata_decl_cons :: [(FcDataCon, [FcTyVar], [FcProp], [FcType])] -- ^ Data Constructors
-                             } -- FIXME decl_cons dirty
-
+  = FcDataDecl { fdata_decl_tc   :: FcTyCon -- ^ Type Constructor
+               , fdata_decl_tv   :: [FcTyVar] -- ^ Universal Type variables
+               , fdata_decl_cons :: [(FcDataCon, [FcTyVar], [FcProp], [FcType])] -- ^ Data Constructors
+                } -- FIXME decl_cons dirty
 -- | Top-level Value Binding
-data FcValBind = FcValBind { fval_bind_var :: FcTmVar   -- ^ Variable Name
-                           , fval_bind_ty  :: FcType    -- ^ Variable Type
-                           , fval_bind_tm  :: FcTerm    -- ^ Variable Value
-                           }
-
-data FcFamDecl = FcFamDecl FcTyFam [FcTyVar] Kind -- type F(as)
-
-data FcAxiomDecl = FcAxiomDecl -- g as : F(us) ~ v
-  { fax_decl_vr  :: FcAxVar    -- ^ Axiom variable             -- g
-  , fax_decl_tv  :: [FcTyVar]  -- ^ Universal Type variables   -- as
-  , fax_decl_fv  :: FcTyFam    -- ^ Type Family                -- F
-  , fax_decl_fvs :: [FcType]   -- ^ Type Family type arguments -- us
-  , fax_decl_ty  :: FcType     -- ^ Equal Type                 -- v
-  }
+  | FcValBind { fval_bind_var :: FcTmVar -- ^ Variable Name
+              , fval_bind_ty  :: FcType -- ^ Variable Type
+              , fval_bind_tm  :: FcTerm -- ^ Variable Value
+               }
+  | FcFamDecl FcTyFam
+              [FcTyVar]
+              Kind -- type F(as)
+  | FcAxiomDecl -- g as : F(us) ~ v
+     { fax_decl_vr  :: FcAxVar -- ^ Axiom variable             -- g
+     , fax_decl_tv  :: [FcTyVar] -- ^ Universal Type variables   -- as
+     , fax_decl_fv  :: FcTyFam -- ^ Type Family                -- F
+     , fax_decl_fvs :: [FcType] -- ^ Type Family type arguments -- us
+     , fax_decl_ty  :: FcType -- ^ Equal Type                 -- v
+      }
 
 -- | Program
-data FcProgram = FcPgmDataDecl FcDataDecl FcProgram     -- ^ Data Declaration
-               | FcPgmValDecl  FcValBind  FcProgram     -- ^ Value Binding
-               | FcPgmTerm FcTerm                       -- ^ Term
-               | FcPgmAxiomDecl FcAxiomDecl FcProgram   -- ^ Axiom Declaration
-               | FcPgmFamDecl FcFamDecl FcProgram       -- ^ Type Family Declaration
+newtype FcProgram = FcProgram
+  { fc_decls :: [FcDecl]
+  } deriving (Monoid, Semigroup)
 
 -- * Pretty printing
 -- ----------------------------------------------------------------------------
@@ -466,7 +464,7 @@ instance PrettyPrint FcAlt where
   needsParens _    = True
 
 -- | Pretty print data declarations
-instance PrettyPrint FcDataDecl where
+instance PrettyPrint FcDecl where
   ppr (FcDataDecl tc as dcs) =
    hang data_ty_decl 2 . vcat $ map ppr_dc dcs
     where
@@ -483,22 +481,28 @@ instance PrettyPrint FcDataDecl where
       ppr_dc (dc, bs, psis, tys) =
         hsep [ppr dc, dcolon, ppr (constructFcDCType (bs, psis, tys, tc, as))]
 
-  needsParens _ = False
-
--- | Pretty print top-level value bindings
-instance PrettyPrint FcValBind where
   ppr (FcValBind x ty tm) = hsep [ colorDoc yellow (text "let"), ppr x
                                  , vcat [ colon <+> ppr ty, equals <+> ppr tm ]
                                  ]
+
+  ppr (FcFamDecl f as _k) =
+    colorDoc green (text "type") <+>
+    ppr f <> parens (sep (punctuate comma (map ppr as)))
+
+  ppr (FcAxiomDecl g as f us v) =
+    colorDoc green (text "axiom") <+>
+    ppr g <+>
+      parens (sep (punctuate comma (map ppr as))) <+>
+      colon <+>
+      ppr f <> parens (sep (punctuate comma (map ppr us))) <+>
+      text "~" <+>
+      ppr v
+
   needsParens _ = False
 
 -- | Pretty print programs
 instance PrettyPrint FcProgram where
-  ppr (FcPgmDataDecl datadecl pgm) = ppr datadecl $$ ppr pgm
-  ppr (FcPgmValDecl  valbind  pgm) = ppr valbind  $$ ppr pgm
-  ppr (FcPgmFamDecl famdecl pgm)   = ppr famdecl  $$ ppr pgm
-  ppr (FcPgmAxiomDecl axdecl pgm)  = ppr axdecl   $$ ppr pgm
-  ppr (FcPgmTerm tm)               = ppr tm
+  ppr (FcProgram decls) = vcat (ppr <$> decls)
   needsParens _ = False
 
 -- | Pretty print a proposition
@@ -550,22 +554,3 @@ instance PrettyPrint FcCoercion where
   needsParens (FcCoInst {})  = False
   needsParens (FcCoQual {})  = True
   needsParens (FcCoQInst {}) = True
-
--- | Pretty print family declarations
-instance PrettyPrint FcFamDecl where
-  ppr (FcFamDecl f as _k) =
-    colorDoc green (text "type") <+>
-    ppr f <> parens (sep (punctuate comma (map ppr as)))
-  needsParens _ = False
-
--- | Pretty print axiom declarations
-instance PrettyPrint FcAxiomDecl where
-  ppr (FcAxiomDecl g as f us v) =
-    colorDoc green (text "axiom") <+>
-    ppr g <+>
-      parens (sep (punctuate comma (map ppr as))) <+>
-      colon <+>
-      ppr f <> parens (sep (punctuate comma (map ppr us))) <+>
-      text "~" <+>
-      ppr v
-  needsParens _ = False

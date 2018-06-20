@@ -323,7 +323,7 @@ type RnClsCs = ClsCs Name
 -- ------------------------------------------------------------------------------
 
 -- | Program
-data Program a = PgmExp  (Term a)                 -- ^ Expression
+data Program a = PgmEnd
                | PgmCls  (ClsDecl  a) (Program a) -- ^ Class declaration
                | PgmInst (InsDecl  a) (Program a) -- ^ Instance declaration
                | PgmData (DataDecl a) (Program a) -- ^ Datatype declaration
@@ -653,7 +653,7 @@ instance (Symable a, PrettyPrint a) => PrettyPrint (ClsCt a) where
 
 -- | Pretty print programs
 instance (Symable a, PrettyPrint a) => PrettyPrint (Program a) where
-  ppr (PgmExp tm)         = ppr tm
+  ppr PgmEnd              = mempty
   ppr (PgmCls  cdecl pgm) = ppr cdecl $$ ppr pgm
   ppr (PgmInst idecl pgm) = ppr idecl $$ ppr pgm
   ppr (PgmData ddecl pgm) = ppr ddecl $$ ppr pgm
