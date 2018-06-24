@@ -23,5 +23,3 @@ instance forall (a :: *) (b :: *). G a b => G (List a) (List b) where
 instance forall (a :: *) (b :: *). F a b Bool => F (List a) (List b) Bool where
   fop = undefined
 
-\x. x
-

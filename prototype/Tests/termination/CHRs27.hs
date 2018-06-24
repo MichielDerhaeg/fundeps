@@ -39,5 +39,3 @@ e2 = head (zip (Cons True (Cons False Nil))
 -- type signature, or get removed by skolemization, only way for it to end up
 -- in the signature is by quantifying
 
-\x. x
-

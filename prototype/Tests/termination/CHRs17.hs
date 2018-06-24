@@ -18,5 +18,3 @@ instance forall (a :: *) (c :: *). (D c, F a c) => D (List a) where
   d = undefined
 
 -- IT DOES SEEM TO COMPILE AND TERMINATE PROPERLY NOW. :-)
-\x. x
-

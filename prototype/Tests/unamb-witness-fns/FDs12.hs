@@ -18,5 +18,3 @@ instance forall (a :: *) (b :: *). (C1 a b, C2 a b) => C (List a) (List b) where
 
 -- SHOULD FAIL due to Ambiguous Witness Derivation
 -- CURRENTLY SUCCEEDS THOUGH!
-\x. x
-

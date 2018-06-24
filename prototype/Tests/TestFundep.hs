@@ -21,5 +21,3 @@ instance A Nat Bool where
 
 g :: forall (c :: *). A Nat c => c -> Bool
   = \x. x
-
-\x. x

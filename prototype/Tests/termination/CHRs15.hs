@@ -14,5 +14,3 @@ instance forall (a :: *) (b :: *). (C b b, C b (List a)) => C (List a) (Tup b b)
   c = undefined
 
 -- SHOULD COMPILE. IT SATISFIES THE PATERSON CONDITIONS.
-\x. x
-

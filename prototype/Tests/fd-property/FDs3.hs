@@ -24,5 +24,3 @@ instance forall (a :: *) (b :: *). D2 a b => C (List a) (List b) Bool where
   foo = \xs. \n. case xs of
                    Cons y ys -> Cons (baz y) Nil
 
-\x. x
-

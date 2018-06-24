@@ -20,5 +20,3 @@ instance forall (a :: *) (b :: *) (c :: *).
 --
 -- fails termination conditions?
 
-\x. x
-

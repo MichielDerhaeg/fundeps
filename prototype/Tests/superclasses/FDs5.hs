@@ -19,5 +19,3 @@ and = \x. \y. case x of
 
 gt :: forall (a :: *). Ord a => a -> a -> Bool
    = \x. \y. and (ge x y) (not (eq x y))
-
-\x. x

@@ -17,5 +17,3 @@ instance forall (a :: *). C (List a) a where
 -- TODO: We actually need to extend this example, to see whether the equality
 -- constraint from the superclass becomes available. We'll talk about it.
 
-\x. x
-

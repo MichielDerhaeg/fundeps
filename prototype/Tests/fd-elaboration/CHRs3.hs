@@ -13,5 +13,3 @@ instance forall (a :: *) (b :: *) (c :: *).
 -- SHOULD COMPILE and generate:
 -- axiom g (a, b) : FD a [b] ~ [FD a b]
 
-\x. x
-

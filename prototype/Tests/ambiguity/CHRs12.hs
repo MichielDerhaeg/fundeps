@@ -12,5 +12,3 @@ f = \s. show (read s)
 -- SHOULD FAIL DUE TO AMBIGUITY
 -- UNFORTUNATELY NOW IT PASSES
 
-\x. x
-

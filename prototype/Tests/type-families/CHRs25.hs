@@ -16,5 +16,3 @@ instance C Nat where
 
 -- Translation of an associated-type-family-example
 -- to a functional-dependencies-based one.
-\x. x
-

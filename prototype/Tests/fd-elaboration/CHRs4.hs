@@ -18,5 +18,3 @@ instance forall (a :: *) (b :: *) (c :: *) (e :: *).
   zip = \as. \bs. \cs.
           zip (zip2 as bs) cs
 
-\x. x
-

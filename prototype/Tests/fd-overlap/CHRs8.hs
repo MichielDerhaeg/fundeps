@@ -14,5 +14,3 @@ instance Mul Int Float Int where
   mul = undefined
 
 -- SHOULD FAIL: THE INSTANCES VIOLATE THE FUNCTIONAL DEPENDENCY
-\x. x
-

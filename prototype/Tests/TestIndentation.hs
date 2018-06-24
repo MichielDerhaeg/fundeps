@@ -6,7 +6,7 @@ data Nat = Succ Nat | Zero
 
 data Maybe (a:: *) = Just a | Nothing
 
-class Eq (a :: *) where
+class forall (a :: *). Eq a where
   eq :: a -> a -> Bool
 
 instance Eq Bool where
@@ -22,5 +22,3 @@ id :: forall (a :: *). a -> a
    =  \x. x
 
 main = id (eq True False)
-
-main
