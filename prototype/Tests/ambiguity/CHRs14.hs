@@ -33,5 +33,3 @@ test1 :: forall (t :: *). C Char t => List Char
 -- No signature
 test2 = h (Cons MkChar (Cons MkChar Nil))
 
-\x. x
-

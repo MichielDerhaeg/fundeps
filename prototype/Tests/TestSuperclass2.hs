@@ -56,4 +56,4 @@ instance forall (a :: *). (A a) => A (List a) where
              Cons x ls -> Cons (fa x) (fa ls)
 
 
-\a. fc (fb a)
+test = \a. fc (fb a)

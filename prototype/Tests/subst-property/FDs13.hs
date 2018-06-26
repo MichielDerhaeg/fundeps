@@ -21,5 +21,3 @@ bar3 :: Bool -> Nat
      = foo
 
 -- SHOULD PASS (and it seems to do so :-))
-\x. x
-

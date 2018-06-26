@@ -15,5 +15,3 @@ instance C Nat Bool where
 f :: forall (b :: *). C Nat b => b -> Bool
   =  \x. x
 
-\x. x
-

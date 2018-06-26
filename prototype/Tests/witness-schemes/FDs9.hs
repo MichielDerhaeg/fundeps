@@ -16,5 +16,3 @@ instance forall (a :: *) (b :: *). C a b => C (List a) (List b) where
 --
 -- Should create the following witness constraint scheme:
 -- axiom g (t) : FC(List t) ~ List (FC(t))
-\x. x
-

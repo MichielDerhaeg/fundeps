@@ -28,5 +28,3 @@ instance forall (a :: *) (b :: *) (c :: *). (G a (Tup a Nat), H c b) => F (List 
 
 -- context is actually ambiguous
 
-\x. x
-

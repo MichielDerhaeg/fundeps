@@ -33,7 +33,7 @@ doAlt3 pat f1 x1 f2 x2 f3 x3 =  pat <$>   f1 x1 <*> pure x2 <*> pure x3
                             <|> pat <$> pure x1 <*>   f2 x2 <*> pure x3
                             <|> pat <$> pure x1 <*> pure x2 <*>   f3 x3
 
-doAltList :: Alternative f => (a -> f a) -> [a] -> f ([a])
+doAltList :: Alternative f => (a -> f a) -> [a] -> f [a]
 doAltList _f []     = empty
 doAltList  f (x:xs) = doAlt2 (:) f x (doAltList f) xs
 

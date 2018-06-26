@@ -14,5 +14,3 @@ instance Coll Integer Bit where
 instance Coll Integer Byte where
   sing = \x. MkInteger
 
-\x. x
-

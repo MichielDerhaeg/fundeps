@@ -6,5 +6,3 @@ class forall (a :: *) (b :: *). C a b | a -> b where
 
 class forall (a :: *) (b :: *). C a b => D a where
   fd :: a -> a
-
-\x. x

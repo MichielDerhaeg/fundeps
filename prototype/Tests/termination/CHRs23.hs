@@ -19,5 +19,3 @@ instance forall (a :: *) (b :: *). H a b => F (List a) (List b) Char where
 
 -- this clearly violates compatability/consistency
 
-\x. x
-

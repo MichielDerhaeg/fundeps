@@ -21,6 +21,7 @@ import Control.Monad.Writer
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Except
+import Control.Arrow (first)
 
 -- * Renaming monad
 -- ------------------------------------------------------------------------------
@@ -325,28 +326,25 @@ rnValBind (ValBind a m_ty tm) = do
   ctx <- ask
   return (ValBind rn_a rn_m_ty rn_tm, extendCtx ctx a rn_a)
 
+-- | Rename a declaration
+rnDecl :: PsDecl -> RnM (RnDecl, RnCtx)
+rnDecl (ClsDecl cls_decl) = first ClsDecl <$> rnClsDecl cls_decl
+rnDecl (InsDecl ins_decl) =
+  (\rn_decl ctx -> (InsDecl rn_decl, ctx)) <$> rnInsDecl ins_decl <*> ask
+rnDecl (DataDecl data_decl) =
+  (\rn_decl ctx -> (DataDecl rn_decl, ctx)) <$> rnDataDecl data_decl <*> ask
+rnDecl (ValDecl val_bind) = first ValDecl <$> rnValBind val_bind
+
 -- | Rename a program
 rnProgram :: PsProgram -> RnM (RnProgram, RnCtx)
-rnProgram (PgmExp tm) = do
-  rn_tm  <- rnTerm tm
-  rn_ctx <- ask
-  return (PgmExp rn_tm, rn_ctx)
-rnProgram (PgmCls cls_decl pgm) = do
-  (rn_cls_decl, ext_ctx) <- rnClsDecl cls_decl
-  (rn_pgm, rn_ctx)       <- local (const ext_ctx) $ rnProgram pgm
-  return (PgmCls rn_cls_decl rn_pgm, rn_ctx)
-rnProgram (PgmInst ins_decl pgm) = do
-  rn_ins_decl      <- rnInsDecl ins_decl
-  (rn_pgm, rn_ctx) <- rnProgram pgm
-  return (PgmInst rn_ins_decl rn_pgm, rn_ctx)
-rnProgram (PgmData data_decl pgm) = do
-  rn_data_decl <- rnDataDecl data_decl
-  (rn_pgm, rn_ctx) <- rnProgram pgm
-  return (PgmData rn_data_decl rn_pgm, rn_ctx)
-rnProgram (PgmVal val_bind pgm) = do
-  (rn_val_bind, ext_ctx) <- rnValBind val_bind
-  (rn_pgm, rn_ctx) <- setCtxM ext_ctx $ rnProgram pgm
-  return (PgmVal rn_val_bind rn_pgm, rn_ctx)
+rnProgram (Program pgm_decls) = first Program <$> go pgm_decls
+  where
+    go :: [PsDecl] -> RnM ([RnDecl], RnCtx)
+    go (decl:decls) = do
+      (rn_decl, ext_ctx) <- rnDecl decl
+      (rn_decls, rn_ctx) <- local (const ext_ctx) $ go decls
+      return (rn_decl:rn_decls, rn_ctx)
+    go [] = do ctx <- ask; return ([],ctx)
 
 -- * Invoke the complete renamer
 -- ------------------------------------------------------------------------------

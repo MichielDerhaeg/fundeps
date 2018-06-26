@@ -30,19 +30,21 @@ data TcEnv = TcEnv
   , tc_env_dc_info  :: AssocList RnDataCon HsDataConInfo
   , tc_env_tc_info  :: AssocList RnTyCon   HsTyConInfo
   , tc_env_tf_info  :: AssocList RnTyFam   HsTyFamInfo
+  , tc_env_theory   :: Theory
   }
 
 instance PrettyPrint TcEnv where
-  ppr (TcEnv cls_infos dc_infos tc_infos tf_infos)
+  ppr (TcEnv cls_infos dc_infos tc_infos tf_infos theory)
     = braces $ vcat $ punctuate comma
     [ text "tc_env_cls_info" <+> colon <+> ppr cls_infos
     , text "tc_env_dc_info"  <+> colon <+> ppr dc_infos
     , text "tc_env_tc_info"  <+> colon <+> ppr tc_infos
     , text "tc_env_tf_info"  <+> colon <+> ppr tf_infos
+    , text "tc_env_theory"   <+> colon <+> ppr theory
     ]
   needsParens _ = False
 
--- * Add data to the environment
+-- * Add to and get data from the environment
 -- ------------------------------------------------------------------------------
 
 -- | Add a renamed class name to the state
@@ -64,6 +66,18 @@ addTyConInfoTcM tc info = modify $ \s ->
 addTyFamInfoTcM :: RnTyFam -> HsTyFamInfo -> TcM ()
 addTyFamInfoTcM tf info = modify $ \s ->
   s { tc_env_tf_info = extendAssocList tf info (tc_env_tf_info s)}
+
+-- | Get the global program theory
+getGlobalTheory :: TcM Theory
+getGlobalTheory = tc_env_theory <$> get
+
+tExtendAxiomsM :: Axioms -> TcM ()
+tExtendAxiomsM axioms =
+  modify $ \s -> s { tc_env_theory = tc_env_theory s `tExtendAxioms` axioms }
+
+tExtendSchemesM :: AnnSchemes -> TcM ()
+tExtendSchemesM schemes =
+  modify $ \s -> s { tc_env_theory = tc_env_theory s `tExtendSchemes` schemes }
 
 -- * Lookup data and type constructors for a class
 -- ------------------------------------------------------------------------------

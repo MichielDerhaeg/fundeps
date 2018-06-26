@@ -22,5 +22,3 @@ instance forall (b :: *). Eq b => Eq (List b) where
                                     Cons y ys -> and (eq x y) (eq xs ys)
 
 -- SHOULD COMPILE (and create d : forall b. TEq b -> TEq (List b))
-\x. x
-

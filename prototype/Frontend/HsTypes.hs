@@ -323,14 +323,16 @@ type RnClsCs = ClsCs Name
 -- ------------------------------------------------------------------------------
 
 -- | Program
-data Program a = PgmExp  (Term a)                 -- ^ Expression
-               | PgmCls  (ClsDecl  a) (Program a) -- ^ Class declaration
-               | PgmInst (InsDecl  a) (Program a) -- ^ Instance declaration
-               | PgmData (DataDecl a) (Program a) -- ^ Datatype declaration
-               | PgmVal  (ValBind  a) (Program a) -- ^ Value Binding
+newtype Program a = Program {unPgm :: [Decl a]}
+
+-- | Declaration
+data Decl a = ClsDecl  (ClsDecl  a) -- ^ Class declaration
+            | InsDecl  (InsDecl  a) -- ^ Instance declaration
+            | DataDecl (DataDecl a) -- ^ Datatype declaration
+            | ValDecl  (ValBind  a) -- ^ Value Binding
 
 -- | Class declaration
-data ClsDecl a = ClsD { cabs    :: [HsTyVarWithKind a] -- ^ TODO
+data ClsDecl a = ClsD { cabs    :: [HsTyVarWithKind a] -- ^ Abstracted type variables
                       , csuper  :: ClsCs a             -- ^ Superclass constraints
                       , cname   :: Class a             -- ^ Class name
                       , cvars   :: [HsTyVar a]         -- ^ Type variables
@@ -339,7 +341,7 @@ data ClsDecl a = ClsD { cabs    :: [HsTyVarWithKind a] -- ^ TODO
                       , cmety   :: PolyTy a }          -- ^ Method type
 
 -- | Instance declaration
-data InsDecl a = InsD { iabs  :: [HsTyVarWithKind a] -- ^ TODO
+data InsDecl a = InsD { iabs  :: [HsTyVarWithKind a] -- ^ Abstracted type variables
                       , icons :: ClsCs a             -- ^ Constraints
                       , iname :: Class a             -- ^ Class name
                       , ivars :: [MonoTy a]          -- ^ Instance types
@@ -361,6 +363,10 @@ data ValBind a = ValBind
 -- | Parsed/renamed programs
 type PsProgram = Program Sym
 type RnProgram = Program Name
+
+-- | Parsed/renamed declarations
+type PsDecl = Decl Sym
+type RnDecl = Decl Name
 
 -- | Parsed/renamed class declarations
 type PsClsDecl = ClsDecl Sym
@@ -653,11 +659,16 @@ instance (Symable a, PrettyPrint a) => PrettyPrint (ClsCt a) where
 
 -- | Pretty print programs
 instance (Symable a, PrettyPrint a) => PrettyPrint (Program a) where
-  ppr (PgmExp tm)         = ppr tm
-  ppr (PgmCls  cdecl pgm) = ppr cdecl $$ ppr pgm
-  ppr (PgmInst idecl pgm) = ppr idecl $$ ppr pgm
-  ppr (PgmData ddecl pgm) = ppr ddecl $$ ppr pgm
-  ppr (PgmVal  vdecl pgm) = ppr vdecl $$ ppr pgm
+  ppr (Program decls) = vcat (ppr <$> decls)
+
+  needsParens _ = False
+
+-- | Pretty print declarations
+instance (Symable a, PrettyPrint a) => PrettyPrint (Decl a) where
+  ppr (ClsDecl  cdecl) = ppr cdecl
+  ppr (InsDecl  idecl) = ppr idecl
+  ppr (DataDecl ddecl) = ppr ddecl
+  ppr (ValDecl  vdecl) = ppr vdecl
 
   needsParens _ = False
 

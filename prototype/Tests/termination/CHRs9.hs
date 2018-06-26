@@ -22,5 +22,3 @@ f = \b. \x. \y. case b of
 
 -- fails to terminate, termination checks pass though
 
-\x. x
-

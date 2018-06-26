@@ -17,5 +17,3 @@ instance forall (a :: *) (b :: *). F a b Bool => F (List a) (List b) Bool where
 
 -- We need to check confluence; we need an example
 -- of a function definition that triggers issues
-\x. x
-

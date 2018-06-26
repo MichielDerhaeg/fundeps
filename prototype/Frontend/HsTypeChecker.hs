@@ -25,6 +25,7 @@ import           Utils.Unique
 import           Utils.Utils
 import           Utils.Var
 
+import           Control.Arrow        (first)
 import           Control.Monad.Except
 import           Control.Monad.Reader
 import           Control.Monad.State
@@ -48,44 +49,39 @@ buildInitTcEnv pgm (RnEnv _rn_cls_infos dc_infos tc_infos) = do -- GEORGE: Assum
   buildStoreClsInfos pgm
   where
     buildStoreClsInfos :: RnProgram -> TcM ()
-    buildStoreClsInfos (PgmExp {})   = return ()
-    buildStoreClsInfos (PgmInst _ p) = buildStoreClsInfos p
-    buildStoreClsInfos (PgmData _ p) = buildStoreClsInfos p
-    buildStoreClsInfos (PgmVal  _ p) = buildStoreClsInfos p
-    buildStoreClsInfos (PgmCls  c p) = case c of
-      ClsD rn_abs rn_cs rn_cls rn_as rn_fundeps rn_method method_ty -> do
-        -- Generate And Store The TyCon Info
-        fc_tc <-
-          FcTC . mkName (mkSym ("T" ++ (show $ symOf rn_cls))) <$> getUniqueM
+    buildStoreClsInfos (Program decls) = mapM_ go decls
+      where
+        go (ClsDecl (ClsD rn_abs rn_cs rn_cls rn_as rn_fundeps rn_method method_ty)) = do
+          -- Generate And Store The TyCon Info
+          fc_tc <-
+            FcTC . mkName (mkSym ("T" ++ (show $ symOf rn_cls))) <$> getUniqueM
 
-        -- Generate And Store The DataCon Info
-        fc_dc  <-
-          FcDC . mkName (mkSym ("K" ++ (show $ symOf rn_cls))) <$> getUniqueM
+          -- Generate And Store The DataCon Info
+          fc_dc  <-
+            FcDC . mkName (mkSym ("K" ++ (show $ symOf rn_cls))) <$> getUniqueM
 
-        fd_fams <- forM (zip [0..] rn_fundeps) $ \(i,Fundep ais ai0) -> do
-          fd_fam <- HsTF .
-            mkName (mkSym ("FunDep" ++ show (symOf rn_cls) ++ show (i :: Word)))
-            <$> getUniqueM
-          addTyFamInfoTcM fd_fam $ HsTFInfo fd_fam ais (kindOf ai0)
-          return fd_fam
+          fd_fams <- forM (zip [0..] rn_fundeps) $ \(i,Fundep ais ai0) -> do
+            fd_fam <- HsTF .
+              mkName (mkSym ("FunDep" ++ show (symOf rn_cls) ++ show (i :: Word)))
+              <$> getUniqueM
+            addTyFamInfoTcM fd_fam $ HsTFInfo fd_fam ais (kindOf ai0)
+            return fd_fam
 
-        -- Generate And Store The Class Info
-        let cls_info =
-              ClassInfo
-                (labelOf rn_abs \\ rn_as)
-                rn_cs
-                rn_cls
-                rn_as
-                rn_fundeps
-                fd_fams
-                rn_method
-                method_ty
-                fc_tc
-                fc_dc
-        addClsInfoTcM rn_cls cls_info
-
-        -- Continue with the rest
-        buildStoreClsInfos p
+          -- Generate And Store The Class Info
+          let cls_info =
+                ClassInfo
+                  (labelOf rn_abs \\ rn_as)
+                  rn_cs
+                  rn_cls
+                  rn_as
+                  rn_fundeps
+                  fd_fams
+                  rn_method
+                  method_ty
+                  fc_tc
+                  fc_dc
+          addClsInfoTcM rn_cls cls_info
+        go _ = return ()
 
 -- * Constraint Entailment TODO
 -- ------------------------------------------------------------------------------
@@ -181,8 +177,7 @@ generateAxioms scheme@(CtrScheme _as cs (ClsCt cls tys)) = do
 --   a) The data declaration for the class
 --   b) The method implementation
 --   c) The extended typing environment
-elabClsDecl :: RnClsDecl
-            -> TcM ([FcFamDecl], FcDataDecl, FcValBind, TcCtx)
+elabClsDecl :: RnClsDecl -> TcM ([FcDecl], TcCtx)
 elabClsDecl (ClsD ab_s rn_cs cls as fundeps method method_ty) = do
   tc <- lookupClsTyCon   cls
   dc <- lookupClsDataCon cls
@@ -269,7 +264,7 @@ elabClsDecl (ClsD ab_s rn_cs cls as fundeps method method_ty) = do
   ty_ctx <- extendCtxM method hs_method_ty ask
 
   -- TODO wtf is this
-  return (fc_fam_decls, fc_data_decl, fc_val_bind, ty_ctx)
+  return (fc_fam_decls <> [fc_data_decl, fc_val_bind], ty_ctx)
 
 -- | Elaborate a list of annotated dictionary variables to a list of System F term binders.
 elabAnnClsCs :: AnnClsCs -> TcM [(FcTmVar, FcType)]
@@ -279,14 +274,14 @@ elabAnnClsCs = mapM (\(d :| ct) -> (,) d <$> elabClsCt ct)
 -- ------------------------------------------------------------------------------
 
 -- | Elaborate a datatype declaration
-elabDataDecl :: RnDataDecl -> TcM (FcDataDecl, [FcFamDecl], [FcAxiomDecl])
+elabDataDecl :: RnDataDecl -> TcM [FcDecl]
 elabDataDecl (DataD tc as dcs) = do
   -- Elaborate the type constructor
   fc_tc <- hs_tc_fc_ty_con <$> lookupTcEnvM tc_env_tc_info tc
   -- Elaborate the universal type variables
   let fc_as = map (rnTyVarToFcTyVar . labelOf) as
 
-  (fc_fams, fc_axioms) <- elabProjections tc as
+  decls <- elabProjections tc as
 
   fc_dcs <- forM dcs $ \(dc, tys) -> do
     -- Elaborate the data constructor
@@ -296,33 +291,31 @@ elabDataDecl (DataD tc as dcs) = do
     unless (all (==KStar) kinds) $
       tcFail (text "elabDataDecl" <+> colon <+> text "not all datacon args have kind star")
     return (fc_dc, mempty, mempty, fc_tys)
-  return (FcDataDecl fc_tc fc_as fc_dcs, fc_fams, fc_axioms)
+  return $ [FcDataDecl fc_tc fc_as fc_dcs] <> decls
 
 -- | Elaborate the projection type functions of the type constructor
-elabProjections :: RnTyCon -> [RnTyVarWithKind] -> TcM ([FcFamDecl], [FcAxiomDecl])
+elabProjections :: RnTyCon -> [RnTyVarWithKind] -> TcM [FcDecl]
 elabProjections tc as = do -- TODO rename as for every axiom
-  tc_info       <- lookupTcEnvM tc_env_tc_info tc
-  let proj_fams =  hs_tc_projs     tc_info
-  let fc_tc     =  hs_tc_fc_ty_con tc_info
-  fmap unzip $ forM (zip proj_fams as) $ \(proj_fam, a) -> do
+  proj_fams <- lookupTyConProj tc
+  fmap concat $ forM (zip proj_fams as) $ \(proj_fam, a) -> do
     addTyFamInfoTcM proj_fam (HsTFInfo proj_fam (labelOf as) (dropLabel a))
     g <- freshFcAxVar
     a' <- freshFcTyVar KStar
-    let fc_as = rnTyVarToFcTyVar <$> (labelOf as)
-    let fc_a = rnTyVarToFcTyVar (labelOf a)
     let fc_fam = rnTyFamToFcFam proj_fam
+    let axiom =
+          Axiom
+            g
+            (labelOf as)
+            proj_fam
+            [mkTyConApp tc (TyVar <$> (labelOf as))]
+            (TyVar (labelOf a))
+    tExtendAxiomsM [axiom]
     return
-      ( FcFamDecl
+      [ FcFamDecl
          fc_fam
          [a']
          (dropLabel a)
-      , FcAxiomDecl
-         g
-         fc_as
-         fc_fam
-         [fcTyConApp fc_tc (FcTyVar <$> fc_as)]
-         (FcTyVar fc_a)
-      )
+      , elabAxiom axiom ]
 
 -- | Extend the typing environment with some kind annotated type variables
 extendCtxKindAnnotatedTysM :: [RnTyVarWithKind] -> TcM a -> TcM a
@@ -333,12 +326,13 @@ extendCtxKindAnnotatedTysM ann_as = extendCtxM as (map kindOf as)
 -- * Class Instance Elaboration
 -- ------------------------------------------------------------------------------
 
-elabInsDecl :: Theory -> RnInsDecl -> TcM ([FcAxiomDecl], FcValBind, Theory)
-elabInsDecl theory (InsD ab_s ins_cs cls tys method method_tm) = do
+elabInsDecl :: RnInsDecl -> TcM [FcDecl]
+elabInsDecl (InsD ab_s ins_cs cls tys method method_tm) = do
   let head_ct = ClsCt cls tys
   let as = ftyvsOf tys
   let bs = labelOf ab_s \\ as
   let fc_abs = rnTyVarToFcTyVar . labelOf <$> ab_s
+  theory <- getGlobalTheory
 
   overlapCheck theory head_ct
   unambiguousCheck bs as ins_cs
@@ -366,8 +360,8 @@ elabInsDecl theory (InsD ab_s ins_cs cls tys method method_tm) = do
   -- TODO change order
   (fc_exis_tys, fc_tms, fc_cos) <- entailSuperClass (labelOf ab_s) i_theory head_ct
 
-  let ext_theory = theory `tExtendAxioms`  axioms
-                          `tExtendSchemes` [ins_d :| ins_scheme]
+  tExtendAxiomsM axioms
+  tExtendSchemesM [ins_d :| ins_scheme]
 
   fc_method_tm <- do
     let theory' = i_theory `tExtendSchemes` [ins_d :| ins_scheme]
@@ -394,10 +388,10 @@ elabInsDecl theory (InsD ab_s ins_cs cls tys method method_tm) = do
                          `FcTmApp`   fc_method_tm
 
   let fc_val_bind = FcValBind ins_d dtrans_ty fc_dict_transformer
-  return (elabAxiom <$> axioms, fc_val_bind, ext_theory)
+  return ((elabAxiom <$> axioms) <> [fc_val_bind])
 
 -- TODO better location
-elabAxiom :: Axiom -> FcAxiomDecl
+elabAxiom :: Axiom -> FcDecl
 elabAxiom (Axiom g as f us ty) =
   FcAxiomDecl
     g
@@ -506,8 +500,9 @@ elabTermSimpl theory tm = do
 -- ------------------------------------------------------------------------------
 
 -- | Elaborate a top-level value binding
-elabValBind :: Theory -> RnValBind -> TcM (FcValBind, TcCtx)
-elabValBind theory (ValBind a m_ty tm) = do
+elabValBind :: RnValBind -> TcM (FcDecl, TcCtx)
+elabValBind (ValBind a m_ty tm) = do
+  theory <- getGlobalTheory
   (ty,fc_tm) <- case m_ty of
     Nothing -> elabTermSimpl theory tm
     Just ty -> do
@@ -521,57 +516,23 @@ elabValBind theory (ValBind a m_ty tm) = do
 -- * Program Elaboration
 -- ------------------------------------------------------------------------------
 
+-- | Elaborate a declaration
+elabDecl :: RnDecl -> TcM ([FcDecl], TcCtx)
+elabDecl (ClsDecl decl)  = elabClsDecl decl
+elabDecl (InsDecl decl)  = (,) <$> elabInsDecl decl <*> ask
+elabDecl (DataDecl decl) = (,) <$> elabDataDecl decl <*> ask
+elabDecl (ValDecl decl)  = first (pure) <$> elabValBind decl
+
 -- | Elaborate a program
-elabProgram :: Theory -> RnProgram
-            -> TcM ( FcProgram       {- Elaborated program       -}
-                   , RnPolyTy        {- Term type (MonoTy?)      -}
-                   , Theory )    {- Final program theory     -}
--- Elaborate the program expression
-elabProgram theory (PgmExp tm) = do
-  (ty, fc_tm) <- elabTermSimpl theory tm
-  return (FcPgmTerm fc_tm, ty, theory) -- GEORGE: You should actually return the ones we have accumulated.
-
--- Elaborate a class declaration
-elabProgram theory (PgmCls cls_decl pgm) = do
-  (fc_fam_decls, fc_data_decl, fc_val_bind, ext_ty_env) <-
-    elabClsDecl cls_decl
-  (fc_pgm, ty, final_theory) <-
-    setCtxM ext_ty_env (elabProgram theory pgm)
-  let fc_program =
-        foldr
-          FcPgmFamDecl
-          (FcPgmDataDecl fc_data_decl (FcPgmValDecl fc_val_bind fc_pgm))
-          fc_fam_decls
-  return (fc_program, ty, final_theory)
-
--- | Elaborate a class instance
-elabProgram theory (PgmInst ins_decl pgm) = do
-  (fc_axiom_decls, fc_val_bind, ext_theory) <- elabInsDecl theory ins_decl
-  (fc_pgm, ty, final_theory) <- elabProgram ext_theory pgm
-  let fc_program =
-        foldr (FcPgmAxiomDecl) (FcPgmValDecl fc_val_bind fc_pgm) fc_axiom_decls
-  return (fc_program, ty, final_theory)
-
--- Elaborate a datatype declaration
-elabProgram theory (PgmData data_decl pgm) = do
-  (fc_data_decl, fc_fam_decls, fc_ax_decls)  <- elabDataDecl data_decl
-  (fc_pgm, ty, final_theory) <- elabProgram theory pgm
-  let fc_program =
-        FcPgmDataDecl
-          fc_data_decl
-          (foldr
-            FcPgmFamDecl
-              (foldr FcPgmAxiomDecl fc_pgm fc_ax_decls)
-              fc_fam_decls
-          )
-  return (fc_program, ty, final_theory)
-
--- Elaborate a top-level value binding
-elabProgram theory (PgmVal val_bind pgm) = do
-  (fc_val_bind, ext_ctx) <- elabValBind theory val_bind
-  (fc_pgm, ty, final_theory) <- setCtxM ext_ctx $ elabProgram theory pgm
-  let fc_program = FcPgmValDecl fc_val_bind fc_pgm
-  return (fc_program, ty, final_theory)
+elabProgram :: RnProgram -> TcM FcProgram
+elabProgram (Program pgm_decls) = FcProgram <$> go pgm_decls
+  where
+    go :: [RnDecl] -> TcM [FcDecl]
+    go (decl:decls)= do
+      (fc_decls, ext_ty_env) <- elabDecl decl
+      more_fc_decls <- setCtxM ext_ty_env $ go decls
+      return (fc_decls <> more_fc_decls)
+    go [] = return []
 
 -- * Invoke the complete type checker
 -- ------------------------------------------------------------------------------
@@ -580,7 +541,7 @@ hsElaborate ::
      RnEnv
   -> UniqueSupply
   -> RnProgram
-  -> Either CompileError ( (((FcProgram, RnPolyTy, Theory)), UniqueSupply)
+  -> Either CompileError ( ((FcProgram), UniqueSupply)
                          , TcEnv)
 hsElaborate rn_gbl_env us pgm = runExcept
                               $ flip runStateT  tc_init_gbl_env -- Empty when you start
@@ -588,8 +549,8 @@ hsElaborate rn_gbl_env us pgm = runExcept
                               $ flip runUniqueSupplyT us
                               $ markTcError
                               $ do buildInitTcEnv pgm rn_gbl_env
-                                   elabProgram tc_init_theory pgm
+                                   elabProgram pgm
   where
     tc_init_theory  = Theory mempty mempty mempty
     tc_init_ctx     = mempty
-    tc_init_gbl_env = TcEnv mempty mempty mempty mempty
+    tc_init_gbl_env = TcEnv mempty mempty mempty mempty tc_init_theory

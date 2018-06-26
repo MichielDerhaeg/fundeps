@@ -5,15 +5,13 @@ Notes
 
   * revise/group conditions
 
-  * revise programs, list of decls instead
-    - projection arrow
-    - projections in axioms
-    - remove program expression from haskell and fc
+  - projection arrow
 
   * write readme
 
   * Value Binding Translation
     - do nosig recursion
+      + recursive poly tys are weird
     - check if untouchable hack is no longer required
 
   * parse quantified type contexts better

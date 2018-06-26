@@ -32,5 +32,3 @@ exp1 :: List Bool
 -- ||                      class constraints : [R a_uJ b_uK]
 
 -- TRICKY EXAMPLE. WE NEED TO LOOK AT THIS TOGETHER
-\x. x
-

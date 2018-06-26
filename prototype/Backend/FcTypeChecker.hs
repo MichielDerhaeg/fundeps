@@ -126,31 +126,33 @@ notInFcGblEnvM f x = gets f >>= \l -> case lookupInAssocList x l of
 -- ----------------------------------------------------------------------------
 
 -- | Build the global environment with info from top-level declarations
-buildInitFcEnv :: FcProgram -> FcM ()
-buildInitFcEnv (FcPgmDataDecl (FcDataDecl tc as dcs) pgm) = do
+buildInitFcEnv :: [FcDecl] -> FcM FcTcCtx
+buildInitFcEnv ((FcDataDecl tc as dcs):decls) = do
   notInFcGblEnvM fc_env_tc_info tc
   addTyConInfoM (FcTCInfo tc as)
   forM_ dcs $ \(dc,bs,props,tys) -> do
     notInFcGblEnvM fc_env_dc_info dc
     addDataConInfoM (FcDCInfo dc as bs props tc tys)
-  buildInitFcEnv pgm
-buildInitFcEnv (FcPgmFamDecl (FcFamDecl f as k) pgm) = do
+  buildInitFcEnv decls
+buildInitFcEnv ((FcFamDecl f as k):decls) = do
   notInFcGblEnvM fc_env_tf_info f
   addFamInfoM (FcFamInfo f as k)
-  buildInitFcEnv pgm
-buildInitFcEnv (FcPgmAxiomDecl (FcAxiomDecl g as fam us v) pgm) = do
+  buildInitFcEnv decls
+buildInitFcEnv ((FcAxiomDecl g as fam us v) : decls) = do
   notInFcGblEnvM fc_env_ax_info g
   addAxiomInfoM (FcAxiomInfo g as fam us v)
-  buildInitFcEnv pgm
-buildInitFcEnv (FcPgmValDecl _decl pgm) = buildInitFcEnv pgm
-buildInitFcEnv (FcPgmTerm _term) = return ()
+  buildInitFcEnv decls
+buildInitFcEnv ((FcValBind x ty _tm):decls) = do
+  notInCtxM x
+  extendCtxM x ty $ buildInitFcEnv decls
+buildInitFcEnv [] = ask
 
 -- * Type checking
 -- ----------------------------------------------------------------------------
 
--- | Type check a data declaration
-tcFcDataDecl :: FcDataDecl -> FcM ()
-tcFcDataDecl (FcDataDecl _tc as dcs) = do
+-- | Type check a declaration
+tcDecl :: FcDecl -> FcM ()
+tcDecl (FcDataDecl _tc as dcs) = do
   forM_ as notInCtxM
   forM_ dcs $ \(_dc, bs, psis, tys) -> do
     let ty_vars = as <> bs
@@ -158,23 +160,15 @@ tcFcDataDecl (FcDataDecl _tc as dcs) = do
                (mapM_ tcProp psis >> mapM tcType tys)
     unless (all (==KStar) (kinds) ) $
       fcFail $ text "tcFcDataDecl: Kind mismatch (FcDataDecl)"
-
--- | Type check a top-level value binding
-tcFcValBind :: FcValBind -> FcM FcTcCtx
-tcFcValBind (FcValBind x ty tm) = do
-  notInCtxM x  -- GEORGE: Ensure is not already bound
+tcDecl (FcValBind _x ty tm) = do
   kind <- tcType ty
   unless (kind == KStar) $
     fcFail $ text "tcFcValBind: Kind mismatch (FcValBind)"
-  ty' <- extendCtxM x ty (tcTerm tm)
+  ty' <- tcTerm tm
   unless (ty `eqFcTypes` ty') $ fcFail (text "Global let type doesnt match:"
                                 $$ parens (text "given:" <+> ppr ty)
                                 $$ parens (text "inferred:" <+> ppr ty'))
-  extendCtxM x ty ask -- GEORGE: Return the extended environment
-
--- | Type check a equality axiom declaration
-tcFcAxiomDecl :: FcAxiomDecl -> FcM ()
-tcFcAxiomDecl (FcAxiomDecl _g as fam us v) = do
+tcDecl (FcAxiomDecl _g as fam us v) = do
   mapM_ notInCtxM as
   FcFamInfo _ as' kind <- lookupFamInfoM fam
   unless (length us == length as') $
@@ -187,31 +181,13 @@ tcFcAxiomDecl (FcAxiomDecl _g as fam us v) = do
   unless (ks == (kindOf <$> as')) $
     fcFail $
     text "tcFcAxiomDecl" <+> colon <+> text "parameter kind mismatch"
-
--- | Type check a type family declaration
-tcFcFamDecl :: FcFamDecl -> FcM ()
-tcFcFamDecl (FcFamDecl _f as _k) = mapM_ notInCtxM as
+tcDecl (FcFamDecl _f as _k) = mapM_ notInCtxM as
 
 -- | Type check a program
-tcFcProgram :: FcProgram -> FcM FcType
--- Type check a datatype declaration
-tcFcProgram (FcPgmDataDecl datadecl pgm) = do
-  tcFcDataDecl datadecl
-  tcFcProgram pgm
--- Type check a top-level value binding
-tcFcProgram (FcPgmValDecl valbind pgm) = do
-  fc_ctx <- tcFcValBind valbind
-  setCtxM fc_ctx $ tcFcProgram pgm
--- Type check a equality axiom declaration
-tcFcProgram (FcPgmAxiomDecl axdecl pgm) = do
-  tcFcAxiomDecl axdecl
-  tcFcProgram pgm
--- Type check a type family declaration
-tcFcProgram (FcPgmFamDecl famdecl pgm) = do
-  tcFcFamDecl famdecl
-  tcFcProgram pgm
--- Type check the top-level program expression
-tcFcProgram (FcPgmTerm tm) = tcTerm tm
+tcFcProgram :: FcProgram -> FcM ()
+tcFcProgram (FcProgram decls) = do
+  env <- buildInitFcEnv decls
+  local (const env) $ mapM_ tcDecl decls
 
 -- | Type check a System Fc term
 tcTerm :: FcTerm -> FcM FcType
@@ -479,15 +455,14 @@ ensureIdenticalTypes types = unless (go types) $ fcFail $ text "Type mismatch in
 fcTypeCheck ::
      UniqueSupply
   -> FcProgram
-  -> Either CompileError ((FcType, UniqueSupply), FcGblEnv)
+  -> Either CompileError (((), UniqueSupply), FcGblEnv)
 fcTypeCheck us pgm = runExcept
                    $ flip runStateT  fc_init_gbl_env
                    $ flip runReaderT fc_init_ctx
                    $ flip runUniqueSupplyT us
                    $ markErrorPhase FcTypeChecker
                    $ tagError (ppr pgm)
-                   $ do buildInitFcEnv pgm
-                        tcFcProgram pgm
+                   $ tcFcProgram pgm
   where
     fc_init_ctx     = mempty
     fc_init_gbl_env =

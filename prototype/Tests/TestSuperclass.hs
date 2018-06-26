@@ -70,10 +70,10 @@ instance Functor List where
 
 
 
-let lessThan =
-  \a. \b. case lessOrEqualThan a b of
-            False -> False
-            True -> case eq a b of
-                      True -> False
-                      False -> True
-  in \x. \y. lessThan x y
+test = let lessThan =
+          \a. \b. case lessOrEqualThan a b of
+                    False -> False
+                    True -> case eq a b of
+                              True -> False
+                              False -> True
+          in \x. \y. lessThan x y

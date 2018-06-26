@@ -22,5 +22,3 @@ instance forall (a :: *). C (Maybe a) a where
 -- Should create the following witness constraint schemes:
 -- axiom g_uO () : FC0(Nat) ~ Bool
 -- axiom g_uQ (t_uJ) : FC0(Maybe t_uJ) ~ t_uJ
-\x. x
-

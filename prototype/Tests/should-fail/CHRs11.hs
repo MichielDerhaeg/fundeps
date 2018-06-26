@@ -13,5 +13,3 @@ instance C Bool where
 
 -- SHOULD FAIL. IT DOES, BUT WE GET A "TODO" :P
 
-\x. x
-

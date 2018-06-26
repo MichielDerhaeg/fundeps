@@ -34,7 +34,7 @@ hsParse contents path =
     Left err -> Left (CompileError HsParser (text (parseErrorPretty' contents err)))
     Right p  -> Right p
   where
-    parser = sc *> pProgram <* eof
+    parser = sc *> pProgram
 
 -- * The Lexer and Utilities
 -- ------------------------------------------------------------------------------
@@ -119,13 +119,16 @@ chainr1 p op = scan where
 
 -- | Parse a program
 pProgram :: PsM PsProgram
-pProgram  =  PgmCls  <$> pClsDecl  <*> pProgram
-         <|> PgmInst <$> pInstDecl <*> pProgram
-         <|> PgmData <$> pDataDecl <*> pProgram
-         <|> PgmVal  <$> pValBind  <*> pProgram
-         <|> PgmExp  <$> pTerm
+pProgram  = Program <$> many pDecl
 
--- | Parse a class declaration
+-- | Parse a declaration
+pDecl :: PsM PsDecl
+pDecl  =  ClsDecl  <$> pClsDecl
+      <|> InsDecl  <$> pInsDecl
+      <|> DataDecl <$> pDataDecl
+      <|> ValDecl  <$> pValBind
+
+-- | Parse a declaration
 pClsDecl :: PsM PsClsDecl
 pClsDecl  =  indent $ (\bs ctx cls as fds (m,ty) -> ClsD bs ctx cls as fds m ty)
          <$  symbol "class"
@@ -138,8 +141,8 @@ pClsDecl  =  indent $ (\bs ctx cls as fds (m,ty) -> ClsD bs ctx cls as fds m ty)
          <*> (pTmVar <&> (symbol "::" *> pPolyTy))
 
 -- | Parse an instance declaration
-pInstDecl :: PsM PsInsDecl
-pInstDecl  =  indent $ (\as ctx cls ty (m,tm) -> InsD as ctx cls ty m tm)
+pInsDecl :: PsM PsInsDecl
+pInsDecl  =  indent $ (\as ctx cls ty (m,tm) -> InsD as ctx cls ty m tm)
           <$  symbol "instance"
           <*> pClassAbs
           <*> pClassCts

@@ -11,5 +11,3 @@ g2 = c
 
 -- SHOULD PASS. 'b' IS DETERMINED
 
-\x. x
-

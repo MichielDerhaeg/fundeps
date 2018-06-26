@@ -27,5 +27,3 @@ instance forall (a :: *) (b :: *) (c :: *). (G a c, H c b) => F (List a) (List b
 -- instance fails termination conditions, 'c' appears more often in context
 -- than in the head, GHC agrees with me :p
 
-\x. x
-

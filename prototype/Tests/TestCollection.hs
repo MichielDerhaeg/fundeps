@@ -10,5 +10,3 @@ sing2 :: forall (e :: *). forall (c1 :: *). forall (c2 :: *). Coll c2 c1 => Coll
            = \x. sing (sing x)
 
 sing2NoSig = \x. sing (sing x)
-
-\x. x
