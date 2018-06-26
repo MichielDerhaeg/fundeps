@@ -34,20 +34,14 @@ runTest filePath = do
   let result = do
         ps_pgm <- hsParse fileContents filePath
         (((rn_pgm, _rn_ctx), us1), rn_env) <- hsRename us0 ps_pgm
-        (((fc_pgm, theory), us2), _tc_env) <-
+        ((fc_pgm, us2), _tc_env) <-
           hsElaborate rn_env us1 rn_pgm
-        ((fc_ty, _us3), _fc_env) <- fcTypeCheck us2 fc_pgm
+        (((), _us3), _fc_env) <- fcTypeCheck us2 fc_pgm
         let simpl_pgm = fcSimplify fc_pgm
-        return (simpl_pgm, theory, fc_ty)
+        return simpl_pgm
   case result of
     Left err -> throwMainError err
-    Right (fc_pgm, theory, fc_ty) -> do
+    Right fc_pgm -> do
       putStrLn
         "---------------------------- Elaborated Program ---------------------------"
       putStrLn $ renderWithColor $ ppr fc_pgm
-      putStrLn
-        "------------------------------ Program Theory -----------------------------"
-      putStrLn $ renderWithColor $ ppr theory
-      putStrLn
-        "-------------------------- System Fc Program Type -------------------------"
-      putStrLn $ renderWithColor $ ppr fc_ty

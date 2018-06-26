@@ -5,6 +5,7 @@ prototype/dist/
 prototype/dist-newstyle/
 prototype/cabal.project.local*
 prototype/result
+prototype/.ghc.environment.*
 
 *.aux
 *.fdb_latexmk

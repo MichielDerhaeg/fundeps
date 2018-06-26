@@ -366,9 +366,7 @@ data FcDecl
       }
 
 -- | Program
-newtype FcProgram = FcProgram
-  { fc_decls :: [FcDecl]
-  } deriving (Monoid, Semigroup)
+newtype FcProgram = FcProgram {unFcPgm :: [FcDecl]}
 
 -- * Pretty printing
 -- ----------------------------------------------------------------------------

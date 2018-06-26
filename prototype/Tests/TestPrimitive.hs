@@ -74,5 +74,5 @@ map :: forall (a :: *). forall (b :: *). (a -> b) -> List a -> List b
       Nil -> Nil
       Cons x xs -> Cons (f x) (map f xs)
 
-test = let id = \x. x in
+test2 = let id = \x. x in
   \a. \b . eq (fmap id a) b
