@@ -7,8 +7,6 @@ Notes
 
   * revise programs, list of decls instead
     - projection arrow
-    - projections in axioms
-    - remove program expression from haskell and fc
 
   * write readme
 

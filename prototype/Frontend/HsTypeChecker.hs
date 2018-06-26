@@ -296,28 +296,26 @@ elabDataDecl (DataD tc as dcs) = do
 -- | Elaborate the projection type functions of the type constructor
 elabProjections :: RnTyCon -> [RnTyVarWithKind] -> TcM [FcDecl]
 elabProjections tc as = do -- TODO rename as for every axiom
-  tc_info       <- lookupTcEnvM tc_env_tc_info tc
-  let proj_fams =  hs_tc_projs     tc_info
-  let fc_tc     =  hs_tc_fc_ty_con tc_info
+  proj_fams <- lookupTyConProj tc
   fmap concat $ forM (zip proj_fams as) $ \(proj_fam, a) -> do
     addTyFamInfoTcM proj_fam (HsTFInfo proj_fam (labelOf as) (dropLabel a))
     g <- freshFcAxVar
     a' <- freshFcTyVar KStar
-    let fc_as = rnTyVarToFcTyVar <$> (labelOf as)
-    let fc_a = rnTyVarToFcTyVar (labelOf a)
     let fc_fam = rnTyFamToFcFam proj_fam
+    let axiom =
+          Axiom
+            g
+            (labelOf as)
+            proj_fam
+            [mkTyConApp tc (TyVar <$> (labelOf as))]
+            (TyVar (labelOf a))
+    tExtendAxiomsM [axiom]
     return
       [ FcFamDecl
          fc_fam
          [a']
          (dropLabel a)
-      , FcAxiomDecl
-         g
-         fc_as
-         fc_fam
-         [fcTyConApp fc_tc (FcTyVar <$> fc_as)]
-         (FcTyVar fc_a)
-      ]
+      , elabAxiom axiom ]
 
 -- | Extend the typing environment with some kind annotated type variables
 extendCtxKindAnnotatedTysM :: [RnTyVarWithKind] -> TcM a -> TcM a
