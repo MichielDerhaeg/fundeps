@@ -440,6 +440,9 @@ partitionWantedCs (WantedEqCt ct:cs) = first (ct :) $ partitionWantedCs cs
 partitionWantedCs (WantedClsCt ct:cs) = second (ct :) $ partitionWantedCs cs
 partitionWantedCs [] = ([], [])
 
+clsCsToSchemes :: AnnClsCs -> AnnSchemes
+clsCsToSchemes = (fmap . fmap) (CtrScheme [] [])
+
 -- | TODO doc
 data Axiom = Axiom
   { ax_fc_var :: FcAxVar

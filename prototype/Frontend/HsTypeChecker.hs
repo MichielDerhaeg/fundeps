@@ -37,7 +37,7 @@ import           Data.Semigroup
 
 -- | Build the initial typechecker environment from the renaming environment
 buildInitTcEnv :: RnProgram -> RnEnv -> TcM ()
-buildInitTcEnv pgm (RnEnv _rn_cls_infos dc_infos tc_infos) = do -- GEORGE: Assume that the initial environment is completely empty (mempty mempty mempty)
+buildInitTcEnv pgm (RnEnv _rn_cls_infos dc_infos tc_infos) = do
   -- Prepopulate the environment with the (user-defined) data constructor information
   mapAssocListM_ (uncurry addDataConInfoTcM) $
     mapFstWithDataAssocList (\_ info -> hs_dc_data_con info) dc_infos
@@ -45,7 +45,6 @@ buildInitTcEnv pgm (RnEnv _rn_cls_infos dc_infos tc_infos) = do -- GEORGE: Assum
   mapAssocListM_ (uncurry addTyConInfoTcM)   $
     mapFstWithDataAssocList (\_ info -> hs_tc_ty_con   info) tc_infos
   -- Create and store in the environment all infos for type classes
-  -- (and the constructors they give rise to) -- GEORGE: UPDATE THIS WHEN YOU ADD SUPERCLASSES
   buildStoreClsInfos pgm
   where
     buildStoreClsInfos :: RnProgram -> TcM ()
@@ -83,90 +82,9 @@ buildInitTcEnv pgm (RnEnv _rn_cls_infos dc_infos tc_infos) = do -- GEORGE: Assum
           addClsInfoTcM rn_cls cls_info
         go _ = return ()
 
--- * Constraint Entailment TODO
+
+-- * Class Declaration Elaboration
 -- ------------------------------------------------------------------------------
-
-entailSuperClass :: [RnTyVar] -> Theory -> RnClsCt -> TcM ([FcType], [FcTerm], [FcCoercion])
-entailSuperClass untchs theory (ClsCt cls tys) = do
-  ClassInfo bs sc _cls as fds fams _m _mty _tc _dc <-
-    lookupTcEnvM tc_env_cls_info cls
-  subst <- mappend (buildSubst (zipExact as tys)) <$> determinacy as sc
-  cs <- genFreshCoVars $ length fds
-  let eq_cs = substInAnnEqCs subst $ cs |:
-        map
-          (\(Fundep ais ai0, f) -> (TyFam f (TyVar <$> ais)) :~: TyVar ai0)
-          (zipExact fds fams)
-  (ds, cls_cs) <- annotateClsCs $ substInClsCs subst sc
-  let general_cs = (WantedEqCt <$> eq_cs) <> (WantedClsCt <$> cls_cs)
-  (residual_cs, ty_subst, ev_subst) <- entail untchs theory general_cs
-  unless (null residual_cs) $
-    tcFail
-      (text "Failed to resolve super class constraints" <+> colon <+> ppr residual_cs
-       $$ text "From" <+> colon <+>
-       ppr theory $$ text "Constraints" <+> colon <+> ppr general_cs)
-  return
-    ( elabMonoTy . substInMonoTy (ty_subst <> subst) . TyVar <$> bs
-    , substEvInTm ev_subst . FcTmVar <$> ds
-    , substEvInCo ev_subst . FcCoVar <$> cs)
-
-dictDestruction :: AnnClsCs -> TcM (MatchCtx, GivenCs, TcCtx)
-dictDestruction [] = (,,) MCtxHole mempty <$> ask
-dictDestruction ((d :| ClsCt cls tys):cs) = do
-  ClassInfo ab_s sc _cls as fds fams _m mty _tc dc <-
-    lookupTcEnvM tc_env_cls_info cls
-
-  -- TODO abs_s = bs
-  let bs = ab_s \\ as
-  (bs', bs_subst) <- freshenRnTyVars bs
-  let subst = bs_subst <> (buildSubst $ zipExact as tys)
-
-  cvs <- genFreshCoVars $ length fds
-  let eq_cs =
-        substInEqCs subst $
-        map
-          (\(fam, Fundep ais ai0) -> TyFam fam (TyVar <$> ais) :~: TyVar ai0)
-          (zipExact fams fds)
-  let given_eq_cs = GivenEqCt <$> ((FcCoVar <$> cvs) |: eq_cs)
-
-  let fc_props = elabEqCt <$> eq_cs
-
-  ds <- genFreshDictVars $ length sc
-  fc_tys <- elabClsCs $ substInClsCs subst sc
-
-  f <- freshRnTmVar
-  let subbed_mty = substInPolyTy subst mty
-  fc_mty <- elabPolyTy subbed_mty
-
-  let new_cs = ds |: substInClsCs subst sc
-  env <- extendCtxM f subbed_mty $ extendCtxM (bs) (kindOf <$> bs) ask
-  (mctx, new_cs', env') <- setCtxM env $ dictDestruction $ new_cs ++ cs
-
-  let given_cls_cs = GivenClsCt <$> ((FcTmVar <$> ds) |: substInClsCs subst sc)
-
-  let pat =
-        FcConPat
-          dc
-          (rnTyVarToFcTyVar <$> bs')
-          (cvs |: fc_props)
-          (ds  |: fc_tys ++ [rnTmVarToFcTmVar f :| fc_mty])
-  return (MCtxCase d pat mctx, given_eq_cs <> given_cls_cs <> new_cs', env')
-
-generateAxioms :: CtrScheme -> TcM Axioms
-generateAxioms scheme@(CtrScheme _as cs ct) = do
-  inst_fds <- instantiateFDs ct
-  forM (inst_fds) $ \(f, uis, ui0) -> do
-    let free_uis = ftyvsOf uis
-    subst <- determinacy free_uis cs
-    let subbed_ui0 = substInMonoTy subst ui0
-    unless (null (ftyvsOf subbed_ui0 \\ free_uis)) gen_ax_fail
-    g <- freshFcAxVar
-    return $ Axiom g free_uis f uis subbed_ui0
-  where
-    gen_ax_fail =
-      tcFail $
-      text "Liberal Coverage Condition violation by the constraint scheme" <+>
-      colon <+> ppr scheme
-
 
 -- | Elaborate a class declaration. Return
 --   a) The data declaration for the class
@@ -290,7 +208,7 @@ elabDataDecl (DataD tc as dcs) = do
 
 -- | Elaborate the projection type functions of the type constructor
 elabProjections :: RnTyCon -> [RnTyVarWithKind] -> TcM [FcDecl]
-elabProjections tc as = do -- TODO rename as for every axiom
+elabProjections tc as = do
   proj_fams <- lookupTyConProj tc
   fmap concat $ forM (zip proj_fams as) $ \(proj_fam, a) -> do
     addTyFamInfoTcM proj_fam (HsTFInfo proj_fam (labelOf as) (dropLabel a))
@@ -352,8 +270,7 @@ elabInsDecl (InsD ab_s ins_cs cls tys method method_tm) = do
                         `tExtendGivenCls` ann_ins_cs
                         `tExtendGivens`   match_cs
 
-  -- TODO change order
-  (fc_exis_tys, fc_tms, fc_cos) <- entailSuperClass (labelOf ab_s) i_theory head_ct
+  (fc_exis_tys, fc_cos, fc_tms) <- entailSuperClass (labelOf ab_s) i_theory head_ct
 
   tExtendAxiomsM axioms
   tExtendSchemesM [ins_d :| ins_scheme]
@@ -385,18 +302,84 @@ elabInsDecl (InsD ab_s ins_cs cls tys method method_tm) = do
   let fc_val_bind = FcValBind ins_d dtrans_ty fc_dict_transformer
   return ((elabAxiom <$> axioms) <> [fc_val_bind])
 
--- TODO better location
-elabAxiom :: Axiom -> FcDecl
-elabAxiom (Axiom g as f us ty) =
-  FcAxiomDecl
-    g
-    (rnTyVarToFcTyVar <$> as)
-    (rnTyFamToFcFam f)
-    (elabMonoTy <$> us)
-    (elabMonoTy ty)
+entailSuperClass :: [RnTyVar] -> Theory -> RnClsCt -> TcM ([FcType], [FcCoercion], [FcTerm])
+entailSuperClass untchs theory (ClsCt cls tys) = do
+  ClassInfo bs sc _cls as fds fams _m _mty _tc _dc <-
+    lookupTcEnvM tc_env_cls_info cls
+  subst <- mappend (buildSubst (zipExact as tys)) <$> determinacy as sc
+  cs <- genFreshCoVars $ length fds
+  let eq_cs = substInAnnEqCs subst $ cs |:
+        map
+          (\(Fundep ais ai0, f) -> (TyFam f (TyVar <$> ais)) :~: TyVar ai0)
+          (zipExact fds fams)
+  (ds, cls_cs) <- annotateClsCs $ substInClsCs subst sc
+  let general_cs = (WantedEqCt <$> eq_cs) <> (WantedClsCt <$> cls_cs)
+  (residual_cs, ty_subst, ev_subst) <- entail untchs theory general_cs
+  unless (null residual_cs) $
+    tcFail
+      (text "Failed to resolve super class constraints" <+> colon <+> ppr residual_cs
+       $$ text "From" <+> colon <+>
+       ppr theory $$ text "Constraints" <+> colon <+> ppr general_cs)
+  return
+    ( elabMonoTy . substInMonoTy (ty_subst <> subst) . TyVar <$> bs
+    , substEvInCo ev_subst . FcCoVar <$> cs
+    , substEvInTm ev_subst . FcTmVar <$> ds)
 
-clsCsToSchemes :: AnnClsCs -> AnnSchemes
-clsCsToSchemes = (fmap . fmap) (CtrScheme [] [])
+dictDestruction :: AnnClsCs -> TcM (MatchCtx, GivenCs, TcCtx)
+dictDestruction [] = (,,) MCtxHole mempty <$> ask
+dictDestruction ((d :| ClsCt cls tys):cs) = do
+  ClassInfo bs sc _cls as fds fams _m mty _tc dc <-
+    lookupTcEnvM tc_env_cls_info cls
+
+  (bs', bs_subst) <- freshenRnTyVars bs
+  let subst = bs_subst <> (buildSubst $ zipExact as tys)
+
+  cvs <- genFreshCoVars $ length fds
+  let eq_cs =
+        substInEqCs subst $
+        map
+          (\(fam, Fundep ais ai0) -> TyFam fam (TyVar <$> ais) :~: TyVar ai0)
+          (zipExact fams fds)
+  let given_eq_cs = GivenEqCt <$> ((FcCoVar <$> cvs) |: eq_cs)
+
+  let fc_props = elabEqCt <$> eq_cs
+
+  ds <- genFreshDictVars $ length sc
+  fc_tys <- elabClsCs $ substInClsCs subst sc
+
+  f <- freshRnTmVar
+  let subbed_mty = substInPolyTy subst mty
+  fc_mty <- elabPolyTy subbed_mty
+
+  let new_cs = ds |: substInClsCs subst sc
+  env <- extendCtxM f subbed_mty $ extendCtxM (bs) (kindOf <$> bs) ask
+  (mctx, new_cs', env') <- setCtxM env $ dictDestruction $ new_cs ++ cs
+
+  let given_cls_cs = GivenClsCt <$> ((FcTmVar <$> ds) |: substInClsCs subst sc)
+
+  let pat =
+        FcConPat
+          dc
+          (rnTyVarToFcTyVar <$> bs')
+          (cvs |: fc_props)
+          (ds  |: fc_tys ++ [rnTmVarToFcTmVar f :| fc_mty])
+  return (MCtxCase d pat mctx, given_eq_cs <> given_cls_cs <> new_cs', env')
+
+generateAxioms :: CtrScheme -> TcM Axioms
+generateAxioms scheme@(CtrScheme _as cs ct) = do
+  inst_fds <- instantiateFDs ct
+  forM (inst_fds) $ \(f, uis, ui0) -> do
+    let free_uis = ftyvsOf uis
+    subst <- determinacy free_uis cs
+    let subbed_ui0 = substInMonoTy subst ui0
+    unless (null (ftyvsOf subbed_ui0 \\ free_uis)) gen_ax_fail
+    g <- freshFcAxVar
+    return $ Axiom g free_uis f uis subbed_ui0
+  where
+    gen_ax_fail =
+      tcFail $
+      text "Liberal Coverage Condition violation by the constraint scheme" <+>
+      colon <+> ppr scheme
 
 -- | Instantiate a method type for a particular instance
 instMethodTy :: [RnMonoTy] -> RnPolyTy -> RnPolyTy

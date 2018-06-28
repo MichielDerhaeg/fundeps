@@ -153,3 +153,13 @@ rnTyFamToFcFam (HsTF name) = FcFV name
 
 rnTyConToFcTyCon :: RnTyCon -> FcTyCon
 rnTyConToFcTyCon (HsTC name) = FcTC name
+
+-- | Elaborate equality axioms
+elabAxiom :: Axiom -> FcDecl
+elabAxiom (Axiom g as f us ty) =
+  FcAxiomDecl
+    g
+    (rnTyVarToFcTyVar <$> as)
+    (rnTyFamToFcFam f)
+    (elabMonoTy <$> us)
+    (elabMonoTy ty)
