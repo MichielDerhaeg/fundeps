@@ -151,15 +151,10 @@ dictDestruction ((d :| ClsCt cls tys):cs) = do
           (ds  |: fc_tys ++ [rnTmVarToFcTmVar f :| fc_mty])
   return (MCtxCase d pat mctx, given_eq_cs <> given_cls_cs <> new_cs', env')
 
--- TODO cleanup
 generateAxioms :: CtrScheme -> TcM Axioms
-generateAxioms scheme@(CtrScheme _as cs (ClsCt cls tys)) = do
-  fds <- lookupClsFundeps cls
-  fams <- lookupClsFDFams cls
-  as' <- lookupClsParams cls
-  let cls_var_subst = buildSubst $ zipExact as' tys
-  forM (zipExact fds fams) $ \(Fundep ais ai0, f) -> do
-    let ui0:uis = substInMonoTy cls_var_subst . TyVar <$> ai0 : ais
+generateAxioms scheme@(CtrScheme _as cs ct) = do
+  inst_fds <- instantiateFDs ct
+  forM (inst_fds) $ \(f, uis, ui0) -> do
     let free_uis = ftyvsOf uis
     subst <- determinacy free_uis cs
     let subbed_ui0 = substInMonoTy subst ui0
